@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Scénario multi-appareils</title>
+<style>
+body{font:13px/1.5 ui-monospace,Consolas,monospace;background:#111;color:#ddd;margin:16px}
+iframe{width:48%;height:360px;border:1px solid #444;background:#000}
+#out div.ok{color:#4ade80}#out div.ko{color:#f87171;font-weight:700}
+h1{font-size:15px}
+</style></head><body>
+<h1>Deux appareils (Alice et Bob) sur le même serveur</h1>
+<div id="out"></div>
+<iframe id="a" src="/?client=testA&nom=Alice"></iframe>
+<iframe id="b" src="/?client=testB&nom=Bob"></iframe>
+<script>
+/* Pilote deux copies de la page comme deux telephones et verifie que chaque
+   action de l'un arrive chez l'autre. Ouvrir http://localhost:8765/tests/scenario.html
+   ou lancer : py tests\lancer_scenario.py
+   Les variables de la page (DB, RESEAU...) sont des let/const : on les lit
+   par eval dans le contexte de chaque iframe. */
+const out = document.getElementById('out');
+let echecs = 0;
+const log = (ok, msg) => {
+  if (!ok) echecs++;
+  const d = document.createElement('div'); d.className = ok ? 'ok' : 'ko';
+  d.textContent = (ok ? 'OK    ' : 'FAIL  ') + msg; out.appendChild(d);
+  console.log((ok ? 'RESULT OK ' : 'RESULT FAIL ') + msg);
+};
+const dort = ms => new Promise(r => setTimeout(r, ms));
+async function attendre(f, ms){
+  ms = ms || 5000;
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms){ try{ if (f()) return true; }catch(e){} await dort(60); }
+  return false;
+}
+/* app(W).DB, app(W).prise(id), app(W).dernierPlan = x : chaque nom est evalue
+   dans le contexte de l'iframe, qu'il s'agisse d'un let, d'un const ou d'une fonction. */
+const app = W => new Proxy({}, {
+  get: (_, k) => W.eval(k),
+  set: (_, k, v) => { W.eval(k + ' = ' + JSON.stringify(v)); return true; }
+});
+const nums = (X, pid) => X.prisesDe(pid).map(t => t.n).join(',');
+const frappe = (W, sel, val) => {
+  const i = W.document.querySelector(sel);
+  i.focus(); i.value = val; i.dispatchEvent(new W.Event('input', { bubbles: true }));
+};
+
+(async () => {
+  const Aw = document.getElementById('a').contentWindow, Bw = document.getElementById('b').contentWindow;
+  const A = app(Aw), B = app(Bw);
+  log(await attendre(() => A.RESEAU.etat === 'ok' && B.RESEAU.etat === 'ok', 12000), 'les deux appareils sont connectés');
+  await attendre(() => A.DB.plans.length && B.DB.plans.length && A.RESEAU.presence.length >= 2 && B.RESEAU.presence.length >= 2, 6000);
+  // les deux ont trouve le serveur vide et lui ont envoye leur decoupage : un seul doit rester
+  log(await attendre(() => A.DB.plans[0].id === B.DB.plans[0].id && !A.RESEAU.attente.length && !B.RESEAU.attente.length, 6000), 'un seul découpage a été retenu par le serveur (mêmes identifiants des deux côtés)');
+  log(A.DB.plans.length === B.DB.plans.length && A.DB.plans.length > 0, 'même découpage des deux côtés (' + A.DB.plans.length + ' plans)');
+  log(A.RESEAU.presence.some(x => x.nom === 'Bob') && B.RESEAU.presence.some(x => x.nom === 'Alice'), 'chacun voit l’autre dans la liste des connectés');
+  log(Aw.document.getElementById('pres').textContent.indexOf('en ligne') > 0, 'pastille "en ligne" affichée (' + Aw.document.getElementById('pres').textContent + ')');
+  const p = A.DB.plans[0];
+  Aw.confirm = () => true; Bw.confirm = () => true;
+
+  // 1. ajout d'une prise
+  const t1 = A.ajouterPrise(p.id);
+  log(await attendre(() => B.prise(t1.id)), 'prise ajoutée sur A visible sur B');
+  log(B.prise(t1.id) && B.prise(t1.id).par === 'Alice', 'la prise porte le nom de son auteur');
+  log(await attendre(() => B.plan(p.id).etat === 'done'), 'le plan passe "tourné" chez B');
+
+  // 2. marquage depuis la liste
+  B.marquer(t1.id, 'OK');
+  log(await attendre(() => A.prise(t1.id).statut === 'OK'), 'OK posé sur B visible sur A');
+  log(A.prise(t1.id).retenue === true, 'première prise OK retenue d’office');
+  log(await attendre(() => Aw.document.querySelector('.prise[data-id="' + t1.id + '"].ok')), 'la liste de A est redessinée (au plus 400 ms après)');
+
+  // 3. frappe dans un champ de la fiche
+  A.openPrise(t1.id);
+  frappe(Aw, '#sbody input[data-k="clip"]', 'A001C001');
+  log(await attendre(() => B.prise(t1.id).clip === 'A001C001'), 'clip tapé sur A arrive sur B');
+
+  // 4. modification distante pendant que la fiche est ouverte sur A
+  B.patch('prise', t1.id, { notes: 'Raccord' });
+  log(await attendre(() => A.prise(t1.id).notes === 'Raccord'), 'note posée sur B arrive sur A');
+  log(await attendre(() => Aw.document.querySelector('#sbody textarea[data-k="notes"]').value === 'Raccord'), 'la fiche ouverte sur A se met à jour en place');
+  log(A.openType === 'prise' && A.openId === t1.id, 'la fiche est restée ouverte');
+  log(Aw.document.querySelector('#sbody input[data-k="clip"]').value === 'A001C001', 'le clip saisi sur A n’a pas été écrasé');
+  log(Aw.document.querySelector('#seg-statut button[data-st="OK"]').className.indexOf('on') >= 0, 'bouton OK allumé dans la fiche');
+
+  // 5. suggestion de clip suivant, notes rapides
+  const t1b = A.ajouterPrise(p.id, true);
+  log(Aw.document.querySelector('#sbody input[data-k="clip"]').placeholder === 'A001C002', 'clip suivant suggéré : A001C002');
+  A.appliquerClip(t1b.id);
+  log(await attendre(() => B.prise(t1b.id) && B.prise(t1b.id).clip === 'A001C002'), 'bouton +1 : clip repris et synchronisé');
+  A.noteRapide('Jeu'); A.noteRapide('Cadre');
+  log(await attendre(() => B.prise(t1b.id).notes === 'Jeu · Cadre'), 'notes rapides synchronisées (' + (B.prise(t1b.id) || {}).notes + ')');
+  A.noteRapide('Jeu');
+  log(await attendre(() => B.prise(t1b.id).notes === 'Cadre'), 'note rapide retirée');
+  A.closeSheet();
+  A.supprimerPrise(t1b);
+  log(await attendre(() => !B.prise(t1b.id)), 'prise 2 supprimée sur A disparaît sur B');
+
+  // 6. ajout simultané sur le même plan
+  const ta = A.ajouterPrise(p.id), tb = B.ajouterPrise(p.id);
+  log(ta.n === tb.n, 'les deux appareils ont d’abord choisi le même numéro (' + ta.n + ')');
+  log(await attendre(() => A.prise(tb.id) && B.prise(ta.id) &&
+      A.prise(ta.id).n !== A.prise(tb.id).n &&
+      B.prise(ta.id).n === A.prise(ta.id).n && B.prise(tb.id).n === A.prise(tb.id).n),
+    'le serveur a tranché : numéros distincts et identiques des deux côtés');
+  log(nums(A, p.id) === '1,2,3' && nums(B, p.id) === '1,2,3', 'numéros 1,2,3 des deux côtés (A ' + nums(A, p.id) + ' / B ' + nums(B, p.id) + ')');
+
+  // 7. suppression et renumérotation
+  const t2 = A.prisesDe(p.id)[1];
+  A.supprimerPrise(t2);
+  log(await attendre(() => !B.prise(t2.id) && nums(B, p.id) === '1,2'), 'suppression sur A : B renumérote (' + nums(B, p.id) + ')');
+  log(nums(A, p.id) === '1,2', 'A renumérote aussi (' + nums(A, p.id) + ')');
+
+  // 8. annuler la suppression
+  A.restaurer();
+  log(await attendre(() => B.prise(t2.id) && nums(B, p.id) === '1,2,3'), 'Annuler sur A : la prise revient sur B (' + nums(B, p.id) + ')');
+  log(B.prise(t2.id) && B.prise(t2.id).n === 2, 'elle reprend son numéro 2');
+
+  // 9. présence : qui regarde quoi
+  A.openPlan(p.id);
+  log(await attendre(() => Bw.document.querySelector('.plan[data-id="' + p.id + '"] .qui')), 'B voit l’initiale d’Alice sur le plan ouvert');
+  log((Bw.document.querySelector('.plan[data-id="' + p.id + '"] .qui') || {}).textContent === 'A', 'initiale correcte');
+  A.closeSheet();
+  log(await attendre(() => !Bw.document.querySelector('.qui')), 'marqueur retiré à la fermeture');
+
+  // 10. plan hors découpage
+  const nb = B.DB.plans.length;
+  A.nouveauPlan(); const np = A.plan(A.dernierPlan);
+  log(await attendre(() => B.DB.plans.length === nb + 1 && B.plan(np.id)), 'plan hors découpage ajouté sur A visible sur B');
+  log(B.DB.plans.findIndex(x => x.id === np.id) === A.DB.plans.findIndex(x => x.id === np.id), 'même position dans la liste');
+  frappe(Aw, '#sbody input[data-k="plan"]', '99X');
+  log(await attendre(() => B.plan(np.id).plan === '99X'), 'numéro de plan tapé sur A arrive sur B');
+  A.closeSheet();
+
+  // 11. suppression d'un plan et de ses prises, puis annulation
+  A.openPlan(p.id); A.delPlan();
+  log(await attendre(() => !B.plan(p.id) && !B.DB.prises.some(t => t.planId === p.id)), 'plan supprimé sur A avec ses prises sur B');
+  A.restaurer();
+  log(await attendre(() => B.plan(p.id) && B.prisesDe(p.id).length === 3), 'Annuler : plan et ses 3 prises reviennent sur B');
+  log(B.DB.plans.findIndex(x => x.id === p.id) === 0, 'le plan retrouve sa place en tête');
+
+  // 11b. ordre de tournage : un plan deplace sur A change de place sur B
+  const p2 = A.DB.plans[2];
+  A.deplacerPlan(p2.id, '');
+  log(await attendre(() => B.DB.plans[0] && B.DB.plans[0].id === p2.id), 'plan déplacé en tête sur A : en tête sur B');
+  A.deplacerPlan(p2.id, A.DB.plans[2].id);
+  log(await attendre(() => B.DB.plans.findIndex(x => x.id === p2.id) === 2), 'remis en troisième : idem sur B');
+
+  // 12. chrono
+  A.dernierPlan = p.id; A.moteur();
+  log(!!A.chrono, 'Moteur : chrono lancé');
+  const tc = A.prise(A.chrono.priseId);
+  log(/^\d\d:\d\d$/.test(tc.heure), 'heure notée (' + tc.heure + ')');
+  await dort(1200); A.couper();
+  log(!A.chrono && /^\d+s$/.test(A.prise(tc.id).duree), 'Coupez : durée notée (' + A.prise(tc.id).duree + ')');
+  log(await attendre(() => B.prise(tc.id) && B.prise(tc.id).duree === A.prise(tc.id).duree), 'durée synchronisée');
+
+  // 13. thème et préférences propres à l'appareil
+  A.basculerTheme();
+  log(Aw.document.documentElement.dataset.theme === 'light' && Bw.document.documentElement.dataset.theme === 'dark', 'le thème clair sur A ne change pas B');
+  A.basculerTheme();
+
+  // 14. état serveur
+  const r = await (await fetch('/api/etat')).json();
+  log(r.db.prises.length === A.DB.prises.length && r.db.prises.length === B.DB.prises.length, 'même nombre de prises serveur / A / B (' + r.db.prises.length + ')');
+  const cle = l => JSON.stringify(l.map(t => [t.id, t.n, t.clip, t.notes, t.statut]).sort());
+  log(cle(r.db.prises) === cle(A.DB.prises) && cle(r.db.prises) === cle(B.DB.prises), 'contenu des prises identique serveur / A / B');
+
+  log(echecs === 0, 'FIN — ' + echecs + ' échec(s)');
+})().catch(e => log(false, 'exception ' + e + ' ' + (e && e.stack) + ' FIN'));
+</script>
+</body></html>

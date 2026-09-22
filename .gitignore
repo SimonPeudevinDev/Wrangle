@@ -1,0 +1,14 @@
+# Donnees du tournage : elles ne quittent pas le poste du DIT
+data/
+exports/
+ref/
+
+# Site construit par outils/construire_site.py
+site/
+
+# Traces de travail
+__pycache__/
+*.pyc
+.claude/
+Thumbs.db
+desktop.ini
