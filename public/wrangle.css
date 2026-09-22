@@ -373,7 +373,7 @@ button.ptag:hover,button.ptag.on{background:var(--surface2)}
 .menu.puce button{height:36px;padding:0 14px;font:700 10.5px var(--font);letter-spacing:.1em;text-transform:uppercase;gap:12px}
 .menu.puce button.on::after{border-color:currentColor}
 /* la description du plan : c'est ce qu'on lit en premier sur le plateau */
-.pdesc{font-size:15px;line-height:1.45;color:var(--txt);margin-top:6px}
+.pdesc{font-size:15px;line-height:1.45;color:var(--txt);margin-top:6px;white-space:pre-line}
 /* le contexte technique : lisible, pas relegue en gris minuscule */
 .pctx{margin-top:6px;font-size:13px;color:var(--dim);display:flex;flex-wrap:wrap;gap:3px 0}
 .pctx span{white-space:nowrap}
@@ -757,7 +757,7 @@ nav button i{display:none}
 .sec-tete .res .ok{color:var(--ok);font-weight:600}
 .sec-tete .res .ng{color:var(--ng);font-weight:600}
 .sec-tete .res .kp{color:var(--acc);font-weight:600}
-.lead{font-size:15.5px;line-height:1.55}
+.lead{font-size:15.5px;line-height:1.55;white-space:pre-line}
 .note{font-size:13px;color:var(--dim);line-height:1.6;margin-top:12px}
 .note b{color:var(--dim2);font-weight:700;font-size:11px;letter-spacing:.1em;
   text-transform:uppercase;display:block;margin-bottom:3px}

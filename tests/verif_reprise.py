@@ -32,6 +32,15 @@ REPERE = """
 ETAT = "[openType, openId, champOuvert, Math.round(window.scrollY), document.getElementById('sbody').scrollTop]"
 
 
+# Apres rechargement, on cherche ce meme plan par son identifiant : la carte qui
+# passe la barre des 160 px peut changer pour quelques pixels de derive, sans
+# que ce qu'on regardait ait bouge.
+POSITION = """
+  (id => { const e = document.querySelector('#l-shoot .plan[data-id="' + id + '"]');
+           return e ? Math.round(e.getBoundingClientRect().top) : null; })(%s)
+"""
+
+
 def meme(a, b):
     return bool(a and b and a[0] == b[0] and abs(a[1] - b[1]) <= 24)
 
@@ -63,10 +72,11 @@ with Banc(8798, 9383, taille=(430, 932)) as banc:
     essais.detail('fiche : defilement %d -> %d, repere %r -> %r'
                   % (avant[4], apres[4], rep_avant['fiche'], rep_apres['fiche']))
     essais.verifier('la fiche montre la meme ligne au meme endroit', meme(rep_avant['fiche'], rep_apres['fiche']), True)
-    essais.detail('liste : defilement %d -> %d, repere %r -> %r'
-                  % (avant[3], apres[3], rep_avant['liste'], rep_apres['liste']))
+    y_liste = banc.js(POSITION % json.dumps(rep_avant['liste'][0])) if rep_avant['liste'] else None
+    essais.detail('liste : defilement %d -> %d, plan %r a %r -> %r'
+                  % (avant[3], apres[3], rep_avant['liste'][0], rep_avant['liste'][1], y_liste))
     essais.verifier('la liste derriere montre le meme plan au meme endroit',
-                    meme(rep_avant['liste'], rep_apres['liste']), True)
+                    y_liste is not None and abs(y_liste - rep_avant['liste'][1]) <= 24, True)
 
     # -- un autre onglet, puis rechargement
     banc.js("""closeSheet(); document.querySelector('nav button[data-v="report"]').click();
