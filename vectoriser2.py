@@ -10,9 +10,12 @@
 """
 import io, math, os, sys
 
-S = ('C:/Users/SIMON~1.PEU/AppData/Local/Temp/claude/d--DIT-Log/'
-     '7501c739-d19e-4a22-9594-0015d01cc9c2/scratchpad')
-SORTIE = sys.argv[1] if len(sys.argv) > 1 else 'D:/DIT-Log/public/wrangle-logo.svg'
+ICI = os.path.dirname(os.path.abspath(__file__))
+# Les chemins se deduisent de l'emplacement du script : le dossier du projet
+# peut etre deplace ou renomme sans rien casser ici.
+#   py vectoriser2.py [sortie.svg] [dossier des sources PNG]
+SORTIE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ICI, 'public', 'wrangle-logo.svg')
+S = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ICI, 'ref')
 TOL_FORME = 0.30     # simplification de la silhouette (px)
 X_MOT = 780          # au-dela, c'est le mot : il est plat (249..255), on n'y touche pas
 # L'ombre se lit en deux temps : l'ambiance, tres douce, qu'un flou large lisse

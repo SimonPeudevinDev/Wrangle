@@ -98,6 +98,7 @@ button{transition:background .2s,color .2s,border-color .2s,opacity .2s}
   width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:50%;
   background:none;border:1px solid var(--line2);color:var(--txt);font-size:17px;cursor:pointer;
 }
+.ico svg{display:block}
 .ico:hover{background:var(--surface)}
 .ico:active{background:var(--surface2)}
 @media(max-width:430px){
@@ -162,15 +163,31 @@ button{transition:background .2s,color .2s,border-color .2s,opacity .2s}
 .fleche svg{width:16px;height:16px}
 .fleche:hover{color:var(--txt);border-color:var(--txt)}
 .fleche:disabled{opacity:.25;cursor:default;border-color:var(--line2);color:var(--dim)}
+/* la rangee se cale sur un onglet entier : sans cela elle s arrete n importe ou
+   et coupe un nom en deux (« ut » pour « Tout »), ce qui se lit comme un bug.
+   `proximity` et non `mandatory` : le doigt garde la main sur un parcours long. */
 .chips{display:flex;gap:26px;overflow-x:auto;padding:0 12px;scrollbar-width:none;flex:1;min-width:0;align-self:stretch;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 12px),transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 12px),transparent)}
+  scroll-snap-type:x proximity;scroll-padding:0 var(--fondu,14px);overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+  --fondu:14px}
+/* Le degrade ne se pose que du cote ou la rangee continue (classes posees par
+   `bordsChips`). Un masque fixe des deux cotes rongeait le premier onglet alors
+   qu il n y avait rien a gauche : on lisait « ut » au lieu de « Tout ». */
+.chips.bord-g{-webkit-mask-image:linear-gradient(90deg,transparent,#000 var(--fondu));
+  mask-image:linear-gradient(90deg,transparent,#000 var(--fondu))}
+.chips.bord-d{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - var(--fondu)),transparent);
+  mask-image:linear-gradient(90deg,#000 calc(100% - var(--fondu)),transparent)}
+.chips.bord-g.bord-d{
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 var(--fondu),#000 calc(100% - var(--fondu)),transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 var(--fondu),#000 calc(100% - var(--fondu)),transparent)}
 .chips::-webkit-scrollbar{display:none}
 .chip{
   position:relative;
   flex:none;padding:12px 0 14px;border:none;background:none;cursor:pointer;
   white-space:nowrap;color:var(--dim);font:600 15px var(--font-titre);border-radius:0;
+  scroll-snap-align:center;-webkit-tap-highlight-color:transparent;transition:color .15s;
 }
+/* le doigt doit voir qu il a touche : au plateau on tape sans regarder deux fois */
+.chip:active{color:var(--txt)}
 /* la rangee se centre entre les fleches quand elle tient ; des marges auto plutot
    que justify-content:center, qui rendrait le debut inatteignable au defilement */
 .chip:first-child{margin-left:auto}
@@ -239,7 +256,19 @@ button{transition:background .2s,color .2s,border-color .2s,opacity .2s}
 .panneau .voir{width:100%;margin-top:16px;height:44px}
 @media(max-width:430px){
   .filtres span{display:none}
-  .filtres{padding:0 10px}
+  .filtres{padding:0 10px;margin-left:8px}
+  /* Sur telephone chaque pixel compte : les fleches se resserrent et les onglets
+     se rapprochent, ce qui fait tenir deux jours de plus a l ecran — donc moins
+     de defilement pour changer de jour, et moins de noms coupes aux bords. */
+  .jours{padding:0 8px}
+  /* le fondu vaut une lettre entiere : a 12 px il tranchait le « J » de
+     « Jour 4 » en deux, ce qui se lisait comme un defaut d affichage */
+  .chips{gap:20px;padding:0 8px;--fondu:26px}
+  .fleche{width:30px;height:30px}
+  .fleche svg{width:15px;height:15px}
+  /* la zone touchable passe a 48 px de haut sans grossir le texte : on tape
+     l onglet du pouce, en marchant, sans viser */
+  .chip{padding:15px 0 17px}
 }
 
 /* la recherche ne donne rien ici, mais donne ailleurs : un pas de cote */

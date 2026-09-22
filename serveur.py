@@ -11,7 +11,7 @@ Un seul fichier, bibliothèque standard uniquement (Python 3.8+).
   py serveur.py --data D:\autre\dossier   range projet.json et les sauvegardes ailleurs
 
 Le serveur :
-  - sert la page dit-log.html et le dossier public/ (feuille de style, logo) ;
+  - sert la page wrangle.html et le dossier public/ (feuille de style, logo) ;
   - garde l'état partagé du projet (data/projet.json) ;
   - reçoit les modifications de chaque appareil (POST /api/ops) sous forme
     d'opérations champ par champ, les applique et les rediffuse à tous les
@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 ICI = os.path.dirname(os.path.abspath(__file__))
-PAGE = os.path.join(ICI, 'dit-log.html')
+PAGE = os.path.join(ICI, 'wrangle.html')
 DATA = os.path.join(ICI, 'data')
 FICHIER = os.path.join(DATA, 'projet.json')
 SAUV = os.path.join(DATA, 'sauvegardes')
@@ -393,7 +393,7 @@ class Requete(BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = urlparse(self.path)
-        if u.path in ('/', '/index.html', '/dit-log.html'):
+        if u.path in ('/', '/index.html', '/wrangle.html'):
             return self._page()
         if u.path == '/api/etat':
             with verrou:
@@ -431,7 +431,7 @@ class Requete(BaseHTTPRequestHandler):
             with open(PAGE, 'rb') as f:
                 corps = f.read()
         except OSError:
-            return self._json(500, {'erreur': 'dit-log.html introuvable à côté de serveur.py'})
+            return self._json(500, {'erreur': 'wrangle.html introuvable à côté de serveur.py'})
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(corps)))

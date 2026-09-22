@@ -6,7 +6,7 @@ WRANGLE — construit le site publie a partir de la page du plateau.
   py outils/construire_site.py [dossier]          (defaut : site/)
   py outils/construire_site.py [dossier] --vide   carnet vide, sans le decoupage
 
-Le site publie, c'est la page seule, sans serveur : dit-log.html devient
+Le site publie, c'est la page seule, sans serveur : wrangle.html devient
 index.html a cote de public/. Par defaut la page part telle quelle, decoupage
 et vignettes du tournage compris (window.DT_SEED, window.DT_THUMBS) : tout le
 monde ouvre le site sur les plans de la production, comme sur le plateau.
@@ -21,7 +21,7 @@ import shutil
 import sys
 
 ICI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PAGE = os.path.join(ICI, 'dit-log.html')
+PAGE = os.path.join(ICI, 'wrangle.html')
 PUBLIC = os.path.join(ICI, 'public')
 CNAME = os.path.join(ICI, 'CNAME')
 
@@ -30,7 +30,7 @@ GRAINES = ('window.DT_SEED=', 'window.DT_THUMBS=')
 
 
 def lignes_page(vide):
-    """Les lignes de dit-log.html, moins celles du tournage si --vide."""
+    """Les lignes de wrangle.html, moins celles du tournage si --vide."""
     with open(PAGE, 'r', encoding='utf-8', newline='') as f:
         lignes = f.readlines()
     if not vide:
@@ -74,7 +74,7 @@ def verifier(index):
     restes = [g for g in GRAINES if g in texte]
     if restes:
         raise SystemExit('ARRET : %s est encore dans la page construite. '
-                         'Le format de dit-log.html a change : corriger '
+                         'Le format de wrangle.html a change : corriger '
                          'construire_site.py avant de publier.'
                          % ', '.join(restes))
 

@@ -1,7 +1,7 @@
 # Wrangle — journal de plateau
 
 Un carnet de DIT / data wrangler : jours, séquences, plans, prises, cartes et rapport de fin de journée.
-La page est `dit-log.html`, avec sa feuille de style et son logo dans `public/` : garder les deux ensemble. Le serveur `serveur.py` permet de saisir à plusieurs en même temps.
+La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` : garder les deux ensemble. Le serveur `serveur.py` permet de saisir à plusieurs en même temps.
 
 ## Lancer sur le plateau (plusieurs appareils)
 
@@ -37,7 +37,7 @@ le sien (découpage compris, et les prises déjà saisies dans ce navigateur s'i
 
 ## Travailler seul, sans serveur
 
-Ouvrir directement `dit-log.html` dans un navigateur : la page travaille seule, données dans le
+Ouvrir directement `wrangle.html` dans un navigateur : la page travaille seule, données dans le
 navigateur, comme avant. La pastille en haut indique « Local ».
 
 ## Trouver un plan
@@ -104,7 +104,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 La page marche aussi toute seule sur Internet : données dans le navigateur de chacun, sans serveur
 ni synchro. C'est ce qui est publié sur le nom de domaine.
 
-`py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `dit-log.html` tel quel
+`py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `wrangle.html` tel quel
 sous le nom `index.html`, découpage et vignettes de la production compris (`window.DT_SEED`,
 `window.DT_THUMBS`). Tout le monde ouvre donc le site sur les plans du tournage, comme sur le
 plateau. Chacun garde ensuite ses prises dans son navigateur ; ⚙ > Données > « Recharger le
