@@ -758,6 +758,8 @@ nav button i{display:none}
 .sec-tete .res .ng{color:var(--ng);font-weight:600}
 .sec-tete .res .kp{color:var(--acc);font-weight:600}
 .lead{font-size:15.5px;line-height:1.55;white-space:pre-line}
+/* les passages et dialogues du decoupage, dans la fiche seulement */
+.passages{white-space:pre-line;font-size:14.5px;line-height:1.55;color:var(--txt)}
 .note{font-size:13px;color:var(--dim);line-height:1.6;margin-top:12px}
 .note b{color:var(--dim2);font-weight:700;font-size:11px;letter-spacing:.1em;
   text-transform:uppercase;display:block;margin-bottom:3px}
