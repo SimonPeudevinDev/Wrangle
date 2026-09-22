@@ -54,7 +54,8 @@ const frappe = (W, sel, val) => {
   log(A.RESEAU.presence.some(x => x.nom === 'Bob') && B.RESEAU.presence.some(x => x.nom === 'Alice'), 'chacun voit l’autre dans la liste des connectés');
   log(Aw.document.getElementById('pres').textContent.indexOf('en ligne') > 0, 'pastille "en ligne" affichée (' + Aw.document.getElementById('pres').textContent + ')');
   const p = A.DB.plans[0];
-  Aw.confirm = () => true; Bw.confirm = () => true;
+  // la page pose ses questions dans sa propre boite : on y repond comme au doigt
+  const valider = async w => { await attendre(() => !w.document.getElementById('dlg').hidden); w.document.getElementById('dlg-oui').click(); };
 
   // 1. ajout d'une prise
   const t1 = A.ajouterPrise(p.id);
@@ -131,7 +132,7 @@ const frappe = (W, sel, val) => {
   A.closeSheet();
 
   // 11. suppression d'un plan et de ses prises, puis annulation
-  A.openPlan(p.id); A.delPlan();
+  A.openPlan(p.id); A.delPlan(); await valider(Aw);
   log(await attendre(() => !B.plan(p.id) && !B.DB.prises.some(t => t.planId === p.id)), 'plan supprimé sur A avec ses prises sur B');
   A.restaurer();
   log(await attendre(() => B.plan(p.id) && B.prisesDe(p.id).length === 3), 'Annuler : plan et ses 3 prises reviennent sur B');

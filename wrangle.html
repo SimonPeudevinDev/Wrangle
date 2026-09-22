@@ -114,6 +114,18 @@
   </div>
 </div>
 <div class="voile" id="voile-photo" hidden onclick="this.hidden=true"><img alt=""></div>
+<!-- la boite de dialogue : confirmer, demander un texte ou prevenir, a la place des fenetres du navigateur -->
+<div class="voile dlg" id="dlg" hidden>
+  <div class="boite" role="dialog" aria-modal="true" aria-labelledby="dlg-titre" aria-describedby="dlg-msg">
+    <h2 id="dlg-titre"></h2>
+    <p id="dlg-msg"></p>
+    <input id="dlg-saisie" class="dlg-champ" type="text" autocomplete="off" hidden>
+    <div class="dlg-btns">
+      <button type="button" class="btn" id="dlg-non">Annuler</button>
+      <button type="button" class="btn p" id="dlg-oui">OK</button>
+    </div>
+  </div>
+</div>
 
 
 <script>
@@ -375,6 +387,48 @@ function toastAction(msg, label, fn){
   t.classList.add('on');
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), label ? 7000 : 2000);
 }
+
+/* ------------------------------------------------- Boites de dialogue */
+/* A la place des fenetres du navigateur (confirm, prompt, alert) : une boite
+   dans la charte, au doigt comme au clavier (Entree valide, Echap renonce).
+   Chaque fonction rend une promesse ; une boite ouverte chasse la precedente. */
+const DLG = { resoudre: null, annulation: false, retour: null };
+function ouvrirDialogue(o){
+  return new Promise(res => {
+    if (DLG.resoudre) DLG.resoudre(DLG.annulation);
+    DLG.resoudre = res; DLG.annulation = o.saisie == null ? false : null;
+    DLG.retour = document.activeElement;
+    const titre = $('dlg-titre'), msg = $('dlg-msg'), s = $('dlg-saisie'), oui = $('dlg-oui'), non = $('dlg-non');
+    titre.textContent = o.titre || ''; titre.hidden = !o.titre;
+    msg.textContent = o.detail || ''; msg.hidden = !o.detail;
+    s.hidden = o.saisie == null;
+    if (o.saisie != null){ s.value = o.saisie; s.placeholder = o.aide || ''; s.inputMode = o.im || 'text'; }
+    oui.textContent = o.ok || 'OK'; oui.className = 'btn ' + (o.danger ? 'd' : 'p');
+    non.textContent = o.annuler || 'Annuler'; non.hidden = o.annuler === false;
+    const d = $('dlg'); d.hidden = false;
+    requestAnimationFrame(() => { d.classList.add('on'); if (o.saisie != null){ s.focus(); s.select(); } else oui.focus(); });
+  });
+}
+function fermerDialogue(valeur){
+  const d = $('dlg'); if (d.hidden) return;
+  d.classList.remove('on'); d.hidden = true;
+  const r = DLG.resoudre, ret = DLG.retour; DLG.resoudre = null; DLG.retour = null;
+  if (ret && ret.focus && document.contains(ret)) ret.focus();
+  if (r) r(valeur);
+}
+/* confirmer('Supprimer la prise 3 ?', { detail, ok:'Supprimer', danger:true }) -> vrai ou faux */
+const confirmer = (titre, o) => ouvrirDialogue(Object.assign({ titre }, o));
+/* demanderTexte('Adresse du serveur', { valeur, aide, im }) -> le texte, ou null si on renonce */
+const demanderTexte = (titre, o) => ouvrirDialogue(Object.assign({ titre, saisie: (o && o.valeur) || '' }, o));
+/* prevenir('Serveur injoignable.', { detail }) -> tenue une fois lu */
+const prevenir = (titre, o) => ouvrirDialogue(Object.assign({ titre, annuler: false, ok: 'Compris' }, o)).then(() => {});
+$('dlg-oui').onclick = () => fermerDialogue($('dlg-saisie').hidden ? true : $('dlg-saisie').value);
+$('dlg-non').onclick = () => fermerDialogue(DLG.annulation);
+$('dlg').addEventListener('click', e => { if (e.target === e.currentTarget) fermerDialogue(DLG.annulation); });
+$('dlg').addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ e.stopPropagation(); fermerDialogue(DLG.annulation); }
+  else if (e.key === 'Enter' && e.target !== $('dlg-non')){ e.preventDefault(); e.stopPropagation(); $('dlg-oui').click(); }
+});
 
 /* l'apostrophe est echappee aussi : les valeurs passent dans des attributs */
 const esc = s => String(s == null ? '' : s)
@@ -1987,9 +2041,12 @@ function majBoutonsPrise(){
 }
 
 function delPrise(){
-  const t = prise(openId); if (!t || !confirm('Supprimer la prise ' + t.n + ' ?')) return;
-  supprimerPrise(t);
-  closeSheet();
+  const t = prise(openId); if (!t) return;
+  confirmer('Supprimer la prise ' + t.n + ' ?', { ok:'Supprimer', danger:true }).then(oui => {
+    if (!oui || !prise(t.id)) return;
+    supprimerPrise(t);
+    closeSheet();
+  });
 }
 
 function supprimerPrise(t){
@@ -2371,9 +2428,13 @@ function dessinerApercu(p){
 }
 function fermerCroquis(demander){
   if (!dessin) return false;
-  if (demander && dessin.sale && !confirm('Abandonner les modifications du croquis ?')) return true;
-  dessin = null;
-  $('voile-dessin').hidden = true;
+  const fermer = () => { dessin = null; $('voile-dessin').hidden = true; };
+  if (demander && dessin.sale){
+    confirmer('Abandonner les modifications du croquis ?', { ok:'Abandonner', danger:true, annuler:'Continuer' })
+      .then(oui => { if (oui && dessin) fermer(); });
+    return true;
+  }
+  fermer();
   return true;
 }
 
@@ -2441,7 +2502,7 @@ function doigtLeve(e){ doigts.delete(e.pointerId); if (doigts.size < 2) pince = 
 /* la barre d'espace tenue : la vue se deplace a la souris, quel que soit l'outil */
 let espaceTenu = false;
 document.addEventListener('keydown', e => {
-  if (e.key === ' ' && dessin && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)){ e.preventDefault(); espaceTenu = true; $('dzone').classList.add('main'); }
+  if (e.key === ' ' && dessin && !DLG.resoudre && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)){ e.preventDefault(); espaceTenu = true; $('dzone').classList.add('main'); }
 });
 document.addEventListener('keyup', e => { if (e.key === ' '){ espaceTenu = false; const z = $('dzone'); if (z) z.classList.remove('main'); } });
 
@@ -2679,24 +2740,37 @@ function finTrait(e){
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
   if (c.bouge || c.tourne || c.bout){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  // ce qui vient d'etre trace rejoint le croquis, une fois son texte connu s'il en faut un
+  const poser = () => {
+    if (!dessin) return;
+    souvenir();
+    c.n = ++dessin.seq;
+    (c.t ? dessin.objets : dessin.traits).push(c);
+    dessin.sale = true; rendreCroquis();
+  };
   if (c.pose){
-    const txt = (prompt('Texte à poser sur le croquis') || '').trim();
-    if (!txt) return;
-    c.txt = txt; delete c.pose;
+    demanderTexte('Texte à poser sur le croquis').then(txt => {
+      txt = (txt || '').trim(); if (!txt) return;
+      c.txt = txt; delete c.pose; poser();
+    });
+    return;
   }
   if ((OBJ_SEG.includes(c.t) || OBJ_RECT.includes(c.t)) && Math.hypot(c.x2 - c.x1, c.y2 - c.y1) < 10 * dessin.w / 1600) return;
   if (c.t === 'cote'){
     // en metres : un nombre seul recoit son unite, « 4,20 » devient « 4,20 m »
-    let m = (prompt('Mesure en mètres (ex. 4,20)') || '').trim();
-    if (!m){ rendreCroquis(); return; }
-    if (/^\d+([.,]\d+)?$/.test(m)) m += ' m';
-    c.txt = m;
+    demanderTexte('Mesure en mètres', { aide:'4,20', im:'decimal' }).then(m => {
+      m = (m || '').trim();
+      if (!m){ rendreCroquis(); return; }
+      if (/^\d+([.,]\d+)?$/.test(m)) m += ' m';
+      c.txt = m; poser();
+    });
+    return;
   }
-  if (c.t === 'perso') c.txt = (prompt('Qui est-ce ? (facultatif : Edward, figurant, doublure…)') || '').trim();
-  souvenir();
-  c.n = ++dessin.seq;
-  (c.t ? dessin.objets : dessin.traits).push(c);
-  dessin.sale = true; rendreCroquis();
+  if (c.t === 'perso'){
+    demanderTexte('Qui est-ce ?', { aide:'Edward, figurant, doublure… (facultatif)' }).then(q => { c.txt = (q || '').trim(); poser(); });
+    return;
+  }
+  poser();
 }
 /* La gomme retire ce qu'elle touche, en entier : un trait, ou un objet. Sur
    un plan de decor, une gomme blanche effacerait le fond. */
@@ -2757,10 +2831,12 @@ function annulerTrait(){
   dessin.sale = true; rendreCroquis();
 }
 function viderCroquis(){
-  if (dessin && (dessin.traits.length || dessin.objets.length) && confirm('Effacer tout le croquis ?')){
+  if (!dessin || !(dessin.traits.length || dessin.objets.length)) return;
+  confirmer('Effacer tout le croquis ?', { ok:'Tout effacer', danger:true }).then(oui => {
+    if (!oui || !dessin) return;
     souvenir();
     dessin.traits = []; dessin.objets = []; dessin.sale = true; rendreCroquis();
-  }
+  });
 }
 function outilCroquis(k, v){
   if (!dessin) return;
@@ -2860,9 +2936,12 @@ function poserFond(lieu, url){
 }
 function retirerFond(id){
   const p = plan(id), lieu = p ? lieuFond(p) : ''; if (!p || !fondDecor(lieu)) return;
-  if (!confirm('Retirer le plan du décor « ' + lieu + ' » ? Les croquis posés dessus repasseront sur feuille blanche.')) return;
-  poserFond(lieu, '');
-  redessinerFichePlan(p); renderList();
+  confirmer('Retirer le plan du décor « ' + lieu + ' » ?',
+            { detail:'Les croquis posés dessus repasseront sur feuille blanche.', ok:'Retirer', danger:true }).then(oui => {
+    if (!oui) return;
+    poserFond(lieu, '');
+    redessinerFichePlan(p); renderList();
+  });
 }
 window.addEventListener('resize', () => { if (dessin) tailleCroquis(); });
 
@@ -2997,17 +3076,20 @@ function supprimerPlan(p){
   operer({ op:'del', kind:'plan', id: p.id });
   corbeille = { type:'plan', plan: p, prises: pr, apres };
 }
-/* Demande confirmation, supprime, propose Annuler. Vrai si c'est fait. */
+/* Demande confirmation, supprime, propose Annuler. Tient vrai si c'est fait. */
 function supprimerPlanConfirme(p){
   const pr = prisesDe(p.id);
-  if (!confirm('Supprimer le plan ' + (p.plan || 'sans n°') + (pr.length ? ' et ses ' + pr.length + ' prise(s)' : '') + ' ?')) return false;
-  supprimerPlan(p);
-  toastAction('Plan ' + (p.plan || 'sans n°') + ' supprimé', 'Annuler', restaurer);
-  return true;
+  return confirmer('Supprimer le plan ' + (p.plan || 'sans n°') + (pr.length ? ' et ses ' + pr.length + ' prise(s)' : '') + ' ?',
+                   { ok:'Supprimer', danger:true }).then(oui => {
+    if (!oui || !plan(p.id)) return false;
+    supprimerPlan(p);
+    toastAction('Plan ' + (p.plan || 'sans n°') + ' supprimé', 'Annuler', restaurer);
+    return true;
+  });
 }
 function delPlan(){
   const p = plan(openId);
-  if (p && supprimerPlanConfirme(p)) closeSheet();
+  if (p) supprimerPlanConfirme(p).then(fait => { if (fait) closeSheet(); });
 }
 
 /* Un plan tourne en plus du decoupage : insert, plan de coupe, raccord ajoute
@@ -3216,7 +3298,7 @@ function ajouterPlanPrep(j){
 }
 function supprimerPlanPrep(id){
   const p = plan(id);
-  if (p && supprimerPlanConfirme(p)) renderAll();
+  if (p) supprimerPlanConfirme(p).then(fait => { if (fait) renderAll(); });
 }
 /* Entree passe au champ suivant de la carte ; sur le dernier, elle rend la main.
    Maj+Entree garde son sens dans la description. */
@@ -3335,13 +3417,19 @@ function htmlEquipe(){
 /* Depuis la version fichier : copier le projet vers le serveur de plateau,
    qui remplace le sien. Sert a passer du travail solo au travail partage. */
 function envoyerVersServeur(){
-  const adr = (prompt('Adresse du serveur de plateau', 'http://localhost:8765') || '').trim().replace(/\/+$/, '');
-  if (!adr) return;
-  if (!confirm('Remplacer le projet du serveur par celui de cette page (' + DB.prises.length + ' prises) ?')) return;
-  poster(adr + '/api/ops', corpsOps([{ op:'remplacer', db: DB }]))
-  .then(r => { if (!r.ok) throw 0; return r.json(); })
-  .then(() => { toast('Projet envoyé'); if (confirm('Projet envoyé. Ouvrir la version partagée ?')) location.href = adr; })
-  .catch(() => alert('Serveur injoignable à ' + adr + '.\nLancez Lancer.bat, puis réessayez.'));
+  demanderTexte('Adresse du serveur de plateau', { valeur:'http://localhost:8765', ok:'Continuer', im:'url' }).then(v => {
+    const adr = (v || '').trim().replace(/\/+$/, '');
+    if (!adr) return;
+    confirmer('Remplacer le projet du serveur par celui de cette page ?',
+              { detail: DB.prises.length + ' prise(s) et tous les plans seront envoyés.', ok:'Remplacer' }).then(oui => {
+      if (!oui) return;
+      poster(adr + '/api/ops', corpsOps([{ op:'remplacer', db: DB }]))
+      .then(r => { if (!r.ok) throw 0; return r.json(); })
+      .then(() => { toast('Projet envoyé'); return confirmer('Projet envoyé. Ouvrir la version partagée ?', { ok:'Ouvrir', annuler:'Rester ici' }); })
+      .then(oui => { if (oui) location.href = adr; })
+      .catch(() => prevenir('Serveur injoignable à ' + adr + '.', { detail:'Lancez Lancer.bat, puis réessayez.' }));
+    });
+  });
 }
 
 function openProd(){
@@ -3747,17 +3835,19 @@ function importJSON(input){
   const f = input.files[0]; if (!f) return;
   const r = new FileReader();
   r.onload = () => {
-    try{
-      const d = JSON.parse(r.result);
-      if (!d.plans) throw 0;
-      if (!confirm('Remplacer le projet actuel par le fichier importé' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?')) { input.value = ''; return; }
+    input.value = '';
+    let d;
+    try{ d = JSON.parse(r.result); if (!d.plans) throw 0; }
+    catch(e){ prevenir('Fichier illisible ou format incorrect.'); return; }
+    confirmer('Remplacer le projet actuel par le fichier importé' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?',
+              { ok:'Remplacer', danger:true }).then(oui => {
+      if (!oui) return;
       DB = normaliser(d);
       dernierPlan = null; chrono = null;
       if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
       operer({ op:'remplacer', db: DB });
       flush(); closeSheet(); toast('Projet importé');
-    }catch(e){ alert('Fichier illisible ou format incorrect.'); }
-    input.value = '';
+    });
   };
   r.readAsText(f);
 }
@@ -3765,29 +3855,35 @@ function importJSON(input){
 /* Remet a jour le decoupage sans toucher au travail du plateau. */
 function resync(){
   if (!SEED) return toast('Découpage introuvable');
-  if (!confirm('Recharger le découpage technique' + (RESEAU.possible ? ' pour tous les appareils' : '') + ' ?\nLes prises, éléments, notes, états et jours sont conservés.')) return;
-  let maj = 0, add = 0;
-  for (const s of SEED.plans){
-    // un plan ajoute sur le plateau n'a pas de ref : il ne doit jamais etre ecrase
-    const ex = DB.plans.find(p => p.ref && p.ref === s.ref);
-    if (ex){
-      const garde = { id: ex.id, jour: ex.jour || s.jour, etat: ex.etat, elements: ex.elements,
-                      elementsAutre: ex.elementsAutre, vfxDesc: ex.vfxDesc, intExt: ex.intExt, image: ex.image, croquis: ex.croquis,
-                      momentJour: ex.momentJour, meteo: ex.meteo, acteurs: ex.acteurs, figu: ex.figu, notesClient: ex.notesClient, notesInternes: ex.notesInternes };
-      Object.assign(ex, s, garde); propagerLocal(ex); maj++;
-    } else { DB.plans.push(Object.assign({ id: uid() }, PLAN_NEUF(), s)); add++; }
-  }
-  operer({ op:'remplacer', db: DB });
-  flush(); renderAll(); toast(maj + ' plans mis à jour, ' + add + ' ajoutés');
+  confirmer('Recharger le découpage technique' + (RESEAU.possible ? ' pour tous les appareils' : '') + ' ?',
+            { detail:'Les prises, éléments, notes, états et jours sont conservés.', ok:'Recharger' }).then(oui => {
+    if (!oui) return;
+    let maj = 0, add = 0;
+    for (const s of SEED.plans){
+      // un plan ajoute sur le plateau n'a pas de ref : il ne doit jamais etre ecrase
+      const ex = DB.plans.find(p => p.ref && p.ref === s.ref);
+      if (ex){
+        const garde = { id: ex.id, jour: ex.jour || s.jour, etat: ex.etat, elements: ex.elements,
+                        elementsAutre: ex.elementsAutre, vfxDesc: ex.vfxDesc, intExt: ex.intExt, image: ex.image, croquis: ex.croquis,
+                        momentJour: ex.momentJour, meteo: ex.meteo, acteurs: ex.acteurs, figu: ex.figu, notesClient: ex.notesClient, notesInternes: ex.notesInternes };
+        Object.assign(ex, s, garde); propagerLocal(ex); maj++;
+      } else { DB.plans.push(Object.assign({ id: uid() }, PLAN_NEUF(), s)); add++; }
+    }
+    operer({ op:'remplacer', db: DB });
+    flush(); renderAll(); toast(maj + ' plans mis à jour, ' + add + ' ajoutés');
+  });
 }
 
 function wipe(){
-  if (!confirm('Effacer tout le projet, prises comprises' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?\nExportez une sauvegarde JSON avant si besoin.')) return;
-  DB = normaliser(null);
-  if (SEED) seed(DB);
-  fJour = '*'; UI.jour = '*'; ecrireUI(); fEtat = ''; fCrit = {}; fQui = ''; dernierPlan = null; chrono = null;
-  operer({ op:'remplacer', db: DB });
-  flush(); closeSheet(); toast('Projet réinitialisé');
+  confirmer('Effacer tout le projet, prises comprises' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?',
+            { detail:'Exportez une sauvegarde JSON avant si besoin.', ok:'Tout effacer', danger:true }).then(oui => {
+    if (!oui) return;
+    DB = normaliser(null);
+    if (SEED) seed(DB);
+    fJour = '*'; UI.jour = '*'; ecrireUI(); fEtat = ''; fCrit = {}; fQui = ''; dernierPlan = null; chrono = null;
+    operer({ op:'remplacer', db: DB });
+    flush(); closeSheet(); toast('Projet réinitialisé');
+  });
 }
 
 /* ------------------------------------------------------------ Navigation */
@@ -3870,6 +3966,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 document.addEventListener('keydown', e => {
+  if (DLG.resoudre) return;   // une boite de dialogue a la main
   // les fleches : d'un jour a l'autre sur la liste, d'une fiche a l'autre quand une est ouverte
   const sens = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
   if (sens && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '')){
