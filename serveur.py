@@ -8,6 +8,7 @@ Un seul fichier, bibliothèque standard uniquement (Python 3.8+).
   py serveur.py            démarre sur le port 8765
   py serveur.py 9000       autre port
   py serveur.py --ouvrir   démarre et ouvre le navigateur
+  py serveur.py --motdepasse xxx   demande ce mot de passe à l'entrée
   py serveur.py --data D:\autre\dossier   range projet.json et les sauvegardes ailleurs
 
 Le serveur :
@@ -24,6 +25,8 @@ Tous les appareils doivent être sur le même réseau (Wi-Fi du plateau) et
 ouvrir l'adresse affichée au démarrage.
 """
 
+import hashlib
+import hmac
 import json
 import os
 import queue
@@ -33,19 +36,38 @@ import threading
 import time
 import webbrowser
 from datetime import datetime
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(ICI, 'wrangle.html')
-DATA = os.path.join(ICI, 'data')
-FICHIER = os.path.join(DATA, 'projet.json')
-SAUV = os.path.join(DATA, 'sauvegardes')
+
+
+def ranger_donnees(dossier):
+    """Où vivent le projet et ses sauvegardes. `--data` déplace les trois d'un coup."""
+    global DATA, FICHIER, SAUV
+    DATA = os.path.abspath(dossier)
+    FICHIER = os.path.join(DATA, 'projet.json')
+    SAUV = os.path.join(DATA, 'sauvegardes')
+
+
+DATA = FICHIER = SAUV = ''
+ranger_donnees(os.path.join(ICI, 'data'))
+
 SAUV_TOUTES_LES = 10 * 60      # secondes entre deux sauvegardes horodatées
 SAUV_CONSERVEES = 60
 PRESENCE_EXPIRE = 90           # secondes sans nouvelle d'un client avant retrait
+COOKIE = 'wrangle_acces'       # le laissez-passer gardé par le navigateur
+COOKIE_DUREE = 90 * 24 * 3600  # un tournage entier sans redemander le mot de passe
 
 COLLECTIONS = {'plan': 'plans', 'prise': 'prises'}
+
+HTML = 'text/html; charset=utf-8'
+TYPES = {'.html': HTML, '.js': 'text/javascript; charset=utf-8',
+         '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8',
+         '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml',
+         '.webp': 'image/webp', '.woff2': 'font/woff2'}
 
 # ----------------------------------------------------------------- État ---
 
@@ -54,6 +76,28 @@ etat = {'db': None, 'rev': 0, 'sale': False, 'derniere_sauv': 0.0}
 abonnes = []          # files SSE : {'q': Queue, 'client': id}
 presence = {}         # client -> {'nom', 'actif', 'vu'}
 t_ecriture = None
+
+
+def collection(db, kind):
+    """La liste qui porte ce genre de fiche ('plan' -> db['plans']), ou None."""
+    return db.get(COLLECTIONS[kind]) if db and kind in COLLECTIONS else None
+
+
+def place_apres(coll, apres):
+    """Où insérer un plan : juste après celui dont c'est l'identifiant, en tête
+    si `apres` est vide, à la fin si on ne le trouve pas."""
+    if not apres:
+        return 0
+    for i, p in enumerate(coll):
+        if p.get('id') == apres:
+            return i + 1
+    return len(coll)
+
+
+def ecrire_json(chemin, db):
+    """Le projet dans ce fichier, au format compact."""
+    with open(chemin, 'w', encoding='utf-8') as f:
+        json.dump(db, f, ensure_ascii=False, separators=(',', ':'))
 
 
 def normaliser(db):
@@ -98,8 +142,7 @@ def ecrire_maintenant():
             return
         os.makedirs(DATA, exist_ok=True)
         tmp = FICHIER + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(etat['db'], f, ensure_ascii=False, separators=(',', ':'))
+        ecrire_json(tmp, etat['db'])
         os.replace(tmp, FICHIER)
         etat['sale'] = True
 
@@ -119,8 +162,7 @@ def sauvegarde_horodatee(force=False):
             return
         os.makedirs(SAUV, exist_ok=True)
         nom = os.path.join(SAUV, 'projet_' + datetime.now().strftime('%Y-%m-%d_%H%M%S') + '.json')
-        with open(nom, 'w', encoding='utf-8') as f:
-            json.dump(etat['db'], f, ensure_ascii=False, separators=(',', ':'))
+        ecrire_json(nom, etat['db'])
         etat['sale'] = False
         etat['derniere_sauv'] = time.time()
         anciennes = sorted(x for x in os.listdir(SAUV) if x.startswith('projet_') and x.endswith('.json'))
@@ -152,7 +194,7 @@ def boucle_entretien():
 # ------------------------------------------------------------ Opérations ---
 
 def trouver(db, kind, id_):
-    coll = db.get(COLLECTIONS.get(kind, ''), None)
+    coll = collection(db, kind)
     if coll is None or not id_:
         return None
     for e in coll:
@@ -202,7 +244,7 @@ def appliquer(ops, client):
 
         elif t == 'add':
             data = op.get('data')
-            coll = db.get(COLLECTIONS.get(kind, ''), None)
+            coll = collection(db, kind)
             if coll is None or not isinstance(data, dict) or not data.get('id'):
                 continue
             existant = trouver(db, kind, data['id'])
@@ -219,19 +261,10 @@ def appliquer(ops, client):
                     data['n'] = (max([p.get('n') or 0 for p in freres]) + 1) if freres else 1
             # position d'un plan : apres tel plan, ou en tete ('' = avant tous)
             apres = op.get('apres')
-            place = None
             if kind == 'plan' and apres is not None:
-                if apres == '':
-                    place = 0
-                else:
-                    for i, p in enumerate(coll):
-                        if p.get('id') == apres:
-                            place = i + 1
-                            break
-            if place is None:
-                coll.append(data)
+                coll.insert(place_apres(coll, apres), data)
             else:
-                coll.insert(place, data)
+                coll.append(data)
             res = {'op': 'add', 'kind': kind, 'data': data}
             if kind == 'plan' and apres is not None:
                 res['apres'] = apres
@@ -239,7 +272,7 @@ def appliquer(ops, client):
 
         elif t == 'del':
             id_ = op.get('id')
-            coll = db.get(COLLECTIONS.get(kind, ''), None)
+            coll = collection(db, kind)
             if coll is None or not id_:
                 continue
             avant = len(coll)
@@ -271,15 +304,7 @@ def appliquer(ops, client):
             if not bouge:
                 continue
             coll.remove(bouge[0])
-            place = 0
-            if apres:
-                for i, p in enumerate(coll):
-                    if p.get('id') == apres:
-                        place = i + 1
-                        break
-                else:
-                    place = len(coll)
-            coll.insert(place, bouge[0])
+            coll.insert(place_apres(coll, apres), bouge[0])
             sortie.append({'op': 'move', 'kind': 'plan', 'id': id_, 'apres': apres})
 
         elif t == 'optiques':
@@ -349,6 +374,64 @@ def adresses_locales(port):
 
 # ------------------------------------------------------------------ HTTP ---
 
+# ---------------------------------------------------------------- Accès ---
+
+# Vide, le serveur est ouvert : c'est ce qu'on veut sur le Wi-Fi d'un plateau,
+# où tout le monde dans la pièce est de l'équipe. Renseigné (--motdepasse, ou
+# la variable WRANGLE_MOTDEPASSE), chaque appareil le donne une fois et son
+# navigateur s'en souvient. Indispensable dès que le serveur est joignable
+# depuis internet : sans lui l'API obéit à tout le monde, y compris pour un
+# remplacement complet du projet.
+MOT_DE_PASSE = os.environ.get('WRANGLE_MOTDEPASSE', '')
+
+ENTREE = """<!doctype html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Wrangle</title>
+<style>
+  :root{ color-scheme:dark }
+  *{ box-sizing:border-box }
+  body{ margin:0; min-height:100vh; display:grid; place-items:center; padding:24px;
+        background:#101114; color:#e8e8ea;
+        font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif }
+  form{ width:100%; max-width:320px }
+  h1{ margin:0 0 2px; font-size:23px; letter-spacing:.02em }
+  .sous{ margin:0 0 26px; color:#8b8d94; font-size:14px }
+  label{ display:block; margin-bottom:8px; font-size:13px; color:#8b8d94 }
+  input{ width:100%; padding:13px 14px; border-radius:10px; border:1px solid #2a2c33;
+         background:#17181d; color:inherit; font-size:17px }
+  input:focus{ outline:none; border-color:#4b8bf5 }
+  button{ width:100%; margin-top:14px; padding:13px; border:0; border-radius:10px;
+          background:#4b8bf5; color:#fff; font-size:16px; font-weight:600 }
+  .rate{ margin-top:16px; padding:10px 12px; border-radius:8px;
+         background:#3a1d1f; color:#ff9d9d; font-size:14px }
+</style>
+</head><body>
+<form method="post" action="/entrer">
+  <h1>Wrangle</h1>
+  <p class="sous">Journal de plateau</p>
+  <label for="mdp">Mot de passe du tournage</label>
+  <input id="mdp" name="mdp" type="password" autocomplete="current-password" autofocus>
+  <button type="submit">Entrer</button>
+  <!--avis-->
+</form>
+</body></html>
+"""
+
+
+def laissez_passer(mdp):
+    """Le jeton déposé dans le navigateur. Il découle du mot de passe seul :
+    redémarrer le serveur ne déconnecte personne, changer le mot de passe
+    déconnecte tout le monde."""
+    return hashlib.sha256(('wrangle:' + mdp).encode('utf-8')).hexdigest()
+
+
+def pareils(a, b):
+    """Comparaison à durée constante, accents compris."""
+    return hmac.compare_digest(a.encode('utf-8'), b.encode('utf-8'))
+
+
 class Requete(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     server_version = 'FSTDW/2'
@@ -358,15 +441,25 @@ class Requete(BaseHTTPRequestHandler):
 
     # -- utilitaires -------------------------------------------------------
 
-    def _json(self, code, obj):
-        corps = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+    def _repondre(self, code, corps=b'', type_=None, entetes=(), cors=False):
+        """Toute réponse passe par ici : le code, les en-têtes, le corps.
+        Rien n'est mis en cache — sur le plateau, la page doit être la bonne."""
         self.send_response(code)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        if type_:
+            self.send_header('Content-Type', type_)
         self.send_header('Content-Length', str(len(corps)))
         self.send_header('Cache-Control', 'no-store')
-        self._cors()
+        for nom, valeur in entetes:
+            self.send_header(nom, valeur)
+        if cors:
+            self._cors()
         self.end_headers()
-        self.wfile.write(corps)
+        if corps:
+            self.wfile.write(corps)
+
+    def _json(self, code, obj):
+        self._repondre(code, json.dumps(obj, ensure_ascii=False).encode('utf-8'),
+                       TYPES['.json'], cors=True)
 
     def _cors(self):
         # la page ouverte en fichier local (file://) peut envoyer son projet au serveur
@@ -375,10 +468,7 @@ class Requete(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
 
     def do_OPTIONS(self):
-        self.send_response(204)
-        self._cors()
-        self.send_header('Content-Length', '0')
-        self.end_headers()
+        self._repondre(204, cors=True)
 
     def _lire_json(self):
         n = int(self.headers.get('Content-Length') or 0)
@@ -389,10 +479,53 @@ class Requete(BaseHTTPRequestHandler):
         except Exception:
             return None
 
+    # -- entrée ------------------------------------------------------------
+
+    def _entre(self):
+        """Cet appareil a-t-il déjà donné le mot de passe ?"""
+        if not MOT_DE_PASSE:
+            return True
+        try:
+            biscuit = SimpleCookie(self.headers.get('Cookie') or '').get(COOKIE)
+        except Exception:
+            return False
+        return biscuit is not None and pareils(biscuit.value,
+                                               laissez_passer(MOT_DE_PASSE))
+
+    def _refuse(self, u):
+        """Une page renvoie au formulaire ; l'API répond 401, et la page en
+        conclut qu'elle a perdu le fil, comme lors d'une coupure réseau."""
+        if u.path.startswith('/api/'):
+            return self._json(401, {'erreur': 'mot de passe attendu'})
+        self._page_entree()
+
+    def _page_entree(self, rate=False):
+        avis = '<div class="rate">Mot de passe incorrect.</div>' if rate else ''
+        self._repondre(401 if rate else 200,
+                       ENTREE.replace('<!--avis-->', avis).encode('utf-8'), HTML)
+
+    def _connexion(self):
+        """Le formulaire : on vérifie, puis on dépose le laissez-passer."""
+        n = int(self.headers.get('Content-Length') or 0)
+        brut = self.rfile.read(n).decode('utf-8', 'replace') if 0 < n <= 4096 else ''
+        donne = (parse_qs(brut).get('mdp') or [''])[0]
+        if not MOT_DE_PASSE or not pareils(donne, MOT_DE_PASSE):
+            print('Mot de passe refusé depuis', self.client_address[0])
+            return self._page_entree(rate=True)
+        # derrière un reverse proxy en HTTPS, le cookie ne doit plus voyager en clair
+        sur = (self.headers.get('X-Forwarded-Proto') or '').lower() == 'https'
+        biscuit = '%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Lax%s' % (
+            COOKIE, laissez_passer(MOT_DE_PASSE), COOKIE_DUREE, '; Secure' if sur else '')
+        self._repondre(303, entetes=[('Location', '/'), ('Set-Cookie', biscuit)])
+
     # -- GET ---------------------------------------------------------------
 
     def do_GET(self):
         u = urlparse(self.path)
+        if u.path == '/entrer':
+            return self._page_entree()
+        if not self._entre():
+            return self._refuse(u)
         if u.path in ('/', '/index.html', '/wrangle.html'):
             return self._page()
         if u.path == '/api/etat':
@@ -413,18 +546,10 @@ class Requete(BaseHTTPRequestHandler):
         chemin = os.path.normpath(os.path.join(dossier, nom))
         if not chemin.startswith(dossier + os.sep) or not os.path.isfile(chemin):
             return self._json(404, {'erreur': 'introuvable'})
-        ext = os.path.splitext(chemin)[1].lower()
-        types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-                 '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8',
-                 '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2'}
         with open(chemin, 'rb') as f:
             corps = f.read()
-        self.send_response(200)
-        self.send_header('Content-Type', types.get(ext, 'application/octet-stream'))
-        self.send_header('Content-Length', str(len(corps)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(corps)
+        ext = os.path.splitext(chemin)[1].lower()
+        self._repondre(200, corps, TYPES.get(ext, 'application/octet-stream'))
 
     def _page(self):
         try:
@@ -432,12 +557,12 @@ class Requete(BaseHTTPRequestHandler):
                 corps = f.read()
         except OSError:
             return self._json(500, {'erreur': 'wrangle.html introuvable à côté de serveur.py'})
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(corps)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(corps)
+        # La page ne peut pas deviner qu'un serveur la sert : derrière un nom de
+        # domaine ou une IP de réseau privé, elle se croirait sur le site publié
+        # et resterait en mode local. On le lui dit donc en clair.
+        corps = corps.replace(b'<head>',
+                              b'<head><script>window.WRANGLE_SERVEUR=1</script>', 1)
+        self._repondre(200, corps, HTML)
 
     def _flux(self, q):
         client = (q.get('client') or [''])[0][:40]
@@ -486,6 +611,10 @@ class Requete(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == '/entrer':
+            return self._connexion()
+        if not self._entre():
+            return self._refuse(u)
         corps = self._lire_json()
         if corps is None:
             return self._json(400, {'erreur': 'JSON attendu'})
@@ -527,7 +656,7 @@ def main():
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
-    global DATA, FICHIER, SAUV
+    global MOT_DE_PASSE
     port = 8765
     ouvrir = False
     args = sys.argv[1:]
@@ -535,10 +664,10 @@ def main():
         a = args.pop(0)
         if a == '--ouvrir':
             ouvrir = True
+        elif a == '--motdepasse' and args:
+            MOT_DE_PASSE = args.pop(0)
         elif a == '--data' and args:
-            DATA = os.path.abspath(args.pop(0))
-            FICHIER = os.path.join(DATA, 'projet.json')
-            SAUV = os.path.join(DATA, 'sauvegardes')
+            ranger_donnees(args.pop(0))
         elif a.isdigit():
             port = int(a)
 
@@ -566,6 +695,8 @@ def main():
         print('  Autres appareils :     ' + a)
     print()
     print('  Les téléphones et tablettes doivent être sur le même Wi-Fi.')
+    if MOT_DE_PASSE:
+        print('  Accès : mot de passe demandé une fois par appareil.')
     print('  Données : ' + FICHIER)
     print('  Ctrl+C pour arrêter.')
     print('=' * 62)

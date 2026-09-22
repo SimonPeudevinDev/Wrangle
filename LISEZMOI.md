@@ -32,6 +32,14 @@ Sur iPhone / iPad : Safari > Partager > « Sur l'écran d'accueil » donne une i
   à saisir, et tout repart au retour du réseau (pastille « Hors ligne » en haut).
 - Export JSON / CSV / ALE : bouton ⚙, section « Données » et « Exports pour la post ».
 
+Le projet reste léger, et c'est voulu : chaque appareil le télécharge en entier à sa première
+ouverture, parfois en 4G. Une prise pleinement remplie pèse 0,8 Ko, un plan 0,5 Ko. **Un croquis
+n'est gardé que sous forme de traits** — environ 1 Ko — et l'aperçu de la fiche est redessiné à
+l'ouverture au lieu d'être stocké en image. Seuls les plans de décor importés pèsent vraiment
+(quelques centaines de Ko chacun, un par décor) : ils sont réduits à 1600 px et encodés dans le
+plus léger du JPEG et du WebP. Comptez 2 à 3 Mo pour un tournage entier, sauvegardes non
+comprises.
+
 Première mise en route : si le serveur n'a encore aucun projet, le premier appareil connecté envoie
 le sien (découpage compris, et les prises déjà saisies dans ce navigateur s'il y en a).
 
@@ -39,6 +47,28 @@ le sien (découpage compris, et les prises déjà saisies dans ce navigateur s'i
 
 Ouvrir directement `wrangle.html` dans un navigateur : la page travaille seule, données dans le
 navigateur, comme avant. La pastille en haut indique « Local ».
+
+## Saisir à plusieurs hors du plateau
+
+Le serveur n'a pas besoin d'être sur le Wi-Fi du plateau. Posé sur une machine joignable depuis
+internet, il laisse chacun saisir depuis son téléphone en 4G, sous son prénom, tout le monde
+voyant les saisies des autres en direct — exactement comme sur le plateau. Deux précautions.
+
+**Le mot de passe.** Sans lui, l'API obéit à n'importe qui, y compris pour remplacer le projet
+entier. Dès que le serveur est joignable depuis internet :
+
+```
+py serveur.py --motdepasse "le-mot-de-passe-du-tournage"
+```
+
+ou la variable d'environnement `WRANGLE_MOTDEPASSE`. Chaque appareil le donne une fois et son
+navigateur s'en souvient trois mois. Sans l'option, le serveur reste ouvert : c'est ce qu'on veut
+sur le Wi-Fi d'un plateau, où tout le monde dans la pièce est de l'équipe. Changer le mot de
+passe déconnecte tout le monde ; redémarrer le serveur, non.
+
+**HTTPS.** Un mot de passe qui voyage en clair n'en est pas un. Mettre le serveur derrière un
+reverse proxy qui s'occupe du certificat (Caddy, nginx). Il envoie l'en-tête `X-Forwarded-Proto`,
+et le cookie d'accès cesse alors de voyager en clair.
 
 ## Trouver un plan
 
@@ -55,6 +85,11 @@ La barre des jours et des filtres suit la liste quand on descend : on change de 
   - `Éléments` : les plans qui portent des éléments VFX (HDRI, mire, textures…).
   - `À compléter` : les prises sans nom de clip ou sans carte, et les plans dits tournés sans
     aucune prise. C'est le ménage à faire avant de rendre la journée.
+- **Saisie par** : dès que plusieurs personnes ont saisi, une rangée de prénoms apparaît — un
+  bouton par personne trouvée dans les prises du jour affiché. Cliquer sur `Simon` ne garde que
+  les plans où il a une prise et, dans ces plans, ne montre que les siennes. Un seul prénom à la
+  fois ; recliquer dessus relâche le filtre. La rangée reste cachée tant qu'une seule personne
+  a saisi : elle n'aurait rien à trier.
 - Chaque bouton porte son compte pour le jour affiché : un filtre à `0` est éteint, on ne clique
   jamais vers une liste vide. **✕ Effacer** remet tout à zéro.
 
@@ -76,9 +111,12 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 ## Divers
 
 - ☼ / ☾ en haut : thème clair pour le plein soleil, sombre pour la nuit.
-- Le logo : `ref/logo-wrangle.svg` (signe + mot) et `ref/logo-wrangle-mark.svg` (signe seul).
+- Le logo : `public/wrangle-logo.svg` (signe + mot), avec son original en image à côté.
   Le signe est aussi dans la page, en haut à gauche et en icône d'onglet. Il prend la couleur
   du thème : ses coutures sont des découpes, pas du blanc, donc il tient sur n'importe quel fond.
+  `py vectoriser2.py sortie.svg source.png` le refabrique à partir d'une image. Il refuse
+  d'écraser un logo dont le cadre ne correspond pas à la source : la page appelle le sien dans
+  un cadre écrit en dur, un logo aux autres proportions y serait rogné sans prévenir.
 - Rapport : filtrable par jour, alertes de cohérence (clips sans carte, cartes sans sauvegarde…),
   bouton Imprimer pour un PDF.
 
@@ -99,6 +137,30 @@ Les plans sans prise ni élément ne sont pas imprimés : la fiche ne contient q
 Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 - Port différent : `py serveur.py 9000`.
 
+## Vérifier que rien n'est cassé
+
+Huit scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+le projet réel n'est jamais touché.
+
+```
+py tests/lancer_scenario.py        deux appareils qui saisissent en même temps
+py tests/verif_rechargement.py     la page redémarre avec une copie locale déjà en place
+py tests/verif_filtre_qui.py       le filtre « Saisie par »
+py tests/verif_serveur_distant.py  le mode partagé hors du Wi-Fi du plateau
+py tests/verif_croquis.py          le croquis, enregistré en traits et redessiné
+py tests/verif_barre_jours.py      la rangée des jours, calée sur trois sur téléphone
+py tests/verif_enchainement.py     les lignes de la fiche s'ouvrent l'une après l'autre
+py tests/verif_reprise.py          recharger la page ramène là où on était
+```
+
+Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
+serveur d'une précédente exécution occupe encore le port : le fermer avant de relancer.
+
+Le décor est commun : `tests/banc.py` monte le serveur et le navigateur, puis les démonte et
+efface ses dossiers temporaires. C'est là qu'on touche si les tests doivent changer de décor,
+pas dans chaque script. À côté, `py tests/captures.py` prend une série de captures d'écran de
+l'interface, en téléphone et en grand écran, pour la contrôler à l'œil.
+
 ## Publier le site
 
 La page marche aussi toute seule sur Internet : données dans le navigateur de chacun, sans serveur
@@ -106,11 +168,11 @@ ni synchro. C'est ce qui est publié sur le nom de domaine.
 
 `py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `wrangle.html` tel quel
 sous le nom `index.html`, découpage et vignettes de la production compris (`window.DT_SEED`,
-`window.DT_THUMBS`). Tout le monde ouvre donc le site sur les plans du tournage, comme sur le
+`window.DT_THUMBS` et le dossier `public/vignettes/`). Tout le monde ouvre donc le site sur les plans du tournage, comme sur le
 plateau. Chacun garde ensuite ses prises dans son navigateur ; ⚙ > Données > « Recharger le
 découpage » remet les plans à jour sans toucher aux prises.
 
-Pour publier un carnet vide à la place (sans le découpage) : `py outils/construire_site.py --vide`.
+Pour publier un carnet vide à la place (sans le découpage ni ses vignettes) : `py outils/construire_site.py --vide`.
 La page pèse alors 200 Ko au lieu de 1,4 Mo, et un garde-fou refuse de construire s'il restait une
 trace des données. Le fichier du plateau n'est jamais touché.
 
@@ -121,6 +183,8 @@ c'est normal, `localhost` est une adresse locale.)
 Publier : `git push`. GitHub relance la construction et met le site en ligne en une minute
 (`.github/workflows/publier.yml`). Le nom de domaine est dans le fichier `CNAME` à la racine.
 
-Le mode partagé ne s'allume que sur une adresse de plateau — `localhost`, une IP privée, un nom en
-`.local` ou un nom sans point (`serveurPossible` dans la page). Sur un vrai nom de domaine, la page
-reste en mode local : il n'y a pas de `serveur.py` derrière.
+Le mode partagé s'allume quand `serveur.py` sert la page : il la signe en tête
+(`window.WRANGLE_SERVEUR`), où qu'il soit posé — Wi-Fi du plateau, nom de domaine, réseau privé.
+Sans cette signature, la page juge sur l'adresse (`serveurPossible`) : `localhost`, IP privée, nom
+en `.local` ou sans point. Le site publié n'a pas de serveur derrière et n'est pas signé : il reste
+en mode local, chacun ses données dans son navigateur.

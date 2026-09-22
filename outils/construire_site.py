@@ -11,7 +11,7 @@ index.html a cote de public/. Par defaut la page part telle quelle, decoupage
 et vignettes du tournage compris (window.DT_SEED, window.DT_THUMBS) : tout le
 monde ouvre le site sur les plans de la production, comme sur le plateau.
 
-Avec --vide, ces deux lignes sont laissees de cote et le site s'ouvre sur un
+Avec --vide, ces deux lignes et public/vignettes/ sont laisses de cote et le site s'ouvre sur un
 carnet vide, chacun importe son decoupage par le bouton engrenage. Un
 garde-fou refuse alors d'ecrire un site ou il en resterait une trace.
 """
@@ -53,7 +53,9 @@ def construire(sortie, vide=False):
     index = os.path.join(sortie, 'index.html')
     with open(index, 'w', encoding='utf-8', newline='') as f:
         f.writelines(gardees)
-    shutil.copytree(PUBLIC, os.path.join(sortie, 'public'))
+    # les vignettes vont avec le decoupage : un carnet vide s'en passe
+    shutil.copytree(PUBLIC, os.path.join(sortie, 'public'),
+                    ignore=shutil.ignore_patterns('vignettes') if vide else None)
 
     # sans ce fichier, GitHub Pages fait passer le site par Jekyll
     open(os.path.join(sortie, '.nojekyll'), 'w').close()
