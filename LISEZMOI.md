@@ -101,14 +101,18 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Publier le site
 
-La page marche aussi toute seule sur Internet : un carnet vide, données dans le navigateur de
-chacun, sans serveur ni synchro. C'est ce qui est publié sur le nom de domaine.
+La page marche aussi toute seule sur Internet : données dans le navigateur de chacun, sans serveur
+ni synchro. C'est ce qui est publié sur le nom de domaine.
 
-`py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `dit-log.html` sous le
-nom `index.html` et laisse de côté les deux lignes qui portent le découpage et les vignettes de la
-production ouverte (`window.DT_SEED`, `window.DT_THUMBS`). La page en ligne pèse 200 Ko au lieu de
-1,4 Mo et s'ouvre sur un carnet vide ; on charge son propre découpage par ⚙ > Données > Importer.
-Le fichier du plateau n'est pas touché.
+`py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `dit-log.html` tel quel
+sous le nom `index.html`, découpage et vignettes de la production compris (`window.DT_SEED`,
+`window.DT_THUMBS`). Tout le monde ouvre donc le site sur les plans du tournage, comme sur le
+plateau. Chacun garde ensuite ses prises dans son navigateur ; ⚙ > Données > « Recharger le
+découpage » remet les plans à jour sans toucher aux prises.
+
+Pour publier un carnet vide à la place (sans le découpage) : `py outils/construire_site.py --vide`.
+La page pèse alors 200 Ko au lieu de 1,4 Mo, et un garde-fou refuse de construire s'il restait une
+trace des données. Le fichier du plateau n'est jamais touché.
 
 Pour voir le résultat avant de publier : ouvrir `site/index.html` directement dans le navigateur.
 (Par `http://localhost`, la page se croit sur un serveur de plateau et affiche « Hors ligne » :

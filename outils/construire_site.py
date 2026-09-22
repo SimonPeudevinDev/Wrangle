@@ -3,17 +3,17 @@
 """
 WRANGLE — construit le site publie a partir de la page du plateau.
 
-  py outils/construire_site.py [dossier]      (defaut : site/)
+  py outils/construire_site.py [dossier]          (defaut : site/)
+  py outils/construire_site.py [dossier] --vide   carnet vide, sans le decoupage
 
-Le site publie, c'est la page seule : pas de serveur, et surtout pas les
-donnees du tournage en cours. dit-log.html porte, sur deux lignes, le
-decoupage (window.DT_SEED) et les vignettes du storyboard (window.DT_THUMBS)
-de la production ouverte : ce script les laisse de cote. La page en ligne
-s'ouvre sur un carnet vide, chacun charge son propre decoupage par l'import
-JSON du bouton engrenage. Le fichier du plateau n'est pas touche.
+Le site publie, c'est la page seule, sans serveur : dit-log.html devient
+index.html a cote de public/. Par defaut la page part telle quelle, decoupage
+et vignettes du tournage compris (window.DT_SEED, window.DT_THUMBS) : tout le
+monde ouvre le site sur les plans de la production, comme sur le plateau.
 
-Le garde-fou en fin de construction refuse d'ecrire un site ou il resterait
-une trace de ces donnees : mieux vaut un site casse qu'un decoupage en ligne.
+Avec --vide, ces deux lignes sont laissees de cote et le site s'ouvre sur un
+carnet vide, chacun importe son decoupage par le bouton engrenage. Un
+garde-fou refuse alors d'ecrire un site ou il en resterait une trace.
 """
 
 import os
@@ -29,18 +29,21 @@ CNAME = os.path.join(ICI, 'CNAME')
 GRAINES = ('window.DT_SEED=', 'window.DT_THUMBS=')
 
 
-def page_sans_donnees():
-    """Les lignes de dit-log.html, moins celles qui portent le tournage."""
+def lignes_page(vide):
+    """Les lignes de dit-log.html, moins celles du tournage si --vide."""
     with open(PAGE, 'r', encoding='utf-8', newline='') as f:
         lignes = f.readlines()
+    if not vide:
+        print('page : %d lignes, decoupage et vignettes compris' % len(lignes))
+        return lignes
     gardees = [l for l in lignes if not l.startswith(GRAINES)]
     print('page : %d lignes, %d de donnees laissees de cote'
           % (len(lignes), len(lignes) - len(gardees)))
     return gardees
 
 
-def construire(sortie):
-    gardees = page_sans_donnees()
+def construire(sortie, vide=False):
+    gardees = lignes_page(vide)
 
     if os.path.isdir(sortie):
         shutil.rmtree(sortie)
@@ -57,7 +60,8 @@ def construire(sortie):
     if os.path.exists(CNAME):
         shutil.copy(CNAME, os.path.join(sortie, 'CNAME'))
 
-    verifier(index)
+    if vide:
+        verifier(index)
     print('site construit dans %s' % sortie)
     print('  index.html : %d Ko  (page du plateau : %d Ko)'
           % (os.path.getsize(index) // 1024, os.path.getsize(PAGE) // 1024))
@@ -76,4 +80,7 @@ def verifier(index):
 
 
 if __name__ == '__main__':
-    construire(os.path.join(ICI, sys.argv[1] if len(sys.argv) > 1 else 'site'))
+    options = [a for a in sys.argv[1:] if a.startswith('--')]
+    reste = [a for a in sys.argv[1:] if not a.startswith('--')]
+    construire(os.path.join(ICI, reste[0] if reste else 'site'),
+               vide='--vide' in options)
