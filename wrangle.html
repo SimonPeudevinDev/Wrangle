@@ -3617,14 +3617,17 @@ function renderReport(){
       ${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div>` : ''}
 
     <div class="btns noprint" style="margin-bottom:30px">
+      <button class="btn p" onclick="imprimerDIT()">Journal DIT (PDF)</button>
       <button class="btn p" onclick="imprimerPost()">Fiche pour la post (PDF)</button>
       <button class="btn" onclick="exportCSV('montage')">Feuille de montage</button>
       <button class="btn" onclick="exportALE()">ALE</button>
       <button class="btn" onclick="window.print()">Imprimer ce bilan</button>
     </div>
-    <div class="note noprint" style="margin:-18px 0 30px">La fiche pour la post reprend le jour
-      choisi en haut : prises retenues pour le montage, éléments et relevés matchmove plan par plan,
-      puis l’état des cartes. Dans la fenêtre d’impression, choisir « Enregistrer au format PDF ».</div>`;
+    <div class="note noprint" style="margin:-18px 0 30px">Les deux fiches reprennent le jour choisi en haut.
+      Le journal DIT s’ouvre sur les prises retenues pour le montage, puis liste tous les plans avec
+      leurs prises, celle qui est retenue, et qui a saisi quoi à quelle heure. La fiche pour la post
+      donne les prises retenues, les éléments et relevés matchmove plan par plan.
+      Dans la fenêtre d’impression, choisir « Enregistrer au format PDF ».</div>`;
 }
 
 /* -------------------------------------- Fiche de transmission a la post */
@@ -3739,13 +3742,105 @@ function htmlPost(j){
       Wrangle</div>`;
 }
 
+/* ------------------------------------------------------- Journal du DIT */
+
+/* Le second document : pour le DIT lui-meme. Il s'ouvre sur ce que le montage
+   attend en temps reel (les prises retenues, avec leurs clips), puis liste
+   tous les plans, chacun avec ses prises, celle qui est retenue, et qui a
+   saisi quoi a quelle heure. Les plans sans prise y figurent aussi, en une
+   ligne : le journal dit ce qui reste a tourner. */
+function htmlDIT(j){
+  const tous = j === '*';
+  const P = tous ? DB.plans : plansDuJour(j);
+  const T = tous ? DB.prises : prisesDuJour(j);
+  const p = DB.prod;
+  const gardees = T.filter(t => t.retenue);
+  const cartes = [...new Set(T.map(t => (t.carte || '').trim()).filter(Boolean))];
+  const d = new Date();
+  const qui = t => [t.par, t.heure].filter(Boolean).join(' · ');
+
+  /* 1. Pour le montage, dans l'ordre du tournage. */
+  const ordre = new Map(DB.plans.map((x, i) => [x.id, i]));
+  const suite = gardees.slice().sort((a, b) =>
+    rangJour(a.jour || '') - rangJour(b.jour || '') ||
+    (ordre.get(a.planId) || 0) - (ordre.get(b.planId) || 0) || (a.n || 0) - (b.n || 0));
+  const montage = suite.length ? `<table>
+      <thead><tr>${tous ? '<th>Jour</th>' : ''}<th>Clip</th><th>Séq</th><th>Plan</th><th>Pr.</th><th>Statut</th>
+        <th>TC in</th><th>TC out</th><th>Durée</th><th>Carte</th><th>Note</th><th>Saisi par</th></tr></thead>
+      <tbody>${suite.map(t => `<tr>
+        ${tous ? `<td>${esc(miniJour(t.jour || ''))}</td>` : ''}
+        <td class="mono">${esc(t.clip || '—')}</td><td>${esc(t.seq || '')}</td><td>${esc(t.plan || '')}</td>
+        <td>${esc(t.n)}</td><td>${esc(t.statut || '')}</td>
+        <td class="mono">${esc(t.tcIn || '')}</td><td class="mono">${esc(t.tcOut || '')}</td>
+        <td>${esc(t.duree || '')}</td><td>${esc(t.carte || '')}</td>
+        <td>${esc(t.notes || '')}</td><td class="qui">${esc(qui(t))}</td></tr>`).join('')}</tbody>
+    </table>` : `<div class="pvide">Aucune prise marquée à monter pour l’instant.</div>`;
+
+  /* 2. Tous les plans, dans l'ordre du tournage, sous leur jour et leur sequence. */
+  let jourCourant = null, seqCourante = null;
+  const plans = P.map(x => {
+    const pr = prisesDe(x.id);
+    let tete = '';
+    if (tous && (x.jour || '') !== jourCourant){
+      jourCourant = x.jour || ''; seqCourante = null;
+      const dec = jourCourant === 'CG' ? 'Full CG' : decorJour(jourCourant);
+      tete += `<h3 class="djour">${esc(nomJour(jourCourant))}${dec ? ' · ' + esc(dec) : ''}</h3>`;
+    }
+    if ((x.seq || '') !== seqCourante){
+      seqCourante = x.seq || '';
+      tete += `<div class="dseq">Séquence ${esc(seqCourante || '—')}${x.seqTitre ? ' <span>' + esc(x.seqTitre) + '</span>' : ''}</div>`;
+    }
+    const prises = pr.length ? `<table class="dprises">
+        <thead><tr><th>Pr.</th><th>Clip</th><th>Carte</th><th>Statut</th><th>Montage</th>
+          <th>TC in</th><th>TC out</th><th>Durée</th><th>Note</th><th>Saisi par</th></tr></thead>
+        <tbody>${pr.map(t => `<tr${t.retenue ? ' class="ret"' : ''}>
+          <td>${esc(t.n)}</td><td class="mono">${esc(t.clip || '')}</td><td>${esc(t.carte || '')}</td>
+          <td>${esc(t.statut || '')}</td><td>${t.retenue ? '&#9679; retenue' : ''}</td>
+          <td class="mono">${esc(t.tcIn || '')}</td><td class="mono">${esc(t.tcOut || '')}</td>
+          <td>${esc(t.duree || '')}</td><td>${esc(t.notes || '')}</td><td class="qui">${esc(qui(t))}</td></tr>`).join('')}</tbody>
+      </table>` : `<div class="dvide">Aucune prise${x.etat === 'drop' ? ' · plan abandonné' : ''}</div>`;
+    return `${tete}<article class="dplan">
+      <div class="dtete"><b>Plan ${esc(x.plan || '—')}</b>
+        <i>${[ETATS[x.etat], x.cadrage, x.mouv, x.support, x.focale,
+              pr.length ? pr.length + ' prise' + plur(pr.length) : ''].filter(Boolean).map(esc).join(' · ')}</i></div>
+      ${prises}
+    </article>`;
+  }).join('');
+
+  return `
+    <h1>${esc(p.titre || 'Projet sans titre')} — journal DIT</h1>
+    <div class="psous">${[tous ? 'Tout le tournage' : nomJour(j), p.date, p.lieu, p.unit,
+        p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler].filter(Boolean).map(esc).join(' · ')}</div>
+    <div class="pchiffres">
+      <span><b>${P.filter(x => x.etat === 'done').length}</b>plans tournés sur ${P.length}</span>
+      <span><b>${gardees.length}</b>prises à monter</span>
+      <span><b>${T.length}</b>prises au total</span>
+      <span><b>${T.filter(t => t.statut === 'OK').length}</b>OK</span>
+      <span><b>${T.filter(t => t.statut === 'NG').length}</b>NG</span>
+      <span><b>${cartes.length}</b>carte${plur(cartes.length)}${cartes.length && cartes.length <= 6 ? ' · ' + cartes.map(esc).join(', ') : ''}</span>
+    </div>
+
+    <h2>Pour le montage — prises retenues</h2>
+    ${montage}
+
+    <h2>Tous les plans — prises et saisies</h2>
+    ${plans || '<div class="pvide">Aucun plan sur cette période.</div>'}
+
+    <div class="ppied">${esc(p.titre || '')} · journal DIT édité le ${deuxCh(d.getDate())}/${deuxCh(d.getMonth() + 1)}/${d.getFullYear()}
+      à ${hhmm(d)}${UI.nom ? ' par ' + esc(UI.nom) : ''} ·
+      Wrangle</div>`;
+}
+
 /* Le document est monte a la demande puis rendu au navigateur : on n'imprime
-   pas la page de saisie, on imprime la fiche. */
-function imprimerPost(){
-  $('post').innerHTML = htmlPost(fJourR);
+   pas la page de saisie, on imprime la fiche. Dans la fenetre d'impression,
+   « Enregistrer au format PDF » fait le fichier. */
+function imprimer(html){
+  $('post').innerHTML = html;
   document.body.classList.add('impr-post');
   window.print();
 }
+function imprimerPost(){ imprimer(htmlPost(fJourR)); }
+function imprimerDIT(){ imprimer(htmlDIT(fJourR)); }
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('impr-post');
   const z = $('post'); if (z) z.innerHTML = '';
