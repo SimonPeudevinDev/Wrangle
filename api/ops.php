@@ -1,12 +1,13 @@
 <?php
-// Les operations d'un appareil : POST { client, nom, ops } -> { rev, ops }.
-// Appliquees au projet sous verrou, notees au journal pour les autres,
-// renvoyees a l'emetteur telles que faites (numeros de prise corriges).
+// Les operations d'un appareil : POST { client, nom, espace, ops } -> { rev, ops }.
+// Appliquees au projet de l'espace sous verrou, notees au journal pour ses
+// autres appareils, renvoyees a l'emetteur telles que faites (numeros corriges).
 require __DIR__ . '/commun.php';
 $c = corps();
 if ($c === null) {
     repondre(400, ['erreur' => 'JSON attendu']);
 }
+choisir_espace(espace_demande($c));
 $client = couper($c->client ?? '', 40);
 $ops = $c->ops ?? null;
 if ($client === '' || !is_array($ops)) {
@@ -23,6 +24,9 @@ if ($faites) {
     ecrire_rev($rev);
     journal_ajouter($rev, $client, $faites);
     sauvegarder_si_besoin($db);
+}
+if (isset($c->nom)) {
+    noter_nom($c->nom);
 }
 deverrouiller();
 

@@ -274,14 +274,20 @@ const QP = new URLSearchParams(location.search);
 if (QP.get('client')) CLIENT = QP.get('client').slice(0, 40);
 if (QP.get('nom')) UI.nom = QP.get('nom').slice(0, 30);
 
-/* Le projet est-il commun ? Servie par serveur.py (voir RESEAU plus bas), la
-   page partage un seul projet avec tout le monde : une seule copie locale.
-   Sur le site, sans serveur, chacun a ses saisies : la copie locale est rangee
-   sous le prenom choisi a l'entree, et changer de prenom change de projet.
-   ?seul=1 dans l'adresse force ce mode, pour les tests. */
+/* Le projet est-il commun ? Servie par serveur.py sur le plateau (voir RESEAU
+   plus bas), la page partage un seul projet avec tout le monde : une seule
+   copie locale. Partout ailleurs, chacun a ses saisies : sur le site sans
+   serveur, la copie locale est rangee sous le prenom choisi a l'entree ; chez
+   l'hebergeur (SERVEUR_PHP), le serveur tient en plus un espace par prenom.
+   Changer de prenom change de saisies. ?seul=1 dans l'adresse force le mode
+   sans serveur, ?php=1 le mode hebergeur, pour les tests. */
+const SERVEUR_PHP = window.WRANGLE_SERVEUR === 'php' || QP.has('php');
 const PROJET_COMMUN = !QP.has('seul') && /^https?:$/.test(location.protocol)
                       && (!!window.WRANGLE_SERVEUR || serveurPossible(location.hostname));
-function cleLocale(){ return UI.nom && !PROJET_COMMUN ? KEY + ':' + UI.nom.trim().toLowerCase() : KEY; }
+/* « Marie-Lou » -> marie-lou : le nom de l'espace d'une personne, ici et sur le serveur */
+const espaceDe = nom => (nom || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'sans-nom';
+function cleLocale(){ return UI.nom && (!PROJET_COMMUN || SERVEUR_PHP) ? KEY + ':' + espaceDe(UI.nom) : KEY; }
 
 let DB;
 try { DB = load(); }
@@ -482,8 +488,8 @@ function serveurPossible(h){
 const RESEAU = {
   possible: PROJET_COMMUN,
   // le site chez l'hebergeur fait serveur en PHP : pas de flux, la page
-  // l'interroge (window.WRANGLE_SERVEUR = 'php', ou ?php=1 pour l'essayer ici)
-  php: PROJET_COMMUN && (window.WRANGLE_SERVEUR === 'php' || QP.has('php')),
+  // l'interroge, et chacun y a son espace (SERVEUR_PHP)
+  php: PROJET_COMMUN && SERVEUR_PHP,
   etat: 'local',          // local | ok | coupe
   rev: 0,
   attente: [],            // operations pas encore acceptees par le serveur
@@ -496,6 +502,8 @@ const RESEAU = {
 };
 /* l'adresse d'un appel : /api/etat chez serveur.py, api/etat.php chez l'hebergeur */
 const API = nom => RESEAU.php ? 'api/' + nom + '.php' : '/api/' + nom;
+/* l'espace de cet appareil chez l'hebergeur : celui de son prenom ; ailleurs, le projet commun */
+const monEspace = () => RESEAU.php ? espaceDe(UI.nom) : '';
 try{ if (RESEAU.possible) RESEAU.attente = JSON.parse(sessionStorage.getItem('fstdw.attente.' + CLIENT) || '[]') || []; }catch(e){}
 function ecrireAttente(){ try{ sessionStorage.setItem('fstdw.attente.' + CLIENT, JSON.stringify(RESEAU.attente)); }catch(e){} }
 
@@ -528,7 +536,7 @@ function operer(op){
 function planifierEnvoi(){ if (!RESEAU.tEnvoi) RESEAU.tEnvoi = setTimeout(envoyer, 0); }
 
 /* Ce que la page envoie au serveur : qui elle est, et la charge. */
-const corpsOps = ops => JSON.stringify({ client: CLIENT, nom: UI.nom, ops });
+const corpsOps = ops => JSON.stringify({ client: CLIENT, nom: UI.nom, espace: monEspace() || undefined, ops });
 const poster = (url, corps) => fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: corps });
 
 function envoyer(){
@@ -631,8 +639,9 @@ function interroger(){
   clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = null;
   if (!RESEAU.php) return;
   const suivant = ms => { clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = setTimeout(interroger, ms); };
+  if (!UI.nom){ suivant(1000); return; }   // l'espace, c'est le prenom : on attend qu'il soit choisi
   fetch(API('depuis') + '?rev=' + RESEAU.rev + '&client=' + encodeURIComponent(CLIENT) +
-        '&nom=' + encodeURIComponent(UI.nom || ''), { cache:'no-store' })
+        '&nom=' + encodeURIComponent(UI.nom || '') + '&espace=' + encodeURIComponent(monEspace()), { cache:'no-store' })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(m => {
     recevoir({ type:'presence', liste: m.presence || [] });   // d'abord : les noms servent aux ops
@@ -706,7 +715,7 @@ function envoyerPresence(){
   clearTimeout(RESEAU.tPresence);
   RESEAU.tPresence = setTimeout(() => {
     const actif = openType === 'prise' || openType === 'plan' ? openType + ':' + openId : '';
-    poster(API('presence'), JSON.stringify({ client: CLIENT, nom: UI.nom, actif })).catch(() => {});
+    poster(API('presence'), JSON.stringify({ client: CLIENT, nom: UI.nom, actif, espace: monEspace() || undefined })).catch(() => {});
   }, 300);
 }
 const initiale = n => ((n || '').trim().charAt(0) || '?').toUpperCase();
@@ -764,15 +773,16 @@ function choisirNom(i){
 }
 /* Sur le site, chacun a ses saisies : on range celles de la personne qui part
    sous son prenom, on ouvre celles de celle qui arrive (le decoupage seul si
-   elle n'a encore rien saisi). Avec le serveur, le projet est commun : on ne
-   change que de prenom. */
+   elle n'a encore rien saisi). Chez l'hebergeur, on change aussi d'espace sur
+   le serveur. Sur le plateau, le projet est commun : on ne change que de prenom. */
 function changerDePersonne(n){
-  if (n === UI.nom || PROJET_COMMUN){ setNom(n); return; }
-  flush();
+  if (n === UI.nom || (PROJET_COMMUN && !SERVEUR_PHP)){ setNom(n); return; }
+  viderTampon(); flush();
   setNom(n);
   DB = load();
   dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = [];
   if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
+  if (RESEAU.php){ RESEAU.rev = 0; RESEAU.attente = []; ecrireAttente(); interrogerBientot(); }
   closeSheet(); renderAll();
 }
 
@@ -3497,8 +3507,9 @@ function htmlEquipe(){
       <div class="note">Les données de cette page et celles de la version partagée
         sont séparées : ce bouton copie le projet d’ici vers le serveur, prises comprises.</div>`;
   return moi + `<div id="equipe" style="margin-top:14px">${htmlListeEquipe()}</div>` +
-    (RESEAU.php ? `<div class="note" style="margin-top:16px">Le site fait serveur : tout le monde travaille sur le
-      même projet, où qu’il soit, et ce que chacun saisit arrive chez les autres en quelques secondes.</div>` : '') +
+    (RESEAU.php ? `<div class="note" style="margin-top:16px">Le site garde les saisies de chacun sous son prénom, à
+      l’abri sur le serveur : vous ne voyez que les vôtres, sur tous vos appareils. Le DIT réunit celles de toute
+      l’équipe dans Rapport → Rapprocher les saisies.</div>` : '') +
     (RESEAU.adresses.length ? `<div class="note" style="margin-top:16px"><b>Sur les autres appareils</b>
       Même Wi-Fi que cet ordinateur, puis ouvrir dans le navigateur&nbsp;:</div>
       ${RESEAU.adresses.map(a => `<div class="url">${esc(a)}</div>`).join('')}` : '');
@@ -4341,7 +4352,31 @@ function deposerSaisies(){
     } else prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });
   }).catch(() => prevenir('Le dépôt n’a pas pris.', { detail: PAS_DE_DEPOT }));
 }
+/* Chez l'hebergeur, chacun a son espace : le DIT ramene le projet de chacun
+   des autres pour les rapprocher, sans depot ni fichier. */
+function recupererEspaces(){
+  fetch(API('espaces'), { cache:'no-store' }).then(r => r.json()).then(rep => {
+    const autres = (rep.espaces || []).filter(e => e.espace !== monEspace());
+    return Promise.all(autres.map(e =>
+      fetch(API('etat') + '?espace=' + encodeURIComponent(e.espace), { cache:'no-store' })
+        .then(r => r.json()).then(x => ({ nom: e.nom || e.espace, db: x.db, quand: e.quand }))));
+  }).then(liste => {
+    let n = 0;
+    liste.forEach(d => {
+      if (!d.db) return;
+      try{
+        const db = normaliser(d.db);
+        RAP.sources = RAP.sources.filter(s => s.nom !== d.nom);
+        RAP.sources.push({ nom: d.nom, db, quand: d.quand });
+        n++;
+      }catch(e){}
+    });
+    renderReport();
+    toast(n ? n + ' saisie' + plur(n) + ' récupérée' + plur(n) : 'Personne d’autre n’a encore saisi');
+  }).catch(() => prevenir('Impossible de lire les saisies de l’équipe.', { detail:'Serveur injoignable. Réessayez.' }));
+}
 function recupererDepots(){
+  if (RESEAU.php) return recupererEspaces();
   appelDepot('lister', {}).then(({ rep, statut }) => {
     if (!rep.depots) return prevenir('Impossible de lire les dépôts.', { detail: rep.erreur || ('réponse ' + statut) });
     let n = 0;
@@ -4510,13 +4545,14 @@ function htmlRapprochement(){
         <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>
         <button class="btn" onclick="telechargerRapprochement()">Écarts (PDF)</button></div>`;
   }
-  return `<div class="rsources">${puces}${RESEAU.possible ? '' : `<button type="button" class="btn sm p" onclick="recupererDepots()">Récupérer les dépôts</button>`}
+  return `<div class="rsources">${puces}${RESEAU.php ? `<button type="button" class="btn sm p" onclick="recupererDepots()">Récupérer les saisies de l’équipe</button>`
+      : RESEAU.possible ? '' : `<button type="button" class="btn sm p" onclick="recupererDepots()">Récupérer les dépôts</button>`}
     <button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
 }
 function garderFusion(){
   const s = sourcesRap();
   if (s.length < 2) return prevenir('Déposez d’abord une sauvegarde à rapprocher.');
-  confirmer('Garder la version fusionnée comme projet' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?',
+  confirmer('Garder la version fusionnée comme projet' + (RESEAU.possible && !RESEAU.php ? ', pour tous les appareils' : '') + ' ?',
             { detail:'Vos saisies font foi sur les écarts ; les autres comblent les vides et apportent leurs prises en plus.', ok:'Fusionner' })
   .then(oui => {
     if (!oui) return;
@@ -4875,7 +4911,7 @@ function importJSON(input){
     let d;
     try{ d = JSON.parse(r.result); if (!d.plans) throw 0; }
     catch(e){ prevenir('Fichier illisible ou format incorrect.'); return; }
-    confirmer('Remplacer le projet actuel par le fichier importé' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?',
+    confirmer('Remplacer le projet actuel par le fichier importé' + (RESEAU.possible && !RESEAU.php ? ', pour tous les appareils' : '') + ' ?',
               { ok:'Remplacer', danger:true }).then(oui => {
       if (!oui) return;
       DB = normaliser(d);
@@ -4911,7 +4947,7 @@ function resync(){
 }
 
 function wipe(){
-  confirmer('Effacer tout le projet, prises comprises' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?',
+  confirmer('Effacer tout le projet, prises comprises' + (RESEAU.possible && !RESEAU.php ? ', pour tous les appareils' : '') + ' ?',
             { detail:'Exportez une sauvegarde JSON avant si besoin.', ok:'Tout effacer', danger:true }).then(oui => {
     if (!oui) return;
     DB = normaliser(null);

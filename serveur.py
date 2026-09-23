@@ -75,7 +75,8 @@ TYPES = {'.html': HTML, '.js': 'text/javascript; charset=utf-8',
 # ----------------------------------------------------------------- État ---
 
 verrou = threading.RLock()
-etat = {'db': None, 'rev': 0, 'sale': False, 'derniere_sauv': 0.0}
+etat = {'db': None, 'rev': 0, 'sale': False, 'derniere_sauv': 0.0, 'journal': []}
+espaces = {}          # la page en mode php (?php=1) : un espace par prénom, en mémoire, pour l'essayer ici
 abonnes = []          # files SSE : {'q': Queue, 'client': id}
 presence = {}         # client -> {'nom', 'actif', 'vu'}
 t_ecriture = None
@@ -270,11 +271,14 @@ def trouver(db, kind, id_):
     return None
 
 
-def appliquer(ops, client):
-    """Applique les opérations d'un appareil. Retourne les opérations
-    effectivement réalisées (parfois corrigées ou complétées)."""
+def appliquer(ops, client, esp=None):
+    """Applique les opérations d'un appareil au projet commun (ou à l'espace
+    `esp`). Retourne les opérations effectivement réalisées (parfois corrigées
+    ou complétées)."""
+    if esp is None:
+        esp = etat
     sortie = []
-    db = etat['db']
+    db = esp['db']
     for op in ops:
         if not isinstance(op, dict):
             continue
@@ -289,7 +293,7 @@ def appliquer(ops, client):
             # appareil l'a devancé entre-temps, son projet reste, celui-ci est ignoré
             if op.get('siVide') and db is not None:
                 continue
-            etat['db'] = db = normaliser(d)
+            esp['db'] = db = normaliser(d)
             sortie.append({'op': 'remplacer', 'db': db})
             continue
 
@@ -381,9 +385,10 @@ def appliquer(ops, client):
                 sortie.append({'op': 'optiques', 'liste': db['optiques']})
 
     if sortie:
-        etat['rev'] += 1
-        noter_journal(etat['rev'], client, sortie)
-        planifier_ecriture()
+        esp['rev'] += 1
+        noter_journal(esp, esp['rev'], client, sortie)
+        if esp is etat:
+            planifier_ecriture()
     return sortie
 
 
@@ -393,27 +398,45 @@ def appliquer(ops, client):
 # mêmes réponses qu'api/depuis.php, ce qui permet de tester ce mode ici).
 
 JOURNAL_GARDE = 400
-journal = []      # [{'rev', 'client', 'ops'}], un remplacement noté sans son contenu
 
 
-def noter_journal(rev, client, faites):
-    journal.append({'rev': rev, 'client': client,
-                    'ops': [op if op['op'] != 'remplacer' else {'op': 'remplacer'} for op in faites]})
-    del journal[:-JOURNAL_GARDE]
+def noter_journal(e, rev, client, faites):
+    e['journal'].append({'rev': rev, 'client': client,
+                         'ops': [op if op['op'] != 'remplacer' else {'op': 'remplacer'} for op in faites]})
+    del e['journal'][:-JOURNAL_GARDE]
 
 
-def journal_depuis(rev):
+def journal_depuis(e, rev):
     """Les entrées après rev, ou None s'il faut le projet entier (trop de
     retard, ou un remplacement entre-temps)."""
     entrees, attendu = [], rev + 1
-    for e in journal:
-        if e['rev'] <= rev:
+    for x in e['journal']:
+        if x['rev'] <= rev:
             continue
-        if e['rev'] != attendu or any(op['op'] == 'remplacer' for op in e['ops']):
+        if x['rev'] != attendu or any(op['op'] == 'remplacer' for op in x['ops']):
             return None
-        entrees.append(e)
+        entrees.append(x)
         attendu += 1
     return entrees
+
+
+def slug(s):
+    return re.sub(r'[^a-z0-9-]+', '-', str(s or '').lower()).strip('-')[:40]
+
+
+def espace_etat(nom):
+    """L'état à servir : le projet commun sans nom d'espace, sinon l'espace de
+    ce prénom (celui de la page en mode php), créé au premier appel."""
+    if not nom:
+        return etat
+    return espaces.setdefault(nom, {'db': None, 'rev': 0, 'journal': [], 'nom': ''})
+
+
+def liste_espaces():
+    liste = [{'espace': k, 'nom': e['nom'] or k, 'rev': e['rev'], 'plans': len(e['db']['plans']),
+              'prises': len(e['db']['prises']), 'quand': datetime.now().isoformat(timespec='seconds')}
+             for k, e in espaces.items() if e['db'] and e['db']['plans']]
+    return sorted(liste, key=lambda x: x['nom'].lower())
 
 
 # --------------------------------------------------------------- Diffusion ---
@@ -433,20 +456,22 @@ def diffuser(message, sauf=None):
 
 def message_presence():
     with verrou:
-        liste = [{'client': c, 'nom': p.get('nom', ''), 'actif': p.get('actif', '')}
+        liste = [{'client': c, 'nom': p.get('nom', ''), 'actif': p.get('actif', ''), 'espace': p.get('espace', '')}
                  for c, p in presence.items()]
     return {'type': 'presence', 'liste': liste}
 
 
-def noter_presence(client, nom=None, actif=None):
+def noter_presence(client, nom=None, actif=None, espace=None):
     if not client:
         return
     with verrou:
-        p = presence.setdefault(client, {'nom': '', 'actif': '', 'vu': 0})
+        p = presence.setdefault(client, {'nom': '', 'actif': '', 'espace': '', 'vu': 0})
         if nom is not None:
             p['nom'] = str(nom)[:40]
         if actif is not None:
             p['actif'] = str(actif)[:80]
+        if espace is not None:
+            p['espace'] = espace
         p['vu'] = time.time()
 
 
@@ -632,12 +657,16 @@ class Requete(BaseHTTPRequestHandler):
         if u.path in ('/', '/index.html', '/wrangle.html'):
             return self._page()
         if u.path == '/api/etat':
+            e = espace_etat(slug((parse_qs(u.query).get('espace') or [''])[0]))
             with verrou:
-                return self._json(200, {'db': etat['db'], 'rev': etat['rev'],
+                return self._json(200, {'db': e['db'], 'rev': e['rev'],
                                         'presence': message_presence()['liste'],
                                         'adresses': self.server.adresses})
         if u.path == '/api/depuis':
             return self._depuis(parse_qs(u.query))
+        if u.path == '/api/espaces':
+            with verrou:
+                return self._json(200, {'espaces': liste_espaces()})
         if u.path == '/api/flux':
             return self._flux(parse_qs(u.query))
         if u.path == '/api/mail':
@@ -683,19 +712,23 @@ class Requete(BaseHTTPRequestHandler):
             rev = 0
         client = (q.get('client') or [''])[0][:40]
         nom = (q.get('nom') or [None])[0]
+        espace = slug((q.get('espace') or [''])[0])
+        e = espace_etat(espace)
         with verrou:
-            actuel = etat['rev']
+            actuel = e['rev']
             rep = {'rev': actuel}
             if rev <= 0 or rev > actuel:
-                rep['db'] = etat['db']
+                rep['db'] = e['db']
             elif rev < actuel:
-                entrees = journal_depuis(rev)
+                entrees = journal_depuis(e, rev)
                 if entrees is None:
-                    rep['db'] = etat['db']
+                    rep['db'] = e['db']
                 else:
                     rep['ops'] = entrees
             if client:
-                noter_presence(client, nom=nom)
+                noter_presence(client, nom=nom, espace=espace)
+            if e is not etat and nom:
+                e['nom'] = nom[:40]
             rep['presence'] = message_presence()['liste']
         return self._json(200, rep)
 
@@ -759,11 +792,15 @@ class Requete(BaseHTTPRequestHandler):
             ops = corps.get('ops')
             if not client or not isinstance(ops, list):
                 return self._json(400, {'erreur': 'client et ops attendus'})
+            espace = slug(corps.get('espace') or '')
+            e = espace_etat(espace)
             with verrou:
-                noter_presence(client, nom=corps.get('nom'))
-                faites = appliquer(ops, client)
-                rev = etat['rev']
-            if faites:
+                noter_presence(client, nom=corps.get('nom'), espace=espace)
+                if e is not etat and corps.get('nom'):
+                    e['nom'] = str(corps.get('nom'))[:40]
+                faites = appliquer(ops, client, e)
+                rev = e['rev']
+            if faites and e is etat:
                 diffuser({'type': 'ops', 'client': client, 'rev': rev, 'ops': faites}, sauf=client)
                 for op in faites:
                     if op['op'] == 'remplacer':

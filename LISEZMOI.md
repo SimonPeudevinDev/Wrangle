@@ -54,19 +54,24 @@ Le serveur n'a pas besoin d'être sur le Wi-Fi du plateau. Posé sur une machine
 internet, il laisse chacun saisir depuis son téléphone en 4G, sous son prénom, tout le monde
 voyant les saisies des autres en direct — exactement comme sur le plateau.
 
-**Chez l'hébergeur (OVH), sans rien d'autre.** Le site publié chez un hébergeur qui exécute PHP
-fait serveur lui-même : les scripts d'`api/` tiennent le projet partagé, le journal des
-opérations et la liste des connectés, avec les mêmes appels et les mêmes réponses que
-`serveur.py`. La page le sait par une ligne en tête (`window.WRANGLE_SERVEUR='php'`, posée par
-`construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH) et
-l'interroge toutes les deux secondes au lieu d'écouter un flux. Chacun ouvre le site sur son
-téléphone, choisit son prénom, et ce qu'il saisit arrive chez les autres en quelques secondes.
-Rien à installer ni à laisser allumé. Les données vivent dans `api/donnees/`, interdit au web :
-le projet, le journal, une sauvegarde horodatée toutes les dix minutes (60 gardées). Le journal
-DIT par mail part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans
-`api/donnees/mail.json` (`{"expediteur": "journal@foresight-movie.com"}`). Pas de mot de passe :
-le site est privé, seule l'équipe en connaît l'adresse. `py tests/verif_ovh.py` parle au site
-publié pour vérifier que tout répond (il faut le réseau ; le projet en place est remis à la fin).
+**Chez l'hébergeur (OVH), sans rien d'autre : chacun sa session.** Le site publié chez un
+hébergeur qui exécute PHP fait serveur lui-même, mais autrement que sur le plateau : **chacun a
+son espace**, nommé d'après son prénom. Il n'y voit que ses saisies, sur tous ses appareils, à
+l'abri sur le serveur ; personne ne voit celles des autres. Le DIT réunit tout dans Rapport →
+« Rapprocher les saisies » → « Récupérer les saisies de l'équipe » : les projets de chacun
+arrivent côte à côte (écarts, compléments, prises chez un seul), « Garder la fusion comme
+projet » en fait son projet à lui, d'où sortent le journal DIT et les exports. Les scripts
+d'`api/` tiennent, par espace, le projet, le journal des opérations et les sauvegardes, avec
+les mêmes appels et les mêmes réponses que `serveur.py` ; la liste des connectés est commune.
+La page sait qu'elle est chez l'hébergeur par une ligne en tête (`window.WRANGLE_SERVEUR='php'`,
+posée par `construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH)
+et l'interroge toutes les deux secondes au lieu d'écouter un flux. Rien à installer ni à laisser
+allumé. Les données vivent dans `api/donnees/espaces/<prénom>/`, interdit au web : le projet, le
+journal, une sauvegarde horodatée toutes les dix minutes (60 gardées). Le journal DIT par mail
+part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans `api/donnees/mail.json`
+(`{"expediteur": "journal@foresight-movie.com"}`). Pas de mot de passe : le site est privé,
+seule l'équipe en connaît l'adresse. `py tests/verif_ovh.py` parle au site publié pour vérifier
+que tout répond, dans deux espaces d'essai vidés à la fin (il faut le réseau).
 
 **Sur une machine à soi.** `serveur.py` posé sur un VPS fait la même chose, avec son flux en
 direct. Deux précautions alors.

@@ -5,10 +5,17 @@
 // Le projet, le journal des operations, la presence et les sauvegardes vivent
 // dans donnees/, interdit au web.
 //
-//   etat.php      GET   { db, rev, presence, adresses }
-//   depuis.php    GET   ?rev=N&client=…&nom=…  -> ce qui a change depuis N
-//   ops.php       POST  { client, nom, ops }   -> { rev, ops }
-//   presence.php  POST  { client, nom, actif } -> { ok }
+// Chacun a son espace, nomme d'apres son prenom (« marie-lou ») : son projet,
+// son journal, ses sauvegardes, sur tous ses appareils. Il ne voit que ses
+// saisies ; le DIT reunit celles de tous dans le rapprochement, par
+// espaces.php puis etat.php?espace=… Chaque appel dit son espace (?espace=
+// ou { espace } dans le corps) ; sans, c'est l'espace « commun ».
+//
+//   etat.php      GET   ?espace=…                      { db, rev, presence, adresses }
+//   depuis.php    GET   ?rev=N&client=…&nom=…&espace=…  -> ce qui a change depuis N
+//   ops.php       POST  { client, nom, espace, ops }   -> { rev, ops }
+//   presence.php  POST  { client, nom, actif, espace } -> { ok }
+//   espaces.php   GET   les espaces qui ont un projet : { espaces: [{ espace, nom, rev, plans, prises, quand }] }
 //   mail.php      GET / POST : le journal DIT par mail
 
 header('Content-Type: application/json; charset=utf-8');
@@ -37,10 +44,41 @@ function couper($s, $n) {
     return mb_substr((string) $s, 0, $n);
 }
 
+// ------------------------------------------------------------- Espaces ---
+
+$ESPACE = 'commun';
+
+// l'espace demande par l'appel : ?espace=… ou { espace } dans le corps, en lettres
+// minuscules, chiffres et tirets ; a defaut, « commun »
+function espace_demande($corps = null) {
+    $e = $_GET['espace'] ?? (is_object($corps) ? ($corps->espace ?? '') : '');
+    $e = trim(strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', (string) $e)), '-');
+    return $e === '' ? 'commun' : substr($e, 0, 40);
+}
+
+function choisir_espace($e) {
+    global $ESPACE;
+    $ESPACE = $e;
+}
+
+function dossier_espace() {
+    global $ESPACE;
+    return DONNEES . '/espaces/' . $ESPACE;
+}
+
+// le prenom tel que la personne l'ecrit, pour la liste des espaces
+function noter_nom($nom) {
+    $nom = couper(trim((string) $nom), 40);
+    $f = dossier_espace() . '/nom.txt';
+    if ($nom !== '' && (!file_exists($f) || file_get_contents($f) !== $nom)) {
+        file_put_contents($f, $nom);
+    }
+}
+
 // ------------------------------------------------------------ Fichiers ---
 
 function preparer() {
-    foreach ([DONNEES, DONNEES . '/journal', DONNEES . '/sauvegardes'] as $d) {
+    foreach ([DONNEES, dossier_espace(), dossier_espace() . '/journal', dossier_espace() . '/sauvegardes'] as $d) {
         if (!is_dir($d)) {
             mkdir($d, 0755, true);
         }
@@ -52,11 +90,11 @@ function preparer() {
 
 $VERROU = null;
 
-// un seul script a la fois modifie le projet ; les lecteurs se partagent le verrou
+// un seul script a la fois modifie le projet d'un espace ; les lecteurs se partagent le verrou
 function verrouiller($exclusif = true) {
     global $VERROU;
     preparer();
-    $VERROU = fopen(DONNEES . '/verrou', 'c');
+    $VERROU = fopen(dossier_espace() . '/verrou', 'c');
     if ($VERROU) {
         flock($VERROU, $exclusif ? LOCK_EX : LOCK_SH);
     }
@@ -88,12 +126,12 @@ function ecrire_json($chemin, $obj) {
 }
 
 function lire_rev() {
-    $f = DONNEES . '/rev.txt';
+    $f = dossier_espace() . '/rev.txt';
     return file_exists($f) ? (int) file_get_contents($f) : 0;
 }
 
 function ecrire_rev($rev) {
-    file_put_contents(DONNEES . '/rev.txt', (string) $rev, LOCK_EX);
+    file_put_contents(dossier_espace() . '/rev.txt', (string) $rev, LOCK_EX);
 }
 
 // -------------------------------------------------------------- Projet ---
@@ -125,9 +163,9 @@ function normaliser($db) {
     return $db;
 }
 
-// le projet partage, ou null tant qu'aucun appareil n'en a envoye un
+// le projet de l'espace, ou null tant qu'aucun appareil n'en a envoye un
 function lire_projet() {
-    $db = lire_json(DONNEES . '/projet.json');
+    $db = lire_json(dossier_espace() . '/projet.json');
     if (!is_object($db) || empty($db->plans)) {
         return null;
     }
@@ -135,19 +173,19 @@ function lire_projet() {
 }
 
 function ecrire_projet($db) {
-    ecrire_json(DONNEES . '/projet.json', $db);
+    ecrire_json(dossier_espace() . '/projet.json', $db);
 }
 
 // une copie horodatee toutes les dix minutes des qu'il y a du nouveau, 60 gardees
 function sauvegarder_si_besoin($db) {
-    $f = DONNEES . '/derniere_sauv.txt';
+    $f = dossier_espace() . '/derniere_sauv.txt';
     $derniere = file_exists($f) ? (int) file_get_contents($f) : 0;
     if (time() - $derniere < SAUV_TOUTES_LES) {
         return;
     }
-    ecrire_json(DONNEES . '/sauvegardes/projet_' . date('Y-m-d_His') . '.json', $db);
+    ecrire_json(dossier_espace() . '/sauvegardes/projet_' . date('Y-m-d_His') . '.json', $db);
     file_put_contents($f, (string) time());
-    $anciennes = glob(DONNEES . '/sauvegardes/projet_*.json') ?: [];
+    $anciennes = glob(dossier_espace() . '/sauvegardes/projet_*.json') ?: [];
     sort($anciennes);
     foreach (array_slice($anciennes, 0, max(0, count($anciennes) - SAUV_CONSERVEES)) as $x) {
         @unlink($x);
@@ -160,8 +198,8 @@ function sauvegarder_si_besoin($db) {
 
 function journal_ajouter($rev, $client, $ops) {
     $entree = ['rev' => $rev, 'client' => $client, 'ops' => $ops];
-    ecrire_json(DONNEES . '/journal/' . sprintf('%012d', $rev) . '.json', $entree);
-    $fichiers = glob(DONNEES . '/journal/*.json') ?: [];
+    ecrire_json(dossier_espace() . '/journal/' . sprintf('%012d', $rev) . '.json', $entree);
+    $fichiers = glob(dossier_espace() . '/journal/*.json') ?: [];
     sort($fichiers);
     foreach (array_slice($fichiers, 0, max(0, count($fichiers) - JOURNAL_GARDE)) as $x) {
         @unlink($x);
@@ -171,7 +209,7 @@ function journal_ajouter($rev, $client, $ops) {
 // les entrees apres la revision $rev, ou null s'il faut le projet entier
 // (trop en retard, ou un remplacement entre-temps)
 function journal_depuis($rev) {
-    $fichiers = glob(DONNEES . '/journal/*.json') ?: [];
+    $fichiers = glob(dossier_espace() . '/journal/*.json') ?: [];
     sort($fichiers);
     $entrees = [];
     $attendu = $rev + 1;
@@ -199,10 +237,12 @@ function journal_depuis($rev) {
 }
 
 // ------------------------------------------------------------ Presence ---
-// Qui est la et ce qu'il regarde. Chaque interrogation renouvelle la
-// presence de l'appareil ; passe le delai, il disparait de la liste.
+// Qui est la et ce qu'il regarde, tous espaces confondus : l'equipe se voit
+// connectee, sans voir les saisies des autres. Chaque interrogation renouvelle
+// la presence de l'appareil ; passe le delai, il disparait de la liste.
 
 function noter_presence($client, $nom = null, $actif = null) {
+    global $ESPACE;
     if ($client === '') {
         return;
     }
@@ -215,9 +255,10 @@ function noter_presence($client, $nom = null, $actif = null) {
     if (!is_object($liste)) {
         $liste = new stdClass;
     }
-    $p = $liste->$client ?? (object) ['nom' => '', 'actif' => '', 'vu' => 0];
+    $p = $liste->$client ?? (object) ['nom' => '', 'actif' => '', 'espace' => '', 'vu' => 0];
     $change = $nom !== null && $p->nom !== couper($nom, 40)
            || $actif !== null && $p->actif !== couper($actif, 80)
+           || ($p->espace ?? '') !== $ESPACE
            || time() - $p->vu >= 10;     // les battements ne reecrivent pas le fichier a chaque fois
     if ($change) {
         if ($nom !== null) {
@@ -226,6 +267,7 @@ function noter_presence($client, $nom = null, $actif = null) {
         if ($actif !== null) {
             $p->actif = couper($actif, 80);
         }
+        $p->espace = $ESPACE;
         $p->vu = time();
         $liste->$client = $p;
         foreach ($liste as $c => $x) {
@@ -247,7 +289,7 @@ function liste_presence() {
     if (is_object($liste)) {
         foreach ($liste as $c => $p) {
             if (time() - ($p->vu ?? 0) <= PRESENCE_EXPIRE) {
-                $sortie[] = ['client' => $c, 'nom' => $p->nom ?? '', 'actif' => $p->actif ?? ''];
+                $sortie[] = ['client' => $c, 'nom' => $p->nom ?? '', 'actif' => $p->actif ?? '', 'espace' => $p->espace ?? ''];
             }
         }
     }
