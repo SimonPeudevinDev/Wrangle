@@ -274,13 +274,22 @@ const QP = new URLSearchParams(location.search);
 if (QP.get('client')) CLIENT = QP.get('client').slice(0, 40);
 if (QP.get('nom')) UI.nom = QP.get('nom').slice(0, 30);
 
+/* Le projet est-il commun ? Servie par serveur.py (voir RESEAU plus bas), la
+   page partage un seul projet avec tout le monde : une seule copie locale.
+   Sur le site, sans serveur, chacun a ses saisies : la copie locale est rangee
+   sous le prenom choisi a l'entree, et changer de prenom change de projet.
+   ?seul=1 dans l'adresse force ce mode, pour les tests. */
+const PROJET_COMMUN = !QP.has('seul') && /^https?:$/.test(location.protocol)
+                      && (!!window.WRANGLE_SERVEUR || serveurPossible(location.hostname));
+function cleLocale(){ return UI.nom && !PROJET_COMMUN ? KEY + ':' + UI.nom.trim().toLowerCase() : KEY; }
+
 let DB;
 try { DB = load(); }
 catch (e) {
   // la copie locale ne se lit plus (ancien format, donnees abimees) : on repart de zero,
   // le serveur renverra le projet a la connexion
   console.error('Copie locale illisible, on repart du serveur :', e);
-  try { localStorage.removeItem(KEY); } catch (x) {}
+  try { localStorage.removeItem(cleLocale()); } catch (x) {}
   DB = normaliser(null);
   if (!DB.plans.length && SEED) seed(DB);
 }
@@ -347,7 +356,13 @@ function normaliser(d){
 function load(){
   let db = null;
   try{
-    const raw = localStorage.getItem(KEY);
+    const cle = cleLocale();
+    let raw = localStorage.getItem(cle);
+    // la copie d'avant les prenoms, ou faite avant de se nommer : le premier prenom la reprend
+    if (!raw && cle !== KEY){
+      raw = localStorage.getItem(KEY);
+      if (raw){ localStorage.setItem(cle, raw); localStorage.removeItem(KEY); }
+    }
     if (raw) db = JSON.parse(raw);
   }catch(e){}
   // ancienne version : le jour affiche etait range dans le projet lui-meme
@@ -367,7 +382,7 @@ let tSave;
 function save(){ clearTimeout(tSave); tSave = setTimeout(flush, 150); }
 function flush(){
   clearTimeout(tSave);
-  try{ localStorage.setItem(KEY, JSON.stringify(DB)); flush.plein = false; }
+  try{ localStorage.setItem(cleLocale(), JSON.stringify(DB)); flush.plein = false; }
   catch(e){
     if (!flush.plein || !RESEAU.possible)
       toast(RESEAU.possible ? 'Cache local plein : les données restent sur le serveur'
@@ -465,8 +480,7 @@ function serveurPossible(h){
 }
 
 const RESEAU = {
-  possible: /^https?:$/.test(location.protocol)
-            && (!!window.WRANGLE_SERVEUR || serveurPossible(location.hostname)),
+  possible: PROJET_COMMUN,
   etat: 'local',          // local | ok | coupe
   rev: 0,
   attente: [],            // operations pas encore acceptees par le serveur
@@ -701,10 +715,23 @@ function demanderNom(){
 function choisirNom(i){
   const n = EQUIPE[i];
   if (!n) return;
-  setNom(n);
+  changerDePersonne(n);
   $('voile-nom').hidden = true;
   if (openType === 'prod') openProd();
   toast('Bonjour ' + n);
+}
+/* Sur le site, chacun a ses saisies : on range celles de la personne qui part
+   sous son prenom, on ouvre celles de celle qui arrive (le decoupage seul si
+   elle n'a encore rien saisi). Avec le serveur, le projet est commun : on ne
+   change que de prenom. */
+function changerDePersonne(n){
+  if (n === UI.nom || PROJET_COMMUN){ setNom(n); return; }
+  flush();
+  setNom(n);
+  DB = load();
+  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = [];
+  if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
+  closeSheet(); renderAll();
 }
 
 /* ------------------------------------------------------------------ Theme */
@@ -3418,8 +3445,8 @@ function htmlEquipe(){
   const moi = `<div class="specs"><div class="spec col"><label>Votre nom</label>
     <div class="choix">${boutonsEquipe('sm')}</div></div></div>`;
   if (!RESEAU.possible)
-    return moi + `<div class="note">Cette page travaille seule : un seul appareil,
-      données rangées dans ce navigateur.<br>
+    return moi + `<div class="note">Cette page travaille seule : les saisies sont rangées dans ce
+      navigateur, sous votre prénom. Changer de prénom change de saisies.<br>
       Pour saisir à plusieurs, lancez <b>Lancer.bat</b> sur un ordinateur du plateau et ouvrez
       l’adresse affichée sur chaque téléphone ou tablette (même Wi-Fi).</div>
       <div class="btns" style="margin-top:12px">
@@ -3522,7 +3549,7 @@ function openProd(){
         <button class="btn p" onclick="deposerSaisies()">Déposer mes saisies</button>
       </div>
       <div class="note">Vos saisies partent chez l’hébergeur du site, sous votre prénom, pour que le DIT les
-        récupère. ${UI.depose ? 'Dernier dépôt : ' + esc(quandDepot(UI.depose)) + '.' : 'Aucun dépôt pour l’instant.'}</div>`}
+        récupère. ${derniereDepose() ? 'Dernier dépôt : ' + esc(quandDepot(derniereDepose())) + '.' : 'Aucun dépôt pour l’instant.'}</div>`}
       <div class="note">Recharger le découpage remet à jour les fiches depuis le DT d’origine${multi}.
         Les prises, éléments, notes, états et jours sont conservés.
         ${RESEAU.possible ? '<br>Le serveur garde une sauvegarde horodatée toutes les 10 minutes dans <b style="display:inline;text-transform:none;letter-spacing:0;font-size:inherit">data/sauvegardes</b>.' : ''}</div>
@@ -4254,6 +4281,9 @@ function telechargerDIT(){
    mot de passe : le site est prive, seule l'equipe en connait l'adresse. Le
    serveur de plateau n'en a pas besoin : il partage deja tout en direct. */
 const PAS_DE_DEPOT = 'Pas de dépôt à cette adresse : il faut ouvrir le site chez l’hébergeur.';
+/* l'heure du dernier depot, par prenom : chacun le sien sur un meme appareil */
+const derniereDepose = () => (UI.deposes || {})[UI.nom.toLowerCase()] || '';
+function noterDepose(quand){ UI.deposes = UI.deposes || {}; UI.deposes[UI.nom.toLowerCase()] = quand; ecrireUI(); }
 /* la reponse du depot : { rep, statut } */
 const appelDepot = (quoi, corps) =>
   poster('depot/' + quoi + '.php', JSON.stringify(corps)).then(r => r.json().then(rep => ({ rep, statut: r.status })));
@@ -4261,7 +4291,7 @@ function deposerSaisies(){
   if (!UI.nom) return demanderNom();   // c'est le prenom qui nomme le depot
   appelDepot('deposer', { nom: UI.nom, projet: DB }).then(({ rep, statut }) => {
     if (rep.ok){
-      UI.depose = rep.quand; ecrireUI();
+      noterDepose(rep.quand);
       toast('Saisies déposées à ' + hhmm(new Date(rep.quand)));
       if (openType === 'prod') openProd();
     } else prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });

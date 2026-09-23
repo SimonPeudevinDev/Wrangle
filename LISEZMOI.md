@@ -104,6 +104,11 @@ remplace le précédent, hors de portée du web). Le DIT clique « Récupérer l
 rapprochement. Pas de clé ni de mot de passe : le site est privé, seule l'équipe en connaît
 l'adresse, et le prénom choisi à l'entrée suffit.
 
+**Chacun ses saisies.** Sur le site, la copie locale du projet est rangée sous le prénom choisi à
+l'entrée : passer de Simon à Romain sur le même téléphone (à l'entrée, ou ⚙ → Journée) change de
+saisies, revenir les retrouve. Avec le serveur du plateau, le projet est commun à tous et le
+prénom ne fait que signer les prises.
+
 ## Le journal DIT par mail
 
 Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)
@@ -189,7 +194,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Quatorze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Quinze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -207,6 +212,7 @@ py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un pl
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
+py tests/verif_personnes.py         chacun ses saisies sur le site : passer de Simon à Romain change de saisies
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
