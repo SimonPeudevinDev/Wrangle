@@ -69,9 +69,20 @@ et l'interroge toutes les deux secondes au lieu d'écouter un flux. Rien à inst
 allumé. Les données vivent dans `api/donnees/espaces/<prénom>/`, interdit au web : le projet, le
 journal, une sauvegarde horodatée toutes les dix minutes (60 gardées). Le journal DIT par mail
 part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans `api/donnees/mail.json`
-(`{"expediteur": "journal@foresight-movie.com"}`). Pas de mot de passe : le site est privé,
-seule l'équipe en connaît l'adresse. `py tests/verif_ovh.py` parle au site publié pour vérifier
-que tout répond, dans deux espaces d'essai vidés à la fin (il faut le réseau).
+(`{"expediteur": "journal@foresight-movie.com"}`). `py tests/verif_ovh.py` parle au site publié
+pour vérifier que tout répond, dans deux espaces d'essai vidés à la fin (il faut le réseau).
+
+Pas de mot de passe, c'est un choix : le site est privé, seule l'équipe en connaît l'adresse. Les
+espaces séparent les saisies, ils ne les protègent pas — qui connaît l'adresse du site peut lire
+ou écrire l'espace de n'importe quel prénom en ajoutant `?espace=…` à un appel. C'est le prix du
+« on choisit son prénom, et c'est tout », et des saisies qui suivent la personne sur tous ses
+appareils sans rien à recopier. Pour un tournage où cela ne suffirait pas, le serveur sur une
+machine à soi, derrière HTTPS et un mot de passe, est la réponse (section suivante).
+
+La page porte le numéro de la version publiée et le compare de loin en loin à `version.txt`, à
+côté d'elle : un téléphone qui garde le site ouvert des jours propose alors de recharger. Chez
+un hébergeur Apache, le `.htaccess` posé à la racine demande en plus que la page, la feuille de
+style et les scripts soient revérifiés à chaque ouverture.
 
 **Sur une machine à soi.** `serveur.py` posé sur un VPS fait la même chose, avec son flux en
 direct. Deux précautions alors.
@@ -130,6 +141,15 @@ l'adresse, et le prénom choisi à l'entrée suffit.
 l'entrée : passer de Simon à Romain sur le même téléphone (à l'entrée, ou ⚙ → Journée) change de
 saisies, revenir les retrouve. Avec le serveur du plateau, le projet est commun à tous et le
 prénom ne fait que signer les prises.
+
+**Le carnet d'avant.** Jusqu'à cette version, le site ne demandait pas de prénom et ne gardait
+qu'un carnet par navigateur. Ce carnet appartient à qui l'a saisi, et chaque prise porte son
+prénom : la page ne le reprend donc toute seule que si c'est sans ambiguïté — aucune prise (le
+découpage seul), ou toutes saisies par la personne qui arrive. Si les prises sont sans nom ou de
+plusieurs personnes, elle demande, une fois par personne, et le laisse en place si on répond
+« pas à moi ». Et si un carnet se retrouve quand même sous le mauvais prénom, la page le voit
+(toutes les prises au nom d'un autre) et propose de le rendre à son auteur : le carnet passe sous
+son prénom, ici et sur le serveur, et celui qui le rend repart du découpage.
 
 ## Le journal DIT par mail
 
@@ -234,7 +254,7 @@ py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un pl
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
-py tests/verif_personnes.py         chacun ses saisies sur le site : passer de Simon à Romain change de saisies
+py tests/verif_personnes.py         chacun ses saisies sur le site, et à qui revient le carnet d'avant
 py tests/verif_interroger.py       la page en mode php, comme chez l'hébergeur : elle interroge au lieu d'écouter
 ```
 

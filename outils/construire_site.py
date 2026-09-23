@@ -26,6 +26,7 @@ garde-fou refuse alors d'ecrire un site ou il en resterait une trace.
 import os
 import shutil
 import sys
+from datetime import datetime
 
 ICI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAGE = os.path.join(ICI, 'wrangle.html')
@@ -49,15 +50,30 @@ def lignes_page(vide):
     return gardees
 
 
-MARQUE_PHP = "<head><script>window.WRANGLE_SERVEUR='php'</script>"
+def version():
+    """Le numero de la version publiee : la revision Git, a defaut la date de
+    la page. La page le porte en tete et le compare a version.txt, a cote
+    d'elle : un telephone qui garde le site ouvert apprend ainsi qu'il tourne
+    sur une version d'avant."""
+    try:
+        import subprocess
+        v = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ICI,
+                           capture_output=True, text=True, timeout=10)
+        if v.returncode == 0 and v.stdout.strip():
+            return v.stdout.strip()
+    except Exception:
+        pass
+    return datetime.fromtimestamp(os.path.getmtime(PAGE)).strftime('%Y%m%d-%H%M%S')
 
 
 def construire(sortie, vide=False, php=False):
     gardees = lignes_page(vide)
-    if php:
-        # la meme ligne que serveur.py ajoute en tete de la page qu'il sert
-        i = next(i for i, l in enumerate(gardees) if '<head>' in l)
-        gardees[i] = gardees[i].replace('<head>', MARQUE_PHP, 1)
+    v = version()
+    # en tete de la page : son numero de version, et pour OVH le fait que les
+    # scripts d'api/ repondent a cote d'elle (la meme ligne que serveur.py ajoute)
+    marque = "<head><script>window.WRANGLE_VERSION='%s'%s</script>" % (v, ";window.WRANGLE_SERVEUR='php'" if php else '')
+    i = next(i for i, l in enumerate(gardees) if '<head>' in l)
+    gardees[i] = gardees[i].replace('<head>', marque, 1)
 
     if os.path.isdir(sortie):
         shutil.rmtree(sortie)
@@ -80,6 +96,15 @@ def construire(sortie, vide=False, php=False):
         os.makedirs(os.path.join(sortie, dossier), exist_ok=True)
         with open(os.path.join(sortie, dossier, '.htaccess'), 'w') as f:
             f.write('Require all denied\n')
+
+    # chez un hebergeur Apache : la page doit etre reverifiee a chaque ouverture,
+    # sinon un telephone garde celle d'hier (GitHub Pages ignore ce fichier)
+    shutil.copy(os.path.join(PUBLIC, 'htaccess-site.txt'), os.path.join(sortie, '.htaccess'))
+    os.remove(os.path.join(sortie, 'public', 'htaccess-site.txt'))
+
+    # le numero de la version publiee, que la page relit de loin en loin
+    with open(os.path.join(sortie, 'version.txt'), 'w', encoding='utf-8') as f:
+        f.write(v + '\n')
 
     # sans ce fichier, GitHub Pages fait passer le site par Jekyll
     open(os.path.join(sortie, '.nojekyll'), 'w').close()

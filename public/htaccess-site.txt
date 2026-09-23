@@ -1,0 +1,20 @@
+# Apache, chez l'hebergeur : construire_site.py copie ce fichier a la racine du
+# site sous le nom .htaccess. Le serveur d'OVH ne donne aucune consigne de
+# cache pour la page, et un telephone peut alors continuer a executer une
+# version d'hier — sur un carnet de plateau, c'est la porte ouverte aux
+# surprises. La page, la feuille de style et les scripts doivent donc etre
+# reverifies a chaque ouverture ; les images et les polices, elles, ne
+# changent pas et peuvent rester en cache.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|css|js|php|json)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+</IfModule>
+
+# Les donnees ecrites par les scripts PHP ne sont pas du web : ni le projet de
+# chacun (api/donnees), ni les depots (depot/saisies). Leurs dossiers portent
+# deja un .htaccess ; celui-ci est la ceinture.
+RedirectMatch 404 ^/(api/donnees|depot/saisies|depot/comptes)(/|$)

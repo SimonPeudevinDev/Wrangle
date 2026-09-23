@@ -359,15 +359,35 @@ function normaliser(d){
   return db;
 }
 
+/* ---- Le carnet d'avant les prenoms ------------------------------------
+   Le site rangeait un seul carnet par navigateur, sans demander de prenom.
+   Ce carnet appartient a qui l'a saisi — chaque prise porte son prenom — et a
+   personne d'autre : le donner au premier qui se nomme lui montrerait les
+   saisies d'un autre. On ne le reprend donc tout seul que si c'est sans
+   ambiguite : aucune prise (le decoupage seul, rien a heriter), ou toutes
+   saisies par la personne qui arrive. Sinon la page demande, une fois. */
+const auteursDe = db => [...new Set(((db && db.prises) || []).map(t => (t.par || '').trim()).filter(Boolean))];
+function ancienCarnet(){
+  try{
+    const brut = localStorage.getItem(KEY);
+    if (!brut) return null;
+    const db = JSON.parse(brut);
+    if (!db || !Array.isArray(db.plans)) return null;
+    return { brut, db, prises: (db.prises || []).length, auteurs: auteursDe(db) };
+  }catch(e){ return null; }
+}
+const ancienEstDe = (a, nom) => !!a && (!a.prises || (a.auteurs.length === 1 && espaceDe(a.auteurs[0]) === espaceDe(nom)));
+const ancienADemander = a => !!a && a.prises > 0 && a.auteurs.length !== 1;
+
 function load(){
   let db = null;
   try{
     const cle = cleLocale();
     let raw = localStorage.getItem(cle);
-    // la copie d'avant les prenoms, ou faite avant de se nommer : le premier prenom la reprend
+    // le carnet d'avant les prenoms revient a celui qui l'a saisi, pas au premier venu
     if (!raw && cle !== KEY){
-      raw = localStorage.getItem(KEY);
-      if (raw){ localStorage.setItem(cle, raw); localStorage.removeItem(KEY); }
+      const a = ancienCarnet();
+      if (ancienEstDe(a, UI.nom)){ raw = a.brut; localStorage.setItem(cle, raw); localStorage.removeItem(KEY); }
     }
     if (raw) db = JSON.parse(raw);
   }catch(e){}
@@ -388,6 +408,10 @@ let tSave;
 function save(){ clearTimeout(tSave); tSave = setTimeout(flush, 150); }
 function flush(){
   clearTimeout(tSave);
+  // tant que personne ne s'est nomme, la cle sans prenom est celle du carnet
+  // d'avant : il est a quelqu'un, on ne l'ecrase pas (sur le plateau, le
+  // carnet est commun et cette cle est la bonne)
+  if (!UI.nom && (SERVEUR_PHP || !PROJET_COMMUN)) return;
   try{ localStorage.setItem(cleLocale(), JSON.stringify(DB)); flush.plein = false; }
   catch(e){
     if (!flush.plein || !RESEAU.possible)
@@ -498,14 +522,23 @@ const RESEAU = {
   adresses: [],
   src: null,
   envoi: false,
+  // change a chaque changement de personne : une reponse partie sous l'ancien
+  // prenom ne doit ni s'appliquer ici, ni pousser ce carnet dans le nouvel espace
+  session: 0,
   tTampon: null, tEnvoi: null, tPresence: null, tInterroge: null
 };
 /* l'adresse d'un appel : /api/etat chez serveur.py, api/etat.php chez l'hebergeur */
 const API = nom => RESEAU.php ? 'api/' + nom + '.php' : '/api/' + nom;
 /* l'espace de cet appareil chez l'hebergeur : celui de son prenom ; ailleurs, le projet commun */
 const monEspace = () => RESEAU.php ? espaceDe(UI.nom) : '';
-try{ if (RESEAU.possible) RESEAU.attente = JSON.parse(sessionStorage.getItem('fstdw.attente.' + CLIENT) || '[]') || []; }catch(e){}
-function ecrireAttente(){ try{ sessionStorage.setItem('fstdw.attente.' + CLIENT, JSON.stringify(RESEAU.attente)); }catch(e){} }
+/* Ce qui n'est pas encore parti est garde par onglet ET par espace : sinon,
+   apres un rechargement, les operations d'une personne partiraient sous le
+   prenom d'une autre. Celles d'un prenom qu'on quitte restent garees la,
+   pour le jour ou l'on y revient. */
+const cleAttente = () => 'fstdw.attente.' + CLIENT + (monEspace() ? '.' + monEspace() : '');
+function lireAttente(){ try{ return JSON.parse(sessionStorage.getItem(cleAttente()) || '[]') || []; }catch(e){ return []; } }
+function ecrireAttente(){ try{ sessionStorage.setItem(cleAttente(), JSON.stringify(RESEAU.attente)); }catch(e){} }
+if (RESEAU.possible) RESEAU.attente = lireAttente();
 
 /* Modifie des champs d'une fiche : ici tout de suite, chez les autres ensuite. */
 function patch(kind, id, data){
@@ -543,10 +576,11 @@ function envoyer(){
   RESEAU.tEnvoi = null;
   if (RESEAU.envoi || !RESEAU.attente.length || !RESEAU.possible) return;
   RESEAU.envoi = true;
-  const lot = RESEAU.attente.slice(0, 200);
+  const lot = RESEAU.attente.slice(0, 200), s = RESEAU.session;
   poster(API('ops'), corpsOps(lot))
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(rep => {
+    if (s !== RESEAU.session) return;   // envoi de la personne d'avant : sa reponse ne nous concerne plus
     RESEAU.attente.splice(0, lot.length); ecrireAttente();
     // en interrogation, c'est l'interrogation qui avance la revision : sauter
     // dessus ici ferait manquer ce que les autres ont fait entre-temps
@@ -557,8 +591,8 @@ function envoyer(){
     setEtatReseau('ok');
     interrogerBientot();
   })
-  .catch(() => { setEtatReseau('coupe'); RESEAU.tEnvoi = setTimeout(envoyer, 3000); })
-  .then(() => { RESEAU.envoi = false; if (RESEAU.attente.length && RESEAU.etat === 'ok' && !RESEAU.tEnvoi) planifierEnvoi(); });
+  .catch(() => { if (s !== RESEAU.session) return; setEtatReseau('coupe'); RESEAU.tEnvoi = setTimeout(envoyer, 3000); })
+  .then(() => { RESEAU.envoi = false; if (s === RESEAU.session && RESEAU.attente.length && RESEAU.etat === 'ok' && !RESEAU.tEnvoi) planifierEnvoi(); });
 }
 
 /* Le serveur renvoie nos propres operations, parfois corrigees : un numero
@@ -640,10 +674,12 @@ function interroger(){
   if (!RESEAU.php) return;
   const suivant = ms => { clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = setTimeout(interroger, ms); };
   if (!UI.nom){ suivant(1000); return; }   // l'espace, c'est le prenom : on attend qu'il soit choisi
+  const s = RESEAU.session;
   fetch(API('depuis') + '?rev=' + RESEAU.rev + '&client=' + encodeURIComponent(CLIENT) +
         '&nom=' + encodeURIComponent(UI.nom || '') + '&espace=' + encodeURIComponent(monEspace()), { cache:'no-store' })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(m => {
+    if (s !== RESEAU.session) return;   // reponse pour la personne d'avant : ni son projet ni sa revision ici
     recevoir({ type:'presence', liste: m.presence || [] });   // d'abord : les noms servent aux ops
     if ('db' in m) recevoir({ type:'etat', db: m.db, rev: m.rev, adresses: [] });
     else {
@@ -653,13 +689,27 @@ function interroger(){
     setEtatReseau('ok');
     suivant(document.hidden ? 15000 : 2000);
   })
-  .catch(() => { setEtatReseau('coupe'); suivant(5000); });
+  .catch(() => { if (s !== RESEAU.session) return; setEtatReseau('coupe'); suivant(5000); });
 }
 function interrogerBientot(){
   if (!RESEAU.php) return;
   clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = setTimeout(interroger, 50);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) interrogerBientot(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden){ interrogerBientot(); verifierVersion(); } });
+
+/* La page publiee change souvent, et un telephone la garde ouverte des jours :
+   il tournerait alors sur une version d'avant sans le savoir. La publication
+   ecrit son numero dans version.txt, a cote de la page ; on le compare de loin
+   en loin, et on propose de recharger. Rien en local, ou le fichier n'existe pas. */
+let tVersion = 0;
+function verifierVersion(){
+  if (!window.WRANGLE_VERSION || Date.now() - tVersion < 300000) return;
+  tVersion = Date.now();
+  fetch('version.txt', { cache:'no-store' }).then(r => r.ok ? r.text() : '').then(v => {
+    if ((v || '').trim() && v.trim() !== window.WRANGLE_VERSION)
+      toastAction('Une nouvelle version du carnet est en ligne.', 'Recharger', () => location.reload());
+  }).catch(() => {});
+}
 
 function recevoir(m){
   if (m.type === 'etat'){
@@ -777,13 +827,77 @@ function choisirNom(i){
    le serveur. Sur le plateau, le projet est commun : on ne change que de prenom. */
 function changerDePersonne(n){
   if (n === UI.nom || (PROJET_COMMUN && !SERVEUR_PHP)){ setNom(n); return; }
+  const partant = UI.nom, sonEspace = monEspace(), saCle = cleAttente();
   viderTampon(); flush();
+  // ce que le partant n'a pas eu le temps d'envoyer part sous son prenom a lui,
+  // jamais sous celui qui arrive ; tant que ce n'est pas passe, ca reste garde
+  const reste = RESEAU.attente.slice();
+  if (RESEAU.php && partant && reste.length)
+    poster(API('ops'), JSON.stringify({ client: CLIENT, nom: partant, espace: sonEspace, ops: reste }))
+      .then(r => { if (r.ok) try{ sessionStorage.removeItem(saCle); }catch(e){} }).catch(() => {});
   setNom(n);
   DB = load();
   dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = [];
   if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
-  if (RESEAU.php){ RESEAU.rev = 0; RESEAU.attente = []; ecrireAttente(); interrogerBientot(); }
+  // les reponses parties sous l'ancien prenom ne valent plus rien : on change de session
+  if (RESEAU.php){ RESEAU.session++; RESEAU.rev = 0; RESEAU.attente = lireAttente(); interrogerBientot(); }
   closeSheet(); renderAll();
+  veillerAuCarnet();
+}
+
+/* Deux verifications au moment d'entrer, et a chaque changement de personne :
+   un carnet d'avant les prenoms attend peut-etre son proprietaire, et le
+   carnet ouvert n'est peut-etre pas celui de la personne en cours (herite par
+   erreur du temps ou le navigateur n'en avait qu'un). On ne demande qu'une
+   fois par personne. */
+const carnetMarque = () => !!(UI.carnetOk || {})[espaceDe(UI.nom)];
+function marquerCarnet(){ UI.carnetOk = Object.assign(UI.carnetOk || {}, { [espaceDe(UI.nom)]: true }); ecrireUI(); }
+function veillerAuCarnet(){
+  if (!UI.nom || (PROJET_COMMUN && !SERVEUR_PHP) || carnetMarque()) return;   // sur le plateau, le carnet est commun
+  const autres = auteursDe(DB);
+  if (DB.prises.length && autres.length === 1 && espaceDe(autres[0]) !== espaceDe(UI.nom))
+    return rendreLeCarnet(autres[0]);
+  const a = ancienCarnet();
+  if (ancienADemander(a)) proposerAncienCarnet(a);
+}
+/* le carnet ouvert porte les saisies d'un seul autre : on propose de le rendre */
+function rendreLeCarnet(qui){
+  confirmer('Ce carnet a été saisi par ' + esc(qui) + ', pas par vous.', {
+    detail: DB.prises.length + ' prise' + plur(DB.prises.length) + ' à son nom. Il a sans doute été repris par erreur, du temps où ce navigateur n’en gardait qu’un. Le rendre remet votre carnet sur le découpage, sans prises.',
+    ok: 'Le rendre à ' + qui, annuler: 'C’est le mien' }).then(oui => {
+    if (!oui) return marquerCarnet();
+    const cible = KEY + ':' + espaceDe(qui);
+    let occupe = false;
+    try{ const r = localStorage.getItem(cible); occupe = !!(r && (JSON.parse(r).prises || []).length); }catch(e){}
+    if (occupe) return prevenir(qui + ' a déjà un carnet sur cet appareil.', { detail:'Pour réunir les deux, passez par Rapport → Rapprocher les saisies.' });
+    const rendu = DB;
+    try{ localStorage.setItem(cible, JSON.stringify(rendu)); }catch(e){}
+    // chez l'hebergeur, le carnet part aussi dans l'espace de cette personne
+    if (RESEAU.php) poster(API('ops'), JSON.stringify({ client: CLIENT, nom: qui, espace: espaceDe(qui),
+        ops: [{ op:'remplacer', db: rendu, siVide: true }] })).catch(() => {});
+    DB = normaliser(null); if (SEED) seed(DB);
+    dernierPlan = null; chrono = null; corbeille = null; RAP.sources = [];
+    marquerCarnet(); flush();
+    if (RESEAU.php){ RESEAU.session++; RESEAU.rev = 0; RESEAU.attente = []; ecrireAttente(); operer({ op:'remplacer', db: DB }); }
+    closeSheet(); renderAll();
+    toast('Carnet rendu à ' + qui);
+  });
+}
+/* un carnet d'avant les prenoms, sans auteur clair : a qui est-il ? */
+function proposerAncienCarnet(a){
+  confirmer('Reprendre le carnet déjà commencé sur cet appareil ?', {
+    detail: a.prises + ' prise' + plur(a.prises) + (a.auteurs.length ? ', saisies par ' + esc(a.auteurs.join(', ')) : ', sans nom de saisisseur')
+      + ', d’avant que chacun ait le sien. Le reprendre le met sous votre prénom ; sinon il reste ici, pour son propriétaire.',
+    ok: 'Reprendre', annuler: 'Pas à moi' }).then(oui => {
+    if (!oui) return marquerCarnet();
+    DB = normaliser(a.db);
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    dernierPlan = null; chrono = null; corbeille = null; RAP.sources = [];
+    marquerCarnet(); flush();
+    if (RESEAU.php){ RESEAU.session++; RESEAU.rev = 0; RESEAU.attente = []; ecrireAttente(); operer({ op:'remplacer', db: DB }); }
+    closeSheet(); renderAll();
+    toast('Carnet repris');
+  });
 }
 
 /* ------------------------------------------------------------------ Theme */
@@ -4559,6 +4673,7 @@ function garderFusion(){
     if (!oui) return;
     DB = normaliser(fusionRap(s));
     dernierPlan = null; chrono = null; RAP.sources = [];
+    marquerCarnet();   // ce carnet porte les saisies des autres, c'est voulu : ne rien demander
     operer({ op:'remplacer', db: DB });
     flush(); renderAll(); toast('Projet fusionné');
   });
@@ -4917,6 +5032,7 @@ function importJSON(input){
       if (!oui) return;
       DB = normaliser(d);
       dernierPlan = null; chrono = null;
+      marquerCarnet();   // un projet importe a la main : il est a moi, quels que soient les noms sur les prises
       if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
       operer({ op:'remplacer', db: DB });
       flush(); closeSheet(); toast('Projet importé');
@@ -5105,6 +5221,9 @@ reprendrePlace();
 majPresence();
 if (RESEAU.possible) connecter();
 if (!UI.nom) demanderNom();   // sur le site aussi : c'est le prenom qui signe les prises et nomme le depot
+else veillerAuCarnet();       // le carnet ouvert est-il bien le sien ?
+setTimeout(verifierVersion, 20000);
+setInterval(verifierVersion, 1800000);
 </script>
 
 

@@ -51,8 +51,9 @@ $ESPACE = 'commun';
 // l'espace demande par l'appel : ?espace=… ou { espace } dans le corps, en lettres
 // minuscules, chiffres et tirets ; a defaut, « commun »
 function espace_demande($corps = null) {
-    $e = $_GET['espace'] ?? (is_object($corps) ? ($corps->espace ?? '') : '');
-    $e = trim(strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', (string) $e)), '-');
+    $e = (string) ($_GET['espace'] ?? (is_object($corps) ? ($corps->espace ?? '') : ''));
+    $a = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $e);   // « Noémie » et « noemie » : un seul espace
+    $e = trim(strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', $a !== false ? $a : $e)), '-');
     return $e === '' ? 'commun' : substr($e, 0, 40);
 }
 
@@ -85,6 +86,23 @@ function preparer() {
     }
     if (!file_exists(DONNEES . '/.htaccess')) {
         file_put_contents(DONNEES . '/.htaccess', "Require all denied\n");
+    }
+    // le projet du temps ou le site n'avait qu'un carnet pour tout le monde
+    // devient l'espace « commun » : le DIT peut l'y reprendre au lieu de le perdre
+    $vieux = DONNEES . '/projet.json';
+    if (file_exists($vieux)) {
+        $d = DONNEES . '/espaces/commun';
+        if (!is_dir($d)) {
+            mkdir($d, 0755, true);
+        }
+        if (file_exists($d . '/projet.json')) {
+            @unlink($vieux);
+        } else {
+            @rename($vieux, $d . '/projet.json');
+            if (file_exists(DONNEES . '/rev.txt')) {
+                @rename(DONNEES . '/rev.txt', $d . '/rev.txt');
+            }
+        }
     }
 }
 

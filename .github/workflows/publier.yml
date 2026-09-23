@@ -47,6 +47,7 @@ jobs:
       # y ecrit (api/donnees, depot/saisies) ne sont pas touchees
       # un envoi rate n'empeche pas GitHub Pages de publier
       - name: Envoyer chez OVH
+        id: ovh
         if: env.OVH_FTP_HOTE != ''
         continue-on-error: true
         timeout-minutes: 10
@@ -67,3 +68,11 @@ jobs:
 
       - id: deploiement
         uses: actions/deploy-pages@v4
+
+      # un envoi FTP rate n'empeche pas GitHub Pages de publier, mais il ne doit
+      # pas passer inapercu : le site chez OVH resterait sur la version d'avant
+      - name: L'envoi chez OVH a-t-il abouti ?
+        if: always() && steps.ovh.outcome == 'failure'
+        run: |
+          echo "::error::L'envoi chez OVH a échoué : le site publié là-bas est resté sur la version d'avant. GitHub Pages, lui, est à jour."
+          exit 1
