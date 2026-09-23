@@ -49,8 +49,13 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('rien ne manque pour les retrouver', [m['sauvegarde']['sansCarte'], m['sauvegarde']['sansClip']], [0, 0])
     essais.verifier('une journee seule : un seul journal', len(banc.js('modeleDIT(%s)' % json.dumps(j))), 1)
 
-    # -- le PDF : un vrai fichier, lisible sans compression
+    essais.verifier('le projet en titre, le journal en sous-titre', [m['titre'], m['sous'].startswith('Journal DIT · Jour 1')], ['Foresight', True])
+
+    # -- le PDF : un vrai fichier, lisible sans compression, avec le logo trace
+    banc.js('chargerLogo()'); time.sleep(0.8)
+    essais.verifier('le logo est lu dans son SVG', banc.js('!!(LOGO_PDF && LOGO_PDF.mot && LOGO_PDF.touche)'), True)
     pdf = banc.js("Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('')")
+    essais.verifier('le logo est trace en tete de chaque journee', pdf.count(' h f*'), len(jours))
     essais.verifier('le fichier est un PDF', pdf[:8], '%PDF-1.4')
     pages = len(re.findall(r'/Type /Page /', pdf))
     essais.verifier('au moins une page par journee', pages >= len(jours), True)

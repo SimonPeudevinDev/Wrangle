@@ -3815,8 +3815,8 @@ function modeleDIT(j){
     };
     const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
     return {
-      jour, titre: (p.titre || 'Projet sans titre') + ' — journal DIT', sauvegarde,
-      sous: [nomJour(jour), dec, p.date, p.unit, p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler]
+      jour, titre: p.titre || 'Projet sans titre', sauvegarde,
+      sous: ['Journal DIT', nomJour(jour), dec, p.date, p.unit, p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler]
               .filter(Boolean).join(' · '),
       chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
                  [T.length, 'fichier' + plur(T.length) + ' à sauvegarder'], [gardees.length, 'prises à monter'],
@@ -3846,6 +3846,25 @@ const PDF_HELV = { ' ':278, '!':278, '"':355, '#':556, '$':556, '%':889, '&':667
 const PDF_WINANSI = { '€':128, '‚':130, 'ƒ':131, '„':132, '…':133, '†':134, '‡':135, 'ˆ':136, '‰':137, 'Š':138, '‹':139,
   'Œ':140, 'Ž':142, '‘':145, '’':146, '“':147, '”':148, '•':149, '–':150, '—':151, '˜':152, '™':153, 'š':154, '›':155,
   'œ':156, 'ž':158, 'Ÿ':159 };
+
+/* La charte du site, en clair comme sur papier : encre brune, caramel pour
+   ce qui compte, tan pour ce qui accompagne, creme pour les fonds. */
+const PDF_TEINTES = {
+  encre:   [42, 26, 5],      // --acc-txt
+  brun:    [58, 42, 32],     // le texte courant
+  tan:     [142, 122, 105],  // --dim2 : les libelles, les metas
+  caramel: [154, 106, 20],   // --acc en clair : titres de section, filets forts
+  or:      [231, 176, 74],   // --acc : le logo
+  creme:   [241, 232, 220],  // --surface2 en clair : les fonds
+  filet:   [216, 204, 190],  // les traits fins
+  filet2:  [176, 160, 142]   // les traits des en-tetes
+};
+function teintePdf(couleur, gris){
+  const c = PDF_TEINTES[couleur];
+  if (c) return c.map(v => (v / 255).toFixed(3)).join(' ');
+  const g = (gris == null ? 0 : gris).toFixed(2);
+  return `${g} ${g} ${g}`;
+}
 
 function largeurPdf(s, taille, police){
   if (police === 'C' || police === 'CB') return String(s || '').length * 600 * taille / 1000;
@@ -3889,25 +3908,46 @@ function nouveauPdf(){
   const doc = {
     y: 0, page: null,
     nouvellePage(){ doc.page = { ops: [] }; pages.push(doc.page); doc.y = PDF_H - PDF_M; },
-    /* du texte a partir de (x, y), y etant la ligne de base */
+    /* du texte a partir de (x, y), y etant la ligne de base ; `couleur` est un
+       nom de la charte (PDF_TEINTES), a defaut un gris de 0 (noir) a 1 */
     texte(x, y, s, o){
       o = o || {};
-      doc.page.ops.push(`BT /${o.police || 'H'} ${o.taille || 9} Tf ${(o.gris || 0).toFixed(2)} g ` +
+      doc.page.ops.push(`BT /${o.police || 'H'} ${o.taille || 9} Tf ${teintePdf(o.couleur || (o.gris == null ? 'brun' : ''), o.gris)} rg ` +
                         `${x.toFixed(2)} ${y.toFixed(2)} Td (${chainePdf(s)}) Tj ET`);
     },
-    ligne(x1, y1, x2, y2, ep, gris){
-      doc.page.ops.push(`${(gris || 0).toFixed(2)} G ${ep || .5} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
+    ligne(x1, y1, x2, y2, ep, couleur){
+      doc.page.ops.push(`${teintePdf(couleur)} RG ${ep || .5} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
     },
-    rect(x, y, w, h, gris){ doc.page.ops.push(`${gris.toFixed(2)} g ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); },
+    rect(x, y, w, h, couleur){ doc.page.ops.push(`${teintePdf(couleur)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); },
+    /* un trace ferme, en points de la page, rempli d'une teinte */
+    forme(points, couleur){
+      if (points.length < 3) return;
+      doc.page.ops.push(`${teintePdf(couleur)} rg ` + points.map((p, i) => `${p[0].toFixed(2)} ${p[1].toFixed(2)} ${i ? 'l' : 'm'}`).join(' ') + ' h f');
+    },
+    /* un trace SVG (M, L, Z seulement) pose dans la page : (x0, y0) est l'origine
+       du dessin, k son echelle ; le SVG compte y vers le bas, la page vers le haut */
+    trace(d, couleur, evenodd, x0, y0, k){
+      const t = d.match(/[MLZ]|-?[\d.]+/g) || [], ops = [teintePdf(couleur) + ' rg'];
+      for (let i = 0; i < t.length;){
+        const c = t[i++];
+        if (c === 'Z') ops.push('h');
+        else if (c === 'M' || c === 'L'){
+          const x = +t[i++], y = +t[i++];
+          ops.push(`${(x0 + x * k).toFixed(2)} ${(y0 - y * k).toFixed(2)} ${c === 'M' ? 'm' : 'l'}`);
+        }
+      }
+      ops.push(evenodd ? 'f*' : 'f');
+      doc.page.ops.push(ops.join(' '));
+    },
     /* assez de place pour `h` points, sinon page suivante */
     place(h){ if (doc.y - h < PDF_M) doc.nouvellePage(); },
     /* le fichier : les objets, la table des adresses, le pied de chaque page */
     fichier(pied){
       pages.forEach((pg, i) => {
         const s = (i + 1) + ' / ' + pages.length;
-        pg.ops.push(`0.60 G 0.5 w ${PDF_M} ${PDF_M - 10} m ${(PDF_L - PDF_M).toFixed(2)} ${PDF_M - 10} l S`);
-        pg.ops.push(`BT /H 7 Tf 0.45 g ${PDF_M} ${PDF_M - 20} Td (${chainePdf(pied)}) Tj ET`);
-        pg.ops.push(`BT /H 7 Tf 0.45 g ${(PDF_L - PDF_M - largeurPdf(s, 7, 'H')).toFixed(2)} ${PDF_M - 20} Td (${chainePdf(s)}) Tj ET`);
+        pg.ops.push(`${teintePdf('filet2')} RG 0.5 w ${PDF_M} ${PDF_M - 10} m ${(PDF_L - PDF_M).toFixed(2)} ${PDF_M - 10} l S`);
+        pg.ops.push(`BT /H 7 Tf ${teintePdf('tan')} rg ${PDF_M} ${PDF_M - 20} Td (${chainePdf(pied)}) Tj ET`);
+        pg.ops.push(`BT /H 7 Tf ${teintePdf('tan')} rg ${(PDF_L - PDF_M - largeurPdf(s, 7, 'H')).toFixed(2)} ${PDF_M - 20} Td (${chainePdf(s)}) Tj ET`);
       });
       const objets = [];
       const ajouter = s => { objets.push(s); return objets.length; };
@@ -3942,9 +3982,9 @@ function tableauPdf(doc, cols, lignes, taille){
   const entete = () => {
     doc.place(inter + 8);
     let x = x0;
-    cols.forEach(c => { doc.texte(x, doc.y - 7, c[0].toUpperCase(), { taille: 6.2, police: 'HB', gris: .4 }); x += c[1]; });
+    cols.forEach(c => { doc.texte(x, doc.y - 7, c[0].toUpperCase(), { taille: 6.2, police: 'HB', couleur: 'tan' }); x += c[1]; });
     doc.y -= 10;
-    doc.ligne(x0, doc.y, x0 + larg, doc.y, .6, .55);
+    doc.ligne(x0, doc.y, x0 + larg, doc.y, .6, 'filet2');
     doc.y -= 2;
   };
   entete();
@@ -3952,7 +3992,7 @@ function tableauPdf(doc, cols, lignes, taille){
     const lg = cols.map((c, i) => lignesPdf(li.v[i], c[1] - 5, taille, c[2] || 'H'));
     const h = Math.max(...lg.map(l => l.length)) * inter + 4;
     if (doc.y - h < PDF_M){ doc.nouvellePage(); entete(); }
-    if (li.fond) doc.rect(x0 - 2, doc.y - h + 2, larg + 4, h, .93);
+    if (li.fond) doc.rect(x0 - 2, doc.y - h + 2, larg + 4, h, 'creme');
     let x = x0;
     lg.forEach((l, i) => {
       const police = (cols[i][2] || 'H') === 'C' ? (li.gras ? 'CB' : 'C') : (li.gras ? 'HB' : 'H');
@@ -3960,16 +4000,31 @@ function tableauPdf(doc, cols, lignes, taille){
       x += cols[i][1];
     });
     doc.y -= h;
-    doc.ligne(x0, doc.y + 1, x0 + larg, doc.y + 1, .3, .82);
+    doc.ligne(x0, doc.y + 1, x0 + larg, doc.y + 1, .3, 'filet');
   });
 }
+
+/* Le logo, lu une fois dans son SVG : le mot et la touche caramel. Sans lui
+   (page ouverte hors serveur), le journal se fait quand meme. */
+let LOGO_PDF = null;
+function chargerLogo(){
+  if (LOGO_PDF) return Promise.resolve(LOGO_PDF);
+  return fetch('public/wrangle-logo.svg').then(r => r.ok ? r.text() : '').then(svg => {
+    const d = [...svg.matchAll(/<path\b[^>]*?\sd="([^"]*)"/g)].map(x => x[1]);
+    // dans le fichier : la decoupe, puis le mot, puis la touche caramel
+    LOGO_PDF = d.length >= 3 ? { mot: d[1], touche: d[2] } : null;
+    return LOGO_PDF;
+  }).catch(() => null);
+}
+// la boite du dessin dans son SVG (viewBox 1569 x 484) : le mot tient la
+const LOGO_BOITE = { x: 109.4, y: 132.4, l: 1346.3, h: 232.6 };
 
 function pdfDIT(j){
   const jours = modeleDIT(j), doc = nouveauPdf(), L = PDF_L - 2 * PDF_M;
   const section = s => {
     doc.place(40); doc.y -= 14;
-    doc.texte(PDF_M, doc.y - 8, s.toUpperCase(), { taille: 7.5, police: 'HB' });
-    doc.y -= 11; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 0); doc.y -= 6;
+    doc.texte(PDF_M, doc.y - 8, s.toUpperCase(), { taille: 7.5, police: 'HB', couleur: 'caramel' });
+    doc.y -= 11; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 'caramel'); doc.y -= 6;
   };
   // un timecode fait onze caracteres de Courier : 60 points a 7,5 points de corps
   const colsM = [['Clip', 66, 'C'], ['Séq', 26], ['Plan', 40], ['Pr.', 20], ['Statut', 44], ['TC in', 60, 'C'],
@@ -3979,17 +4034,26 @@ function pdfDIT(j){
 
   jours.forEach((m, i) => {
     if (i) doc.nouvellePage();
-    // l'en-tete de la journee : le titre, la journee, puis ses chiffres en une ligne
-    doc.texte(PDF_M, doc.y - 15, m.titre, { taille: 16, police: 'HB' }); doc.y -= 22;
-    doc.texte(PDF_M, doc.y - 8, m.sous, { taille: 8.5, gris: .35 }); doc.y -= 14;
-    doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, .6); doc.y -= 5;
+    // l'en-tete de la journee : le logo, le projet, la journee, puis ses chiffres en une ligne
+    const hl = 24, kl = hl / LOGO_BOITE.h;
+    let xt = PDF_M;
+    if (LOGO_PDF){
+      const ox = PDF_M - LOGO_BOITE.x * kl, oy = doc.y + LOGO_BOITE.y * kl;
+      doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
+      doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
+      xt += LOGO_BOITE.l * kl + 20;
+    }
+    doc.texte(xt, doc.y - 14, m.titre, { taille: 17, police: 'HB', couleur: 'encre' });
+    doc.texte(xt, doc.y - 26, m.sous, { taille: 8.5, couleur: 'tan' });
+    doc.y -= 36;
+    doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 'caramel'); doc.y -= 6;
     let x = PDF_M;
     m.chiffres.forEach(([n, l]) => {
       const s = String(n);
-      doc.texte(x, doc.y - 11, s, { taille: 11, police: 'HB' }); x += largeurPdf(s, 11, 'HB') + 3;
-      doc.texte(x, doc.y - 11, l, { taille: 8, gris: .35 }); x += largeurPdf(l, 8, 'H') + 12;
+      doc.texte(x, doc.y - 11, s, { taille: 11, police: 'HB', couleur: 'encre' }); x += largeurPdf(s, 11, 'HB') + 3;
+      doc.texte(x, doc.y - 11, l, { taille: 8, couleur: 'tan' }); x += largeurPdf(l, 8, 'H') + 12;
     });
-    doc.y -= 17; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, .6);
+    doc.y -= 17; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, 'filet2');
 
     // 0. ce qu'il y a a sauvegarder : le premier travail du DIT
     const s = m.sauvegarde;
@@ -3997,61 +4061,62 @@ function pdfDIT(j){
     if (s.cartes.length)
       tableauPdf(doc, [['Carte', 70], ['Fichiers', 50], ['Du clip', 110, 'C'], ['Au clip', 110, 'C'], ['', L - 340]],
                  s.cartes.map(c => ({ v: [c.carte, String(c.n), c.premier, c.dernier, ''] })), 8);
-    else { doc.texte(PDF_M, doc.y - 8, s.total ? 'Aucune carte renseignée sur les prises.' : 'Aucune prise enregistrée.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    else { doc.texte(PDF_M, doc.y - 8, s.total ? 'Aucune carte renseignée sur les prises.' : 'Aucune prise enregistrée.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
     const manques = [s.sansCarte && s.cartes.length ? s.sansCarte + ' prise' + plur(s.sansCarte) + ' sans carte' : '',
                      s.sansClip ? s.sansClip + ' prise' + plur(s.sansClip) + ' sans nom de clip' : ''].filter(Boolean);
-    if (manques.length){ doc.place(14); doc.texte(PDF_M, doc.y - 9, 'À compléter : ' + manques.join(' · ') + '.', { taille: 7.5, gris: .45 }); doc.y -= 13; }
+    if (manques.length){ doc.place(14); doc.texte(PDF_M, doc.y - 9, 'À compléter : ' + manques.join(' · ') + '.', { taille: 7.5, couleur: 'tan' }); doc.y -= 13; }
 
     // 1. ce que le montage attend
     section('Pour le montage — prises retenues');
     if (m.montage.length)
       tableauPdf(doc, colsM, m.montage.map(t => ({ v: [t.clip || '—', t.seq, t.plan, t.n, t.statut, t.tcIn, t.tcOut,
                                                        t.duree, t.carte, t.note, t.qui] })), 7.5);
-    else { doc.texte(PDF_M, doc.y - 8, 'Aucune prise marquée à monter pour l’instant.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    else { doc.texte(PDF_M, doc.y - 8, 'Aucune prise marquée à monter pour l’instant.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
 
     // 2. les plans tournes, chacun avec ses prises
     section('Plans tournés — prises et saisies');
-    if (!m.tournes.length){ doc.texte(PDF_M, doc.y - 8, 'Aucun plan tourné pour l’instant.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    if (!m.tournes.length){ doc.texte(PDF_M, doc.y - 8, 'Aucun plan tourné pour l’instant.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
     m.tournes.forEach(b => {
       // un plan ne se coupe pas en deux pages, sauf s'il ne tient sur aucune
       const h = 18 + (b.seq ? 14 : 0) + (b.prises.length ? 16 + b.prises.length * 15 : 12);
       if (doc.y - Math.min(h, 400) < PDF_M) doc.nouvellePage();
       if (b.seq){
-        doc.y -= 6; doc.texte(PDF_M, doc.y - 7, b.seq.toUpperCase(), { taille: 6.8, police: 'HB', gris: .3 });
-        if (b.seqTitre) doc.texte(PDF_M + largeurPdf(b.seq.toUpperCase(), 6.8, 'HB') + 6, doc.y - 7, b.seqTitre, { taille: 7.2, gris: .55 });
+        doc.y -= 6; doc.texte(PDF_M, doc.y - 7, b.seq.toUpperCase(), { taille: 6.8, police: 'HB', couleur: 'caramel' });
+        if (b.seqTitre) doc.texte(PDF_M + largeurPdf(b.seq.toUpperCase(), 6.8, 'HB') + 6, doc.y - 7, b.seqTitre, { taille: 7.2, couleur: 'tan' });
         doc.y -= 12;
       }
-      doc.texte(PDF_M, doc.y - 10, 'Plan ' + b.plan, { taille: 10.5, police: 'HB' });
+      doc.texte(PDF_M, doc.y - 10, 'Plan ' + b.plan, { taille: 10.5, police: 'HB', couleur: 'encre' });
       const xm = PDF_M + largeurPdf('Plan ' + b.plan, 10.5, 'HB') + 8;
-      doc.texte(xm, doc.y - 10, lignesPdf(b.meta, L - (xm - PDF_M), 7.5, 'H')[0], { taille: 7.5, gris: .4 });
+      doc.texte(xm, doc.y - 10, lignesPdf(b.meta, L - (xm - PDF_M), 7.5, 'H')[0], { taille: 7.5, couleur: 'tan' });
       doc.y -= 15;
       if (b.prises.length)
         tableauPdf(doc, colsP, b.prises.map(t => ({ v: [t.n, t.clip, t.carte, t.statut, t.retenue ? '• retenue' : '',
           t.tcIn, t.tcOut, t.duree, t.note, t.qui], fond: t.retenue, gras: t.retenue })), 7.5);
-      else { doc.texte(PDF_M, doc.y - 8, 'Marqué tourné, aucune prise enregistrée.', { taille: 7.5, gris: .5 }); doc.y -= 12; }
-      doc.y -= 3; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .3, .85); doc.y -= 4;
+      else { doc.texte(PDF_M, doc.y - 8, 'Marqué tourné, aucune prise enregistrée.', { taille: 7.5, couleur: 'tan' }); doc.y -= 12; }
+      doc.y -= 3; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .3, 'filet'); doc.y -= 4;
     });
 
     // 3. ce qui reste, en liste : une ligne par plan, dans l'ordre du tournage
     section('Reste à tourner : ' + m.reste.length + ' plan' + plur(m.reste.length));
-    if (!m.reste.length){ doc.texte(PDF_M, doc.y - 8, 'Rien : la journée est tournée.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    if (!m.reste.length){ doc.texte(PDF_M, doc.y - 8, 'Rien : la journée est tournée.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
     m.reste.forEach(r => {
       doc.place(13);
-      doc.texte(PDF_M, doc.y - 8, r.ref, { taille: 8, police: 'HB' });
+      doc.texte(PDF_M, doc.y - 8, r.ref, { taille: 8, police: 'HB', couleur: 'encre' });
       const xr = PDF_M + largeurPdf(r.ref, 8, 'HB') + 8;
-      if (r.meta) doc.texte(xr, doc.y - 8, lignesPdf(r.meta, L - (xr - PDF_M), 7.5, 'H')[0], { taille: 7.5, gris: .4 });
+      if (r.meta) doc.texte(xr, doc.y - 8, lignesPdf(r.meta, L - (xr - PDF_M), 7.5, 'H')[0], { taille: 7.5, couleur: 'tan' });
       doc.y -= 12;
     });
     if (m.abandonnes.length){
       doc.place(24); doc.y -= 6;
-      doc.texte(PDF_M, doc.y - 8, 'Abandonnés : ' + m.abandonnes.map(a => a.ref).join(' · '), { taille: 7.5, gris: .5 });
+      doc.texte(PDF_M, doc.y - 8, 'Abandonnés : ' + m.abandonnes.map(a => a.ref).join(' · '), { taille: 7.5, couleur: 'tan' });
       doc.y -= 12;
     }
   });
   return doc.fichier(jours.length ? jours[0].pied : '');
 }
 function telechargerDIT(){
-  download(fname('journal-DIT' + (fJourR === '*' ? '' : '-' + fJourR), 'pdf'), pdfDIT(fJourR), 'application/pdf');
+  const j = fJourR;
+  chargerLogo().then(() => download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf'));
 }
 
 /* La fiche pour la post est montee a la demande puis rendue au navigateur :
