@@ -3813,8 +3813,12 @@ function modeleDIT(j){
       const meta = [x.cadrage, x.mouv, x.support, x.focale].filter(Boolean).join(' · ');
       const ref = 'Séquence ' + (x.seq || '—') + ' · Plan ' + (x.plan || '—');
       if (pr.length || x.etat === 'done'){
+        const ok = pr.filter(t => t.statut === 'OK').length, ng = pr.filter(t => t.statut === 'NG').length,
+              ret = pr.filter(t => t.retenue).length;
         const b = { seq: '', seqTitre: '', plan: x.plan || '—', prises: pr.map(prise),
-                    meta: [ETATS[x.etat], meta, pr.length ? pr.length + ' prise' + plur(pr.length) : 'aucune prise'].filter(Boolean).join(' · ') };
+                    meta: [ETATS[x.etat], meta].filter(Boolean).join(' · '),
+                    bilan: pr.length ? [pr.length + ' prise' + plur(pr.length), ok && ok + ' OK', ng && ng + ' NG',
+                                        ret && ret + ' retenue' + plur(ret)].filter(Boolean).join(' · ') : 'aucune prise' };
         if ((x.seq || '') !== seqCourante){
           seqCourante = x.seq || '';
           b.seq = 'Séquence ' + (seqCourante || '—'); b.seqTitre = x.seqTitre || '';
@@ -3932,11 +3936,12 @@ function lignesPdf(s, larg, taille, police){
   return out.length ? out : [''];
 }
 
-function nouveauPdf(){
-  const pages = [];
+/* `paysage` : la page couchee, pour les tableaux larges */
+function nouveauPdf(paysage){
+  const pages = [], largeur = paysage ? PDF_H : PDF_L, hauteur = paysage ? PDF_L : PDF_H;
   const doc = {
-    y: 0, page: null,
-    nouvellePage(){ doc.page = { ops: [] }; pages.push(doc.page); doc.y = PDF_H - PDF_M; },
+    y: 0, page: null, largeur, hauteur,
+    nouvellePage(){ doc.page = { ops: [] }; pages.push(doc.page); doc.y = hauteur - PDF_M; },
     /* du texte a partir de (x, y), y etant la ligne de base ; `couleur` est un
        nom de la charte (PDF_TEINTES), a defaut un gris de 0 (noir) a 1 */
     texte(x, y, s, o){
@@ -3985,9 +3990,9 @@ function nouveauPdf(){
     fichier(pied){
       pages.forEach((pg, i) => {
         const s = (i + 1) + ' / ' + pages.length;
-        pg.ops.push(`${teintePdf('filet2')} RG 0.5 w ${PDF_M} ${PDF_M - 10} m ${(PDF_L - PDF_M).toFixed(2)} ${PDF_M - 10} l S`);
-        pg.ops.push(`BT /H 7 Tf ${teintePdf('tan')} rg ${PDF_M} ${PDF_M - 20} Td (${chainePdf(pied)}) Tj ET`);
-        pg.ops.push(`BT /H 7 Tf ${teintePdf('tan')} rg ${(PDF_L - PDF_M - largeurPdf(s, 7, 'H')).toFixed(2)} ${PDF_M - 20} Td (${chainePdf(s)}) Tj ET`);
+        pg.ops.push(`${teintePdf('filet2')} RG 0.5 w ${PDF_M} ${PDF_M - 10} m ${(largeur - PDF_M).toFixed(2)} ${PDF_M - 10} l S`);
+        pg.ops.push(`BT /H 7 Tf 0 Tc ${teintePdf('tan')} rg ${PDF_M} ${PDF_M - 20} Td (${chainePdf(pied)}) Tj ET`);
+        pg.ops.push(`BT /H 7 Tf 0 Tc ${teintePdf('tan')} rg ${(largeur - PDF_M - largeurPdf(s, 7, 'H')).toFixed(2)} ${PDF_M - 20} Td (${chainePdf(s)}) Tj ET`);
       });
       const objets = [];
       const ajouter = s => { objets.push(s); return objets.length; };
@@ -3998,7 +4003,7 @@ function nouveauPdf(){
       const kids = pages.map(pg => {
         const flux = pg.ops.join('\n');
         const c = ajouter(`<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`);
-        return ajouter(`<< /Type /Page /Parent ${noPages} 0 R /MediaBox [0 0 ${PDF_L} ${PDF_H}] /Resources ${res} /Contents ${c} 0 R >>`);
+        return ajouter(`<< /Type /Page /Parent ${noPages} 0 R /MediaBox [0 0 ${largeur} ${hauteur}] /Resources ${res} /Contents ${c} 0 R >>`);
       });
       objets[noPages - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
       const racine = ajouter(`<< /Type /Catalog /Pages ${noPages} 0 R >>`);
@@ -4020,22 +4025,24 @@ function nouveauPdf(){
 /* Une cellule est un texte, ou { t, couleur, police, puce } : `puce` pose un
    point de couleur devant le texte. Une cellule { parts: [...] } enchaine
    plusieurs textes sur une ligne, chacun avec sa police et sa couleur. */
-function tableauPdf(doc, cols, lignes, taille){
-  const inter = taille * 1.5, x0 = PDF_M, larg = cols.reduce((a, c) => a + c[1], 0);
-  const entete = () => {
+/* `suite` : ce qu'on rappelle en tete du tableau quand il continue sur la page d'apres. */
+function tableauPdf(doc, cols, lignes, taille, suite){
+  const inter = taille * 1.4, x0 = PDF_M, larg = cols.reduce((a, c) => a + c[1], 0);
+  const entete = encore => {
     doc.place(inter + 12);
+    if (encore && suite){ doc.texte(x0, doc.y - 9, suite, { taille: 8, police: 'HB', couleur: 'tan' }); doc.y -= 13; }
     let x = x0;
     cols.forEach(c => { doc.texte(x + 3, doc.y - 8, c[0].toUpperCase(), { taille: 6.3, police: 'HB', couleur: 'tan', esp: .5 }); x += c[1]; });
     doc.y -= 11;
     doc.ligne(x0, doc.y, x0 + larg, doc.y, .7, 'filet2');
     doc.y -= 1;
   };
-  entete();
+  entete(false);
   lignes.forEach((li, n) => {
     const cel = li.v.map(c => (c && typeof c === 'object') ? c : { t: c });
     const lg = cols.map((c, i) => cel[i].parts ? [''] : lignesPdf(cel[i].t, c[1] - 8 - (cel[i].puce ? 9 : 0), taille, cel[i].police || c[2] || 'H'));
-    const h = Math.max(...lg.map(l => l.length)) * inter + 6;
-    if (doc.y - h < PDF_M){ doc.nouvellePage(); entete(); }
+    const h = Math.max(...lg.map(l => l.length)) * inter + 5;
+    if (doc.y - h < PDF_M){ doc.nouvellePage(); entete(true); }
     // une rangee sur deux est teintee ; la prise retenue l'est davantage
     if (li.fond) doc.rect(x0, doc.y - h, larg, h, 'creme2');
     else if (n % 2) doc.rect(x0, doc.y - h, larg, h, 'creme3');
@@ -4075,8 +4082,12 @@ function chargerLogo(){
 // la boite du dessin dans son SVG (viewBox 1569 x 484) : le mot tient la
 const LOGO_BOITE = { x: 109.4, y: 132.4, l: 1346.3, h: 232.6 };
 
+/* Le journal est en paysage : une journee de dix plans a dix prises fait cent
+   lignes, et chacune doit se lire d'un coup d'oeil. Les tableaux ne montrent
+   que les colonnes remplies ce jour-la, un tableau qui continue sur la page
+   d'apres rappelle son plan, et chaque plan annonce son bilan. */
 function pdfDIT(j){
-  const jours = modeleDIT(j), doc = nouveauPdf(), L = PDF_L - 2 * PDF_M;
+  const jours = modeleDIT(j), doc = nouveauPdf(true), L = doc.largeur - 2 * PDF_M;
   // un titre de section : petites capitales espacees, encre, sur un filet
   const section = s => {
     doc.place(48); doc.y -= 18;
@@ -4086,18 +4097,42 @@ function pdfDIT(j){
   const vide = s => { doc.texte(PDF_M, doc.y - 8, s, { taille: 8.5, couleur: 'tan' }); doc.y -= 13; };
   // le statut d'une prise, dans sa couleur : OK en vert, NG en rouge, le reste en tan
   const statut = s => ({ t: s, couleur: s === 'OK' ? 'ok' : s === 'NG' ? 'ng' : 'tan', police: s === 'OK' || s === 'NG' ? 'HB' : 'H' });
-  // les deux timecodes dans une colonne : l'un sous l'autre quand il y en a deux
-  const tc = t => t.tcIn && t.tcOut ? t.tcIn + ' – ' + t.tcOut : t.tcIn || t.tcOut;
   // qui a saisi : le prenom en gras, l'heure en tan
   const saisi = t => ({ parts: [{ t: t.par, police: 'HB', couleur: 'encre' }, { t: t.par && t.heure ? ' · ' : '', couleur: 'tan' },
                                 { t: t.heure, couleur: 'tan' }] });
-  const colsM = [['Clip', 68, 'C'], ['Plan · prise', 74], ['Statut', 42], ['TC in / out', 72, 'C'], ['Durée', 36], ['Carte', 40],
-                 ['Note', L - 68 - 74 - 42 - 72 - 36 - 40 - 74], ['Saisi par', 74]];
-  const colsP = [['Pr.', 24], ['Clip', 68, 'C'], ['Statut', 42], ['Montage', 54], ['TC in / out', 72, 'C'], ['Durée', 36], ['Carte', 40],
-                 ['Note', L - 24 - 68 - 42 - 54 - 72 - 36 - 40 - 74], ['Saisi par', 74]];
+  /* les colonnes d'une journee : celles qui ont quelque chose a dire. Chaque
+     colonne sait lire sa cellule dans une prise ; la note prend la place qui reste. */
+  const COLONNES = {
+    n:      ['Pr.', 26, 'H', t => t.n],
+    clip:   ['Clip', 80, 'C', t => t.clip || '—'],
+    ou:     ['Plan · prise', 96, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n],
+    statut: ['Statut', 50, 'H', t => statut(t.statut)],
+    ret:    ['Montage', 62, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
+    tcIn:   ['TC in', 66, 'C', t => t.tcIn],
+    tcOut:  ['TC out', 66, 'C', t => t.tcOut],
+    duree:  ['Durée', 40, 'H', t => t.duree],
+    carte:  ['Carte', 48, 'H', t => t.carte],
+    note:   ['Note', 0, 'H', t => t.note],
+    qui:    ['Saisi par', 96, 'H', saisi]
+  };
+  const colonnes = (fixes, prises) => {
+    const avec = k => prises.some(t => t[k]);
+    const ids = fixes.slice(0, -1)
+      .concat(avec('tcIn') || avec('tcOut') ? ['tcIn', 'tcOut'] : [], avec('duree') ? ['duree'] : [], avec('carte') ? ['carte'] : [],
+              avec('note') ? ['note'] : [], fixes.slice(-1));
+    const cols = ids.map(id => COLONNES[id].slice());
+    const reste = L - cols.reduce((a, c) => a + c[1], 0);
+    const note = cols.find(c => c[0] === 'Note');
+    if (note) note[1] = Math.max(80, reste); else cols[cols.length - 1][1] += Math.max(0, reste);
+    return cols;
+  };
+  const rangee = (cols, t, extra) => Object.assign({ v: cols.map(c => c[3](t)) }, extra || {});
 
   jours.forEach((m, i) => {
     if (i) doc.nouvellePage();
+    const toutes = m.tournes.flatMap(b => b.prises);
+    const colsM = colonnes(['clip', 'ou', 'statut', 'qui'], m.montage);
+    const colsP = colonnes(['n', 'clip', 'statut', 'ret', 'qui'], toutes);
     // l'en-tete : le logo a gauche, le projet et la journee a droite, sur un trait caramel
     const hl = 26, kl = hl / LOGO_BOITE.h;
     if (LOGO_PDF){
@@ -4138,9 +4173,7 @@ function pdfDIT(j){
 
     // 1. ce que le montage attend
     section('Pour le montage — prises retenues');
-    if (m.montage.length)
-      tableauPdf(doc, colsM, m.montage.map(t => ({ v: [t.clip || '—', [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n,
-                                                       statut(t.statut), tc(t), t.duree, t.carte, t.note, saisi(t)] })), 8);
+    if (m.montage.length) tableauPdf(doc, colsM, m.montage.map(t => rangee(colsM, t)), 8, 'Prises retenues, suite');
     else vide('Aucune prise marquée à monter pour l’instant.');
 
     // 2. les plans tournes, chacun avec ses prises
@@ -4156,26 +4189,25 @@ function pdfDIT(j){
         if (b.seqTitre) doc.texte(PDF_M + largeurEsp(b.seq.toUpperCase(), 6.5, 'HB', .7) + 8, doc.y - 7, b.seqTitre, { taille: 7.2, couleur: 'tan' });
         doc.y -= 12;
       }
-      // le plan : son numero, puis ses reglages
+      // le plan : son numero, ses reglages, et son bilan a droite
       doc.texte(PDF_M, doc.y - 13, 'Plan ' + b.plan, { taille: 12, police: 'HB', couleur: 'encre' });
-      const xm = PDF_M + largeurPdf('Plan ' + b.plan, 12, 'HB') + 10;
-      doc.texte(xm, doc.y - 12.5, lignesPdf(b.meta, L - (xm - PDF_M), 8, 'H')[0], { taille: 8, couleur: 'tan' });
+      const xm = PDF_M + largeurPdf('Plan ' + b.plan, 12, 'HB') + 10, lb = largeurPdf(b.bilan, 8, 'HB');
+      doc.texte(PDF_M + L - lb, doc.y - 12.5, b.bilan, { taille: 8, police: 'HB', couleur: 'encre' });
+      doc.texte(xm, doc.y - 12.5, lignesPdf(b.meta, L - (xm - PDF_M) - lb - 12, 8, 'H')[0], { taille: 8, couleur: 'tan' });
       doc.y -= 20;
       if (b.prises.length)
-        tableauPdf(doc, colsP, b.prises.map(t => ({ v: [t.n, t.clip, statut(t.statut),
-          t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : '',
-          tc(t), t.duree, t.carte, t.note, saisi(t)], fond: t.retenue, gras: t.retenue })), 8);
+        tableauPdf(doc, colsP, b.prises.map(t => rangee(colsP, t, { fond: t.retenue, gras: t.retenue })), 8, 'Plan ' + b.plan + ', suite');
       else { doc.texte(PDF_M, doc.y - 8, 'Marqué tourné, aucune prise enregistrée.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
       doc.y -= 8;
     });
 
-    // 3. ce qui reste, sur deux colonnes : le plan, puis ses reglages dessous
+    // 3. ce qui reste, sur trois colonnes : le plan, puis ses reglages dessous
     section('Reste à tourner : ' + m.reste.length + ' plan' + plur(m.reste.length));
     if (!m.reste.length) vide('Rien : la journée est tournée.');
-    const moitie = Math.ceil(m.reste.length / 2), lc = L / 2, hr = 24;
-    for (let k = 0; k < moitie; k++){
+    const nc = 3, parCol = Math.ceil(m.reste.length / nc), lc = L / nc, hr = 24;
+    for (let k = 0; k < parCol; k++){
       doc.place(hr);
-      [m.reste[k], m.reste[k + moitie]].forEach((r, c) => {
+      [0, 1, 2].map(c => m.reste[k + c * parCol]).forEach((r, c) => {
         if (!r) return;
         const xc = PDF_M + c * lc;
         doc.texte(xc, doc.y - 8.5, r.ref, { taille: 8.5, police: 'HB', couleur: 'encre' });

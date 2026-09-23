@@ -68,7 +68,10 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('le montage vient avant le reste a tourner', 0 < pdf.find('(A001C002)') < pdf.find('RESTE \xc0 TOURNER'), True)
     essais.verifier('la sauvegarde ouvre le journal', 0 < pdf.find('SAUVEGARDER : 3 FICHIERS SUR 1 CARTE') < pdf.find('(A001C002)'), True)
     essais.verifier('la prise retenue est en gras sur fond creme', '/CB 8 Tf' in pdf and ' re f' in pdf, True)
-    essais.verifier('les deux timecodes tiennent dans une colonne', '(10:22:31:04 \x96)' in pdf and '(10:23:02:12)' in pdf, True)
+    essais.verifier('la page est couchee', '/MediaBox [0 0 841.89 595.28]' in pdf, True)
+    essais.verifier('les timecodes ont leurs colonnes, puisqu il y en a', '(10:22:31:04)' in pdf and '(TC OUT)' in pdf, True)
+    essais.verifier('la journee 2, sans prise, n a pas de tableau', '(TC OUT)' in pdf.split('(RESTE ')[1], False)
+    essais.verifier('le plan annonce son bilan', '(2 prises \xb7 1 OK \xb7 1 NG \xb7 1 retenue)' in pdf, True)
     essais.verifier('qui a saisi, et quand, dans le PDF', bool(re.search(r'/HB 8 Tf[^\n]*\(Bob\) Tj', pdf)) and '(09:15)' in pdf, True)
     essais.verifier('les notes a parentheses sont echappees', banc.js(
         "Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('').indexOf('(faux d\\xe9part)') > 0"), True)
