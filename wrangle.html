@@ -81,7 +81,6 @@
 
 <div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-btn" hidden></button></div>
 <input type="file" id="imp" accept=".json" hidden onchange="importJSON(this)">
-<input type="file" id="photo-in" accept="image/*" capture="environment" hidden onchange="photoChoisie(this)">
 <input type="file" id="image-plan-in" accept="image/*" hidden onchange="imagePlanChoisie(this)">
 <input type="file" id="fond-in" accept="image/*" hidden onchange="fondChoisi(this)">
 
@@ -240,7 +239,7 @@ const NEUVE = () => ({
   codec:'', reso:'', fps:'', shutter:'', ei:'', wb:'', nd:'', lut:'',
   objectif:'', diaph:'', filtre:'',
   sonRoll:'', sonFile:'', sync:'',
-  notes:'', par:'', photo:''
+  notes:'', par:''
 });
 const PLAN_NEUF = () => ({
   etat:'todo', tags:['LIVE', 'TBC'], acteurs:[], figu:false, elements:{}, elementsAutre:'', vfxDesc:'',
@@ -1054,7 +1053,9 @@ const ICO_AMBIANCE = {
   pluie:      PICTO_AMB('<path d="M19.6 15.4A4.5 4.5 0 0 0 17.5 7h-1.1A7 7 0 1 0 4.6 14.4"/><path d="M8 14.5v6M12 16v6M16 14.5v6"/>'),
   brume:      PICTO_AMB('<path d="M17.2 12.5A4 4 0 0 0 16.5 5h-1A6.2 6.2 0 0 0 4 8.6a4 4 0 0 0 1.6 3.9"/><path d="M3.5 16h17M6 19.5h12"/>'),
   vent:       PICTO_AMB('<path d="M9.6 5.1A2 2 0 1 1 11 8.5H2.5M12.6 18.9a2 2 0 1 0 1.4-3.4H2.5M17.7 8.2A2.4 2.4 0 1 1 19.4 12H2.5"/>'),
-  neige:      PICTO_AMB('<path d="M12 2.5v19M3.8 7.2l16.4 9.6M20.2 7.2L3.8 16.8M9.5 4.2L12 6.5l2.5-2.3M9.5 19.8l2.5-2.3 2.5 2.3"/>')
+  neige:      PICTO_AMB('<path d="M12 2.5v19M3.8 7.2l16.4 9.6M20.2 7.2L3.8 16.8M9.5 4.2L12 6.5l2.5-2.3M9.5 19.8l2.5-2.3 2.5 2.3"/>'),
+  // artificiel : la lumiere du plateau, une ampoule
+  artificiel: PICTO_AMB('<path d="M9 18.5h6M10 21.5h4M8.6 14.4a5.6 5.6 0 1 1 6.8 0c-.6.5-.9 1.2-.9 2V17H9.5v-.6c0-.8-.3-1.5-.9-2z"/>')
 };
 /* Les lignes que le plan et la prise ont en commun : la meteo, la focale (une valeur tapee
    rejoint la serie du tournage), le mouvement et le support. */
@@ -1199,7 +1200,7 @@ const MOUVEMENTS = ['Fixe', 'Pan', 'Tilt', 'Suivi', 'Travelling Av', 'Travelling
 const SUPPORTS = ['Trépied', 'Rail / dolly', 'Slider', 'Steadicam', 'Gimbal', 'Épaule', 'Grue', 'Drone', 'Véhicule'];
 /* Voile : le soleil passe encore, adouci ; Couvert : plus de soleil du tout. Deux lumieres
    differentes pour la post, donc deux valeurs (« Couvert » n'est plus range dans « Voile »). */
-const METEOS = ['Soleil', 'Voilé', 'Couvert', 'Dynamique', 'Pluie', 'Brume', 'Vent', 'Neige'];
+const METEOS = ['Soleil', 'Voilé', 'Couvert', 'Dynamique', 'Pluie', 'Brume', 'Vent', 'Neige', 'Artificiel'];
 
 /* La focale : la serie du tournage ; une valeur tapee l'enrichit pour tous. */
 function ajouterFocale(input){
@@ -1585,7 +1586,6 @@ function ligne(t, sansActions){
   return `<div class="prise ${t.statut === 'OK' ? 'ok' : t.statut === 'NG' ? 'ng' : ''}"
     data-id="${t.id}" onclick="openPrise('${t.id}')">
     <div class="tn">${t.n}</div>
-    ${t.photo ? `<img class="tphoto" src="${t.photo}" alt="">` : ''}
     <div class="tbody">
       <div class="trow">
         <span class="clip${t.clip ? '' : ' vide'}">${esc(t.clip || 'clip à renseigner')}</span>
@@ -1839,8 +1839,7 @@ const RESUME_PRISE = {
   fichier: t => [t.cam, t.carte, t.tcIn && 'TC ' + t.tcIn, t.duree],
   releves: t => [t.focale && fleche(t.focale, t.focaleStop), t.diaph, t.focusStart && fleche(t.focusStart, t.focusStop), t.mouvement, t.support],
   image:   t => [t.codec, t.reso, t.fps && t.fps + ' fps', t.ei && 'EI ' + t.ei, t.wb, t.nd && 'ND ' + t.nd, t.lut],
-  son:     t => [t.sonRoll, t.sync, t.sonFile],
-  photo:   t => [t.photo && 'Une photo']
+  son:     t => [t.sonRoll, t.sync, t.sonFile]
 };
 // la table est lue a l'usage : RESUME_PLAN n'est declare que plus bas
 const resumesDe = () => ({ prise: RESUME_PRISE, plan: RESUME_PLAN })[openType];
@@ -2007,10 +2006,6 @@ function openPrise(id, y){
         ${F(t, 'Fichier son', 'sonFile')}
       </div>`)}
 
-    ${sectionFiche('photo', 'Photo de référence', t, `
-      <div class="photo-bloc" id="photo-bloc">${htmlPhoto(t)}</div>
-      <div class="note">Moniteur, clap, position caméra : ce qui aidera à retrouver la prise.</div>`)}
-
     <div class="sec">
       <div class="specs">
         ${F(t, 'Saisie par', 'par', {refresh:1, ph:'—'})}
@@ -2051,8 +2046,6 @@ function majBoutonsPrise(){
   const k = $('btn-star');
   if (k){ k.className = 'star' + (t.retenue ? ' on' : ''); k.innerHTML = htmlEtoile(t); }
   document.querySelectorAll('.chips-notes button').forEach(b => b.classList.toggle('on', aNote(t, b.dataset.n)));
-  const pb = $('photo-bloc');
-  if (pb && pb.dataset.photo !== (t.photo || '')) pb.innerHTML = htmlPhoto(t);
   majResumes(); majNavPrise(); majChoix();
 }
 
@@ -2096,32 +2089,14 @@ function restaurer(){
   flush(); renderAll(); toast('Rétabli');
 }
 
-/* ---------------------------------------------------------------- Photo */
+/* --------------------------------------------------------------- Images */
+/* L'image d'un plan et le plan du decor sous le croquis : choisies sur
+   l'appareil, reduites avant d'etre gardees. */
 
-function htmlPhoto(t){
-  const b = $('photo-bloc');
-  if (b) b.dataset.photo = t.photo || '';
-  return (t.photo ? `<img src="${t.photo}" alt="" onclick="voirPhoto('${t.id}')">` : '') +
-    `<div class="btns">
-      <button class="btn sm" onclick="prendrePhoto('${t.id}')">${t.photo ? 'Reprendre' : '&#128247; Prendre une photo'}</button>
-      ${t.photo ? `<button class="btn sm d" onclick="retirerPhoto('${t.id}')">Retirer</button>` : ''}
-    </div>`;
-}
 /* Ouvre le selecteur d'image de l'appareil, en retenant pour quelle fiche (et quel decor). */
 function demanderImage(quel, id, lieu){
   const i = $(quel);
   i.dataset.id = id; i.dataset.lieu = lieu || ''; i.value = ''; i.click();
-}
-function prendrePhoto(id){ demanderImage('photo-in', id); }
-function photoChoisie(input){
-  const f = input.files && input.files[0], id = input.dataset.id;
-  input.value = '';
-  if (!f || !id) return;
-  reduirePhoto(f, 720, .55).then(url => {
-    if (!prise(id)) return;
-    patch('prise', id, { photo: url });
-    rafraichirDoux(); toast('Photo enregistrée');
-  }).catch(() => toast('Photo illisible'));
 }
 /* Reduite avant d'etre gardee : une vignette lisible pese 20 a 40 Ko,
    pas les 4 Mo d'une photo de telephone. */
@@ -2159,12 +2134,6 @@ function reduirePhoto(f, max, q){
       .then(b => dessine(b, b.width, b.height)).catch(viaImage);
   return viaImage();
 }
-function retirerPhoto(id){
-  if (!prise(id)) return;
-  patch('prise', id, { photo:'' });
-  rafraichirDoux();
-}
-function voirPhoto(id){ const t = prise(id); if (t && t.photo) voirImage(t.photo); }
 
 /* --------------------------------------------------------- Feuille plan */
 
@@ -3893,7 +3862,7 @@ function exportCSV(kind){
             'Hauteur départ','Hauteur arrivée','Mesuré depuis','Pan départ','Pan arrivée','Tilt départ','Tilt arrivée','Roll départ','Roll arrivée','Mouvement','Support',
             'Codec','Résolution','Cadence','Obturateur','EI','Balance','ND','LUT','Objectif','Filtres',
             'Bande son','Synchro','Fichier son','Note de prise',
-            'Éléments du plan','Description VFX','Description du plan','Int/Ext','Moment','Saisie par','Photo'];
+            'Éléments du plan','Description VFX','Description du plan','Int/Ext','Moment','Saisie par'];
     rows = src.map(t => {
       const p = plan(t.planId);
       return [t.jour ? nomJour(t.jour) : '', t.seq, t.plan, t.n, t.statut, t.retenue ? 'oui' : '',
@@ -3903,7 +3872,7 @@ function exportCSV(kind){
         t.codec, t.reso, t.fps, t.shutter, t.ei, t.wb, t.nd, t.lut, t.objectif, t.filtre,
         t.sonRoll, t.sync, t.sonFile, t.notes,
         listeElements(p), p ? p.vfxDesc : '', p ? p.desc : '', p ? p.intExt : '', p ? p.momentJour : '',
-        t.par, t.photo ? 'oui' : ''];
+        t.par];
     });
   } else {
     head = ['Jour','Séquence','Titre séquence','Plan','État','Description','Passages','Décor','Int/Ext','Moment','Météo','Acteurs','Figuration',
