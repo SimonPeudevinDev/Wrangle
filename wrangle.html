@@ -3740,7 +3740,8 @@ function renderReport(){
 
     <div class="bloc" id="rapprocher">
       <h3>Rapprocher les saisies</h3>
-      <div class="note">Chacun saisit de son côté ; déposez ici les sauvegardes JSON des autres (⚙ → Données → Sauvegarde JSON).
+      <div class="note">Chacun saisit de son côté ; ${RESEAU.php ? 'le bouton ci-dessous ramène les saisies de toute l’équipe, telles qu’elles sont sur le serveur'
+          : 'déposez ici les sauvegardes JSON des autres (⚙ → Données → Sauvegarde JSON)'}.
         Le rapport montre ce qui ne concorde pas, plan par plan. La fusion garde tout : vos saisies font foi
         sur les écarts, les autres comblent les vides et apportent leurs prises en plus.</div>
       ${htmlRapprochement()}
