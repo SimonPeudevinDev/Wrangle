@@ -97,6 +97,13 @@ ce navigateur font foi sur les écarts, les autres comblent les vides et apporte
 plus. « Écarts (PDF) » sort le même rapport en PDF. Chaque fichier est nommé d'après qui a saisi ses
 prises.
 
+**Sans échange de fichiers.** Quand le site est servi par un hébergeur qui exécute PHP (OVH), la
+boîte de dépôt `depot/` fait le tour : chacun clique ⚙ → Données → « Déposer mes saisies », donne
+une fois la clé du tournage, et ses saisies partent chez l'hébergeur sous son prénom (un fichier
+par personne, le dernier dépôt remplace le précédent, hors de portée du web). Le DIT clique
+« Récupérer les dépôts » dans le rapprochement. La clé est le secret GitHub `DEPOT_CLE` : la
+publication l'écrit dans `depot/cle.php` chez l'hébergeur seulement, jamais sur GitHub Pages.
+
 ## Le journal DIT par mail
 
 Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)

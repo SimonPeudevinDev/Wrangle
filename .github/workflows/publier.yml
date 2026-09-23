@@ -27,6 +27,7 @@ jobs:
       url: ${{ steps.deploiement.outputs.page_url }}
     env:
       OVH_FTP_HOTE: ${{ secrets.OVH_FTP_HOTE }}
+      DEPOT_CLE: ${{ secrets.DEPOT_CLE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +37,14 @@ jobs:
 
       - name: Construire le site
         run: python outils/construire_site.py site
+
+      # la cle du depot des saisies (secret DEPOT_CLE) : ecrite pour OVH seulement,
+      # jamais publiee sur GitHub Pages (l'etape de nettoyage plus bas l'enleve)
+      - name: La clé du dépôt des saisies
+        if: env.OVH_FTP_HOTE != '' && env.DEPOT_CLE != ''
+        run: |
+          mkdir -p site/depot
+          printf "<?php define('CLE', base64_decode('%s'));\n" "$(printf %s "$DEPOT_CLE" | base64 -w0)" > site/depot/cle.php
 
       # le site chez OVH : le contenu de site/ dans le www de l'hebergement,
       # seuls les fichiers qui ont change sont renvoyes
@@ -52,6 +61,10 @@ jobs:
           protocol: ftp   # ce cluster OVH ne sait pas le TLS explicite
           local-dir: site/
           server-dir: www/
+
+      - name: La clé ne part pas sur GitHub Pages
+        if: always()
+        run: rm -f site/depot/cle.php
 
       - uses: actions/configure-pages@v5
 

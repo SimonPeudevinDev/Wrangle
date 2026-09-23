@@ -57,6 +57,10 @@ def construire(sortie, vide=False):
     shutil.copytree(PUBLIC, os.path.join(sortie, 'public'),
                     ignore=shutil.ignore_patterns('vignettes') if vide else None)
 
+    # le depot des saisies : deux scripts PHP, utiles chez un hebergeur qui les
+    # execute (OVH) ; ailleurs ils restent des fichiers inertes
+    shutil.copytree(os.path.join(ICI, 'depot'), os.path.join(sortie, 'depot'))
+
     # sans ce fichier, GitHub Pages fait passer le site par Jekyll
     open(os.path.join(sortie, '.nojekyll'), 'w').close()
     if os.path.exists(CNAME):

@@ -69,5 +69,31 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
     essais.verifier('le projet est fusionne', [banc.js('DB.prises.length'), banc.js("$('toast-msg').textContent"), banc.js('RAP.sources.length')], [3, 'Projet fusionné', 0])
     banc.js("retirerSource(0); $('rap-in')")
     essais.verifier('sans fichier, le bloc n a que ce navigateur', banc.js("document.querySelectorAll('#rapprocher .rsource').length"), 1)
+
+    # -- le depot chez l'hebergeur : on joue l'hebergeur, avec sa cle, en interceptant les appels
+    banc.js("""
+      window.__depots = {}; window.__appels = [];
+      RESEAU.possible = false;   // comme sur le site
+      const vrai = window.fetch;
+      window.fetch = (url, o) => {
+        if (!/depot\\/(deposer|lister)\\.php$/.test(url)) return vrai(url, o);
+        const corps = JSON.parse(o.body); window.__appels.push([url.replace(/.*\\//, ''), corps.nom || '']);
+        const rep = (statut, obj) => Promise.resolve({ status: statut, json: () => Promise.resolve(obj) });
+        if (corps.cle !== 'foresight') return rep(401, { erreur: 'clé du tournage refusée' });
+        if (/deposer/.test(url)){ window.__depots[corps.nom] = { nom: corps.nom, quand: '2026-10-05T18:40:00+02:00', projet: corps.projet }; return rep(200, { ok: true, nom: corps.nom, quand: '2026-10-05T18:40:00+02:00' }); }
+        return rep(200, { depots: Object.values(window.__depots) });
+      };
+      UI.cle = 'mauvaise'; deposerSaisies();
+    """)
+    time.sleep(0.5)
+    essais.verifier('une mauvaise cle est refusee, et oubliee', [banc.js("$('dlg-titre').textContent"), banc.js('UI.cle')], ['Le dépôt n’a pas pris.', ''])
+    banc.js("fermerDialogue(); UI.cle = 'foresight'; deposerSaisies()"); time.sleep(0.5)
+    essais.verifier('avec la bonne cle, les saisies partent sous le prenom', banc.js("Object.keys(window.__depots)"), ['Simon'])
+    essais.verifier('et la page le dit', banc.js("$('toast-msg').textContent"), 'Saisies déposées à 18:40')
+    banc.js("window.__depots['Alice'] = { nom:'Alice', quand:'2026-10-05T18:45:00+02:00', projet: window.__d2 }; recupererDepots()"); time.sleep(0.6)
+    essais.verifier('le DIT recupere les depots des autres, pas le sien',
+                    banc.js("RAP.sources.map(s => s.nom + ' ' + quandDepot(s.quand))"), ['Alice 05/10 18:45'])
+    essais.verifier('le bloc montre le depot et sa date', 'Alice' in banc.js("document.querySelector('#rapprocher').textContent") and '05/10 18:45' in banc.js("document.querySelector('#rapprocher').textContent"), True)
+    essais.verifier('le bouton Deposer mes saisies est dans la fiche Journee', banc.js("openProd(); !!document.querySelector('#sbody button[onclick=\"deposerSaisies()\"]')"), True)
     essais.exceptions(banc)
 essais.bilan()

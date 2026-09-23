@@ -3518,6 +3518,11 @@ function openProd(){
         <button class="btn" onclick="resync()">Recharger le découpage</button>
         <button class="btn d" onclick="wipe()">Tout effacer</button>
       </div>
+      ${RESEAU.possible ? '' : `<div class="btns" style="margin-top:10px">
+        <button class="btn p" onclick="deposerSaisies()">Déposer mes saisies</button>
+      </div>
+      <div class="note">Vos saisies partent chez l’hébergeur du site, sous la clé du tournage, pour que le DIT les
+        récupère. ${UI.depose ? 'Dernier dépôt : ' + esc(quandDepot(UI.depose)) + '.' : 'Aucun dépôt pour l’instant.'}</div>`}
       <div class="note">Recharger le découpage remet à jour les fiches depuis le DT d’origine${multi}.
         Les prises, éléments, notes, états et jours sont conservés.
         ${RESEAU.possible ? '<br>Le serveur garde une sauvegarde horodatée toutes les 10 minutes dans <b style="display:inline;text-transform:none;letter-spacing:0;font-size:inherit">data/sauvegardes</b>.' : ''}</div>
@@ -4242,6 +4247,62 @@ function telechargerDIT(){
   chargerLogo().then(() => download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf'));
 }
 
+/* ------------------------------------------------- Le depot des saisies */
+/* Sur le site, chacun depose ses saisies d'un bouton : elles partent chez
+   l'hebergeur (depot/deposer.php), sous la cle du tournage, un fichier par
+   personne. Le DIT les recupere toutes dans « Rapprocher les saisies ». Le
+   serveur de plateau n'en a pas besoin : il partage deja tout en direct. */
+function cleDepot(){
+  if (UI.cle) return Promise.resolve(UI.cle);
+  return demanderTexte('Clé du tournage', { aide:'donnée par le DIT', ok:'Continuer' }).then(v => {
+    v = (v || '').trim();
+    if (v){ UI.cle = v; ecrireUI(); }
+    return v;
+  });
+}
+/* la reponse du depot : { rep, statut } ; une cle refusee est oubliee, on la redemandera */
+function appelDepot(chemin, corps){
+  return poster(chemin, JSON.stringify(corps)).then(r => r.json().then(rep => {
+    if (r.status === 401){ UI.cle = ''; ecrireUI(); }
+    return { rep, statut: r.status };
+  }));
+}
+const PAS_DE_DEPOT = 'Pas de dépôt à cette adresse : il faut ouvrir le site chez l’hébergeur.';
+function deposerSaisies(){
+  if (!UI.nom) return prevenir('Donnez d’abord votre prénom.', { detail:'C’est lui qui nomme votre dépôt.' });
+  cleDepot().then(cle => {
+    if (!cle) return;
+    return appelDepot('depot/deposer.php', { cle, nom: UI.nom, projet: DB }).then(({ rep, statut }) => {
+      if (rep.ok){
+        UI.depose = rep.quand; ecrireUI();
+        toast('Saisies déposées à ' + hhmm(new Date(rep.quand)));
+        if (openType === 'prod') openProd();
+      } else prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });
+    }).catch(() => prevenir('Le dépôt n’a pas pris.', { detail: PAS_DE_DEPOT }));
+  });
+}
+function recupererDepots(){
+  cleDepot().then(cle => {
+    if (!cle) return;
+    return appelDepot('depot/lister.php', { cle }).then(({ rep, statut }) => {
+      if (!rep.depots) return prevenir('Impossible de lire les dépôts.', { detail: rep.erreur || ('réponse ' + statut) });
+      let n = 0;
+      rep.depots.forEach(d => {
+        if (d.nom === UI.nom) return;   // ses propres saisies sont deja la, dans ce navigateur
+        try{
+          const db = normaliser(d.projet);
+          RAP.sources = RAP.sources.filter(s => s.nom !== d.nom);
+          RAP.sources.push({ nom: d.nom, db, quand: d.quand });
+          n++;
+        }catch(e){}
+      });
+      renderReport();
+      toast(n ? n + ' dépôt' + plur(n) + ' récupéré' + plur(n) : 'Aucun dépôt des autres pour l’instant');
+    }).catch(() => prevenir('Impossible de lire les dépôts.', { detail: PAS_DE_DEPOT }));
+  });
+}
+const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + ' ' + hhmm(d); };
+
 /* ------------------------------------------------ Rapprocher les saisies */
 /* Chacun saisit de son cote, dans son navigateur ; le DIT depose ici les
    sauvegardes des autres. On met les prises cote a cote, plan par plan :
@@ -4377,7 +4438,8 @@ function resumeRap(t){
 }
 function htmlRapprochement(){
   const s = sourcesRap();
-  const puces = s.map((x, i) => `<span class="rsource${x.ici ? ' ici' : ''}">${esc(x.nom)}${x.ici ? ' <em>ce navigateur</em>' : ''}${
+  const puces = s.map((x, i) => `<span class="rsource${x.ici ? ' ici' : ''}">${esc(x.nom)}${
+    x.ici ? ' <em>ce navigateur</em>' : x.quand ? ` <em>${esc(quandDepot(x.quand))}</em>` : ''}${
     x.ici ? '' : ` <button type="button" onclick="retirerSource(${i - 1})" aria-label="Retirer ${esc(x.nom)}">&times;</button>`}</span>`).join('');
   let corps = '';
   if (s.length > 1){
@@ -4391,7 +4453,8 @@ function htmlRapprochement(){
         <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>
         <button class="btn" onclick="telechargerRapprochement()">Écarts (PDF)</button></div>`;
   }
-  return `<div class="rsources">${puces}<button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
+  return `<div class="rsources">${puces}${RESEAU.possible ? '' : `<button type="button" class="btn sm p" onclick="recupererDepots()">Récupérer les dépôts</button>`}
+    <button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
 }
 function garderFusion(){
   const s = sourcesRap();
