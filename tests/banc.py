@@ -268,10 +268,10 @@ class Banc:
         time.sleep(self.repos if repos is None else repos)
         return self.exceptions()
 
-    def nommer(self, i=1):
+    def nommer(self, nom='Simon'):
         """Le voile « Qui saisit sur cet appareil ? » barre la page au premier
-        lancement : on choisit un prénom pour passer."""
-        self.js("document.querySelectorAll('#choix-nom .btn')[%d].click()" % i)
+        lancement : on passe sans compte, avec un prénom."""
+        self.js("sansCompte(%s)" % json.dumps(nom))
         time.sleep(0.4)
 
     def vue(self, largeur, hauteur, mobile=True, echelle=3):

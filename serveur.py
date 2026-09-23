@@ -32,10 +32,12 @@ import hmac
 import json
 import os
 import queue
+import re
 import socket
 import sys
 import threading
 import time
+import unicodedata
 import webbrowser
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -100,6 +102,77 @@ def ecrire_json(chemin, db):
     """Le projet dans ce fichier, au format compact."""
     with open(chemin, 'w', encoding='utf-8') as f:
         json.dump(db, f, ensure_ascii=False, separators=(',', ':'))
+
+
+# --------------------------------------------------------------- Comptes ---
+# Un compte par personne : prénom et mot de passe, créés avec la clé du
+# tournage (le mot de passe du serveur, ou WRANGLE_CLE, ou data/cle.txt ;
+# sans clé, le plateau est ouvert et n'importe qui peut créer un compte).
+# La connexion rend un jeton signé que la page garde : il dit qui saisit, et
+# si c'est le DIT. Mêmes appels et mêmes réponses que depot/*.php chez l'hébergeur.
+
+JETON_DUREE = 90 * 24 * 3600
+
+
+def cle_tournage():
+    if MOT_DE_PASSE:
+        return MOT_DE_PASSE
+    if os.environ.get('WRANGLE_CLE'):
+        return os.environ['WRANGLE_CLE']
+    try:
+        with open(os.path.join(DATA, 'cle.txt'), 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
+def lire_comptes():
+    try:
+        with open(os.path.join(DATA, 'comptes.json'), 'r', encoding='utf-8') as f:
+            c = json.load(f)
+        return c if isinstance(c, dict) else {}
+    except Exception:
+        return {}
+
+
+def slug(nom):
+    """« Marie-Lou » -> marie-lou : la clé d'un compte."""
+    a = unicodedata.normalize('NFKD', nom).encode('ascii', 'ignore').decode().lower()
+    return re.sub(r'[^a-z0-9]+', '-', a).strip('-') or 'sans-nom'
+
+
+def secret_jetons():
+    chemin = os.path.join(DATA, 'secret.txt')
+    if not os.path.exists(chemin):
+        with open(chemin, 'w', encoding='utf-8') as f:
+            f.write(os.urandom(32).hex())
+    with open(chemin, 'r', encoding='utf-8') as f:
+        return f.read().strip().encode('utf-8')
+
+
+def hacher(mdp, sel=None):
+    sel = sel or os.urandom(16).hex()
+    return sel, hashlib.pbkdf2_hmac('sha256', mdp.encode('utf-8'), bytes.fromhex(sel), 100000).hex()
+
+
+def signer(nom, dit):
+    msg = '%s|%d|%d' % (nom, 1 if dit else 0, int(time.time()) + JETON_DUREE)
+    return msg + '|' + hmac.new(secret_jetons(), msg.encode('utf-8'), 'sha256').hexdigest()
+
+
+def verifier_jeton(jeton):
+    p = str(jeton or '').split('|')
+    if len(p) != 4:
+        return None
+    msg = '|'.join(p[:3])
+    if not hmac.compare_digest(hmac.new(secret_jetons(), msg.encode('utf-8'), 'sha256').hexdigest(), p[3]):
+        return None
+    try:
+        if int(p[2]) < time.time():
+            return None
+    except ValueError:
+        return None
+    return {'nom': p[0], 'dit': p[1] == '1'}
 
 
 # ------------------------------------------------------------------ Mail ---
@@ -718,8 +791,48 @@ class Requete(BaseHTTPRequestHandler):
 
         if u.path == '/api/mail':
             return self._mail(corps)
+        if u.path == '/api/inscrire':
+            return self._inscrire(corps)
+        if u.path == '/api/connecter':
+            return self._connecter(corps)
+        if u.path == '/api/comptes':
+            return self._comptes(corps)
 
         self._json(404, {'erreur': 'introuvable'})
+
+    # -- comptes -----------------------------------------------------------
+
+    def _inscrire(self, corps):
+        cle = cle_tournage()
+        if cle and not pareils(str(corps.get('cle') or ''), cle):
+            return self._json(401, {'erreur': 'clé du tournage refusée'})
+        nom = str(corps.get('nom') or '').replace('|', ' ').strip()[:40]
+        mdp = str(corps.get('mdp') or '')
+        if not nom or len(mdp) < 4:
+            return self._json(400, {'erreur': 'prénom et mot de passe (quatre caractères au moins) attendus'})
+        sel, h = hacher(mdp)
+        with verrou:
+            comptes = lire_comptes()
+            comptes[slug(nom)] = {'nom': nom, 'sel': sel, 'hash': h, 'dit': bool(corps.get('dit'))}
+            ecrire_json(os.path.join(DATA, 'comptes.json'), comptes)
+        print('Compte', nom, '(DIT)' if corps.get('dit') else '', 'créé depuis', self.client_address[0])
+        return self._json(200, {'ok': True, 'nom': nom, 'dit': bool(corps.get('dit'))})
+
+    def _connecter(self, corps):
+        c = lire_comptes().get(slug(str(corps.get('nom') or '')))
+        if not c or not pareils(hacher(str(corps.get('mdp') or ''), c.get('sel'))[1], c.get('hash', '')):
+            return self._json(401, {'erreur': 'prénom ou mot de passe incorrect'})
+        return self._json(200, {'ok': True, 'jeton': signer(c['nom'], c.get('dit')), 'nom': c['nom'], 'dit': bool(c.get('dit'))})
+
+    def _comptes(self, corps):
+        q = verifier_jeton(corps.get('jeton'))
+        if not q:
+            return self._json(401, {'erreur': 'connexion requise'})
+        if not q['dit']:
+            return self._json(403, {'erreur': 'réservé au DIT'})
+        liste = sorted(({'nom': c['nom'], 'dit': bool(c.get('dit'))} for c in lire_comptes().values()),
+                       key=lambda x: x['nom'].lower())
+        return self._json(200, {'comptes': liste})
 
     def _mail(self, corps):
         """Expédie le journal DIT que la page a fabriqué. Un envoi automatique

@@ -98,11 +98,26 @@ plus. « Écarts (PDF) » sort le même rapport en PDF. Chaque fichier est nomm�
 prises.
 
 **Sans échange de fichiers.** Quand le site est servi par un hébergeur qui exécute PHP (OVH), la
-boîte de dépôt `depot/` fait le tour : chacun clique ⚙ → Données → « Déposer mes saisies », donne
-une fois la clé du tournage, et ses saisies partent chez l'hébergeur sous son prénom (un fichier
-par personne, le dernier dépôt remplace le précédent, hors de portée du web). Le DIT clique
-« Récupérer les dépôts » dans le rapprochement. La clé est le secret GitHub `DEPOT_CLE` : la
-publication l'écrit dans `depot/cle.php` chez l'hébergeur seulement, jamais sur GitHub Pages.
+boîte de dépôt `depot/` fait le tour : chacun clique ⚙ → Données → « Déposer mes saisies », et ses
+saisies partent chez l'hébergeur sous son compte (un fichier par personne, le dernier dépôt
+remplace le précédent, hors de portée du web). Le DIT clique « Récupérer les dépôts » dans le
+rapprochement.
+
+## Les comptes
+
+À l'entrée, chacun donne son prénom et son mot de passe ; l'appareil reste connecté 90 jours. Les
+comptes se créent avec la **clé du tournage** (« Créer un compte » sur l'écran d'entrée, ou ⚙ →
+Journée → « Comptes de l'équipe » pour le DIT) ; la case « Ce compte est le DIT » donne le droit
+de récupérer les dépôts et de voir les comptes. Sans réseau, « Continuer sans compte » pose un
+prénom seul, sans dépôt possible.
+
+- Chez l'hébergeur, la clé est le secret GitHub `DEPOT_CLE` : la publication l'écrit dans
+  `depot/cle.php` chez OVH seulement, jamais sur GitHub Pages. Les comptes vivent dans
+  `depot/comptes/`, interdit au web.
+- Sur le serveur du plateau, la clé est le mot de passe du serveur (`--motdepasse`), ou la
+  variable `WRANGLE_CLE`, ou le contenu de `data/cle.txt`. Sans clé, le plateau est ouvert :
+  n'importe qui sur le Wi-Fi peut créer un compte, ce qui va bien entre gens de l'équipe. Les
+  comptes vivent dans `data/comptes.json`, mots de passe hachés.
 
 ## Le journal DIT par mail
 
@@ -189,7 +204,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Quatorze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Quinze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -207,6 +222,7 @@ py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un pl
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
+py tests/verif_comptes.py          les comptes : entrer, se tromper, changer, ouvrir un compte à l'équipe
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un

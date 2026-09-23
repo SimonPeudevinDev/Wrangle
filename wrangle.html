@@ -106,11 +106,25 @@
   <div class="dconseil" id="dconseil"></div>
 </div>
 
+<!-- l'entree : prenom et mot de passe. Le compte se cree avec la cle du tournage. -->
 <div class="voile" id="voile-nom" hidden>
-  <div class="boite">
-    <h2>Qui saisit sur cet appareil ?</h2>
-    <p>Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.</p>
-    <div class="choix" id="choix-nom"></div>
+  <div class="boite entree">
+    <h2 id="entree-titre">Qui saisit sur cet appareil ?</h2>
+    <p id="entree-texte">Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.</p>
+    <form class="specs" onsubmit="event.preventDefault();validerEntree()">
+      <div class="spec"><label>Prénom</label><input id="entree-nom" autocomplete="username" autocapitalize="words" placeholder="Marie"></div>
+      <div class="spec"><label>Mot de passe</label><input id="entree-mdp" type="password" autocomplete="current-password" placeholder="••••••"></div>
+      <div class="spec entree-creer" hidden><label>Clé du tournage</label><input id="entree-cle" type="password" autocomplete="off" placeholder="donnée par le DIT"></div>
+      <div class="spec entree-creer" hidden><label>Rôle</label>
+        <label class="case"><input type="checkbox" id="entree-dit">Ce compte est le DIT</label></div>
+      <div class="entree-erreur" id="entree-erreur" hidden></div>
+      <div class="btns" style="margin-top:16px">
+        <button class="btn p" type="submit" id="entree-ok">Entrer</button>
+        <button class="btn" type="button" id="entree-bascule" onclick="basculerEntree()">Créer un compte</button>
+      </div>
+    </form>
+    <div class="note" style="margin-top:14px"><button type="button" class="lien" onclick="continuerSansCompte()">Continuer sans compte</button>
+      · hors ligne, ou pour un essai : le prénom seul, sans dépôt.</div>
   </div>
 </div>
 <div class="voile" id="voile-photo" hidden onclick="this.hidden=true"><img alt=""></div>
@@ -251,7 +265,6 @@ const PLAN_NEUF = () => ({
 
 /* L'equipe du plateau : un bouton par prenom au premier lancement. Changer
    cette liste suffit a changer les choix proposes. */
-const EQUIPE = ['Romain', 'Simon', 'Tom', 'Victoire', 'Marie', 'Georges', 'Alex'];
 
 function lireUI(){
   let u = {};
@@ -687,25 +700,88 @@ function setNom(v){
   UI.nom = (v || '').trim(); ecrireUI();
   envoyerPresence();
 }
-/* Un bouton par personne, celui en cours en or. Sert a l'arrivee comme dans
-   le panneau Journee, ou l'on change de personne en cours de tournage. */
-function boutonsEquipe(taille){
-  return EQUIPE.map((n, i) =>
-    `<button class="btn ${taille}${n === UI.nom ? ' p' : ''}" onclick="choisirNom(${i})">${esc(n)}</button>`
-  ).join('');
-}
+/* ------------------------------------------------------------ Comptes */
+/* Un compte par personne, prenom et mot de passe : la page sait qui saisit,
+   et si c'est le DIT. Les comptes se creent avec la cle du tournage. Le
+   serveur du plateau (/api/…) et l'hebergeur du site (depot/….php) repondent
+   aux memes appels. La connexion tient 90 jours sur l'appareil. Sans reseau,
+   « Continuer sans compte » pose juste un prenom, comme avant. */
+const urlCompte = quoi => RESEAU.possible ? '/api/' + quoi : 'depot/' + quoi + '.php';
+const appelCompte = (quoi, corps) =>
+  poster(urlCompte(quoi), JSON.stringify(corps)).then(r => r.json().then(rep => ({ rep, statut: r.status })));
+const connecte = () => !!(UI.jeton && UI.nom);
+
+let entreeCreation = false;
 function demanderNom(){
-  $('choix-nom').innerHTML = boutonsEquipe('');
   $('voile-nom').hidden = false;
+  entreeCreation = false; dessinerEntree();
+  setTimeout(() => $('entree-nom').focus(), 50);
 }
-function choisirNom(i){
-  const n = EQUIPE[i];
-  if (!n) return;
-  setNom(n);
+function dessinerEntree(){
+  const c = entreeCreation;
+  $('entree-titre').textContent = c ? 'Créer un compte' : connecte() ? 'Changer de compte' : 'Qui saisit sur cet appareil ?';
+  $('entree-texte').textContent = c ? 'Il faut la clé du tournage : c’est le DIT qui l’a.'
+    : 'Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.';
+  document.querySelectorAll('.entree-creer').forEach(e => { e.hidden = !c; });
+  $('entree-mdp').autocomplete = c ? 'new-password' : 'current-password';
+  $('entree-ok').textContent = c ? 'Créer et entrer' : 'Entrer';
+  $('entree-bascule').textContent = c ? 'J’ai déjà un compte' : 'Créer un compte';
+  $('entree-erreur').hidden = true;
+}
+function basculerEntree(){ entreeCreation = !entreeCreation; dessinerEntree(); $('entree-nom').focus(); }
+function erreurEntree(msg){ const e = $('entree-erreur'); e.textContent = msg; e.hidden = false; }
+/* connecte : le jeton et le prenom sont poses, le voile tombe */
+function entrer(rep){
+  UI.jeton = rep.jeton || ''; UI.dit = !!rep.dit;
+  setNom(rep.nom);
   $('voile-nom').hidden = true;
   if (openType === 'prod') openProd();
-  toast('Bonjour ' + n);
+  toast('Bonjour ' + rep.nom);
 }
+function validerEntree(){
+  const nom = $('entree-nom').value.trim(), mdp = $('entree-mdp').value;
+  if (!nom || !mdp) return erreurEntree('Prénom et mot de passe, s’il vous plaît.');
+  const dejaLa = connecte();
+  const suite = entreeCreation
+    ? appelCompte('inscrire', { cle: $('entree-cle').value, nom, mdp, dit: $('entree-dit').checked })
+        .then(({ rep, statut }) => {
+          if (!rep.ok) throw new Error(rep.erreur || ('réponse ' + statut));
+          // le DIT qui ouvre un compte a quelqu'un d'autre reste sur le sien ;
+          // s'il refait le sien, on se reconnecte pour que le role suive
+          if (dejaLa && rep.nom.toLowerCase() !== UI.nom.toLowerCase()){ toast('Compte créé pour ' + rep.nom); $('voile-nom').hidden = true; if (openType === 'prod') openProd(); return null; }
+          return appelCompte('connecter', { nom, mdp });
+        })
+    : appelCompte('connecter', { nom, mdp });
+  suite.then(r => {
+    if (!r) return;
+    if (r.rep.ok) entrer(r.rep); else erreurEntree(r.rep.erreur || ('réponse ' + r.statut));
+  }).catch(e => erreurEntree(e instanceof Error && e.message ? e.message : 'Serveur injoignable. Réessayez, ou continuez sans compte.'));
+}
+/* sans compte : le prenom seul, pour travailler hors ligne ou essayer */
+function sansCompte(nom){
+  UI.jeton = ''; UI.dit = false;
+  setNom(nom);
+  $('voile-nom').hidden = true;
+  if (openType === 'prod') openProd();
+}
+function continuerSansCompte(){
+  demanderTexte('Votre prénom', { valeur: $('entree-nom').value.trim(), ok:'Continuer' }).then(v => { if (v && v.trim()) sansCompte(v.trim()); });
+}
+function deconnecter(){
+  UI.jeton = ''; UI.dit = false; setNom('');
+  demanderNom();
+}
+/* pour le DIT : les comptes de l'equipe, et un bouton pour en ouvrir un */
+function voirComptes(){
+  const z = $('comptes-liste'); if (!z) return;
+  appelCompte('comptes', { jeton: UI.jeton }).then(({ rep, statut }) => {
+    if (!rep.comptes) return prevenir('Impossible de lire les comptes.', { detail: rep.erreur || ('réponse ' + statut) });
+    z.innerHTML = `<div class="cinq" style="margin-top:10px">${rep.comptes.map(c =>
+        `<div class="ligne"><span>${esc(c.nom)}</span><b>${c.dit ? 'DIT' : ''}</b></div>`).join('') || '<div class="note">Aucun compte.</div>'}</div>
+      <div class="btns" style="margin-top:10px"><button class="btn" onclick="ouvrirCreation()">+ Ouvrir un compte</button></div>`;
+  }).catch(() => prevenir('Impossible de lire les comptes.', { detail:'Serveur injoignable.' }));
+}
+function ouvrirCreation(){ $('voile-nom').hidden = false; entreeCreation = true; dessinerEntree(); $('entree-nom').value = ''; $('entree-mdp').value = ''; $('entree-nom').focus(); }
 
 /* ------------------------------------------------------------------ Theme */
 
@@ -3415,8 +3491,13 @@ function ouEst(x){
   return ` <small>— sur ${esc(txt)}</small>`;
 }
 function htmlEquipe(){
-  const moi = `<div class="specs"><div class="spec col"><label>Votre nom</label>
-    <div class="choix">${boutonsEquipe('sm')}</div></div></div>`;
+  const moi = `<div class="specs"><div class="spec"><label>Compte</label>
+      <span class="val">${UI.nom ? esc(UI.nom) + (UI.dit ? ' · DIT' : '') + (UI.jeton ? '' : ' · sans compte') : '—'}</span></div></div>
+    <div class="btns" style="margin-top:12px">
+      <button class="btn" onclick="deconnecter()">Changer de compte</button>
+      ${UI.dit ? `<button class="btn" onclick="voirComptes()">Comptes de l’équipe</button>` : ''}
+    </div>
+    <div id="comptes-liste"></div>`;
   if (!RESEAU.possible)
     return moi + `<div class="note">Cette page travaille seule : un seul appareil,
       données rangées dans ce navigateur.<br>
@@ -4249,57 +4330,44 @@ function telechargerDIT(){
 
 /* ------------------------------------------------- Le depot des saisies */
 /* Sur le site, chacun depose ses saisies d'un bouton : elles partent chez
-   l'hebergeur (depot/deposer.php), sous la cle du tournage, un fichier par
-   personne. Le DIT les recupere toutes dans « Rapprocher les saisies ». Le
-   serveur de plateau n'en a pas besoin : il partage deja tout en direct. */
-function cleDepot(){
-  if (UI.cle) return Promise.resolve(UI.cle);
-  return demanderTexte('Clé du tournage', { aide:'donnée par le DIT', ok:'Continuer' }).then(v => {
-    v = (v || '').trim();
-    if (v){ UI.cle = v; ecrireUI(); }
-    return v;
-  });
-}
-/* la reponse du depot : { rep, statut } ; une cle refusee est oubliee, on la redemandera */
-function appelDepot(chemin, corps){
-  return poster(chemin, JSON.stringify(corps)).then(r => r.json().then(rep => {
-    if (r.status === 401){ UI.cle = ''; ecrireUI(); }
-    return { rep, statut: r.status };
-  }));
-}
+   l'hebergeur (depot/deposer.php) sous son compte, un fichier par personne.
+   Le DIT les recupere toutes dans « Rapprocher les saisies ». Le serveur de
+   plateau n'en a pas besoin : il partage deja tout en direct. */
 const PAS_DE_DEPOT = 'Pas de dépôt à cette adresse : il faut ouvrir le site chez l’hébergeur.';
-function deposerSaisies(){
-  if (!UI.nom) return prevenir('Donnez d’abord votre prénom.', { detail:'C’est lui qui nomme votre dépôt.' });
-  cleDepot().then(cle => {
-    if (!cle) return;
-    return appelDepot('depot/deposer.php', { cle, nom: UI.nom, projet: DB }).then(({ rep, statut }) => {
-      if (rep.ok){
-        UI.depose = rep.quand; ecrireUI();
-        toast('Saisies déposées à ' + hhmm(new Date(rep.quand)));
-        if (openType === 'prod') openProd();
-      } else prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });
-    }).catch(() => prevenir('Le dépôt n’a pas pris.', { detail: PAS_DE_DEPOT }));
+/* la reponse du depot : { rep, statut } ; une connexion refusee est oubliee, on la redemandera */
+function appelDepot(quoi, corps){
+  return appelCompte(quoi, Object.assign({ jeton: UI.jeton }, corps)).then(x => {
+    if (x.statut === 401){ UI.jeton = ''; ecrireUI(); demanderNom(); }
+    return x;
   });
+}
+function deposerSaisies(){
+  if (!connecte()) return demanderNom();
+  appelDepot('deposer', { projet: DB }).then(({ rep, statut }) => {
+    if (rep.ok){
+      UI.depose = rep.quand; ecrireUI();
+      toast('Saisies déposées à ' + hhmm(new Date(rep.quand)));
+      if (openType === 'prod') openProd();
+    } else if (statut !== 401) prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });
+  }).catch(() => prevenir('Le dépôt n’a pas pris.', { detail: PAS_DE_DEPOT }));
 }
 function recupererDepots(){
-  cleDepot().then(cle => {
-    if (!cle) return;
-    return appelDepot('depot/lister.php', { cle }).then(({ rep, statut }) => {
-      if (!rep.depots) return prevenir('Impossible de lire les dépôts.', { detail: rep.erreur || ('réponse ' + statut) });
-      let n = 0;
-      rep.depots.forEach(d => {
-        if (d.nom === UI.nom) return;   // ses propres saisies sont deja la, dans ce navigateur
-        try{
-          const db = normaliser(d.projet);
-          RAP.sources = RAP.sources.filter(s => s.nom !== d.nom);
-          RAP.sources.push({ nom: d.nom, db, quand: d.quand });
-          n++;
-        }catch(e){}
-      });
-      renderReport();
-      toast(n ? n + ' dépôt' + plur(n) + ' récupéré' + plur(n) : 'Aucun dépôt des autres pour l’instant');
-    }).catch(() => prevenir('Impossible de lire les dépôts.', { detail: PAS_DE_DEPOT }));
-  });
+  if (!connecte()) return demanderNom();
+  appelDepot('lister', {}).then(({ rep, statut }) => {
+    if (!rep.depots){ if (statut !== 401) prevenir('Impossible de lire les dépôts.', { detail: rep.erreur || ('réponse ' + statut) }); return; }
+    let n = 0;
+    rep.depots.forEach(d => {
+      if (d.nom === UI.nom) return;   // ses propres saisies sont deja la, dans ce navigateur
+      try{
+        const db = normaliser(d.projet);
+        RAP.sources = RAP.sources.filter(s => s.nom !== d.nom);
+        RAP.sources.push({ nom: d.nom, db, quand: d.quand });
+        n++;
+      }catch(e){}
+    });
+    renderReport();
+    toast(n ? n + ' dépôt' + plur(n) + ' récupéré' + plur(n) : 'Aucun dépôt des autres pour l’instant');
+  }).catch(() => prevenir('Impossible de lire les dépôts.', { detail: PAS_DE_DEPOT }));
 }
 const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + ' ' + hhmm(d); };
 
@@ -5009,10 +5077,8 @@ majHauteurBarre();
 renderAll();
 reprendrePlace();
 majPresence();
-if (RESEAU.possible){
-  connecter();
-  if (!UI.nom) demanderNom();
-}
+if (RESEAU.possible) connecter();
+if (!UI.nom) demanderNom();
 </script>
 
 
