@@ -204,6 +204,14 @@ c'est normal, `localhost` est une adresse locale.)
 Publier : `git push`. GitHub relance la construction et met le site en ligne en une minute
 (`.github/workflows/publier.yml`). Le nom de domaine est dans le fichier `CNAME` à la racine.
 
+Le même automatisme peut aussi déposer le site chez OVH, par FTP, dans le `www` de l'hébergement :
+il suffit de poser trois secrets dans GitHub (Settings > Secrets and variables > Actions) :
+`OVH_FTP_HOTE` (`ftp.clusterNNN.hosting.ovh.net`), `OVH_FTP_UTILISATEUR` et `OVH_FTP_MOTDEPASSE`.
+Sans eux, l'étape est sautée. Pour que le nom de domaine mène chez OVH plutôt que chez GitHub :
+dans l'espace client OVH, l'hébergement > Multisite > ajouter le domaine avec sa zone DNS, puis
+commander le certificat SSL gratuit ; côté GitHub, retirer le domaine personnalisé des réglages
+Pages et supprimer le fichier `CNAME`.
+
 Le mode partagé s'allume quand `serveur.py` sert la page : il la signe en tête
 (`window.WRANGLE_SERVEUR`), où qu'il soit posé — Wi-Fi du plateau, nom de domaine, réseau privé.
 Sans cette signature, la page juge sur l'adresse (`serveurPossible`) : `localhost`, IP privée, nom

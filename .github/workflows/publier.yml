@@ -1,4 +1,7 @@
-# Chaque push sur main reconstruit et publie le site.
+# Chaque push sur main reconstruit et publie le site : sur GitHub Pages, et
+# chez OVH par FTP des que les trois secrets sont poses dans GitHub
+# (Settings > Secrets and variables > Actions) : OVH_FTP_HOTE,
+# OVH_FTP_UTILISATEUR, OVH_FTP_MOTDEPASSE. Sans eux, l'etape OVH est sautee.
 # A faire une fois dans GitHub : Settings > Pages > Source = GitHub Actions.
 name: Publier le site
 
@@ -22,6 +25,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploiement.outputs.page_url }}
+    env:
+      OVH_FTP_HOTE: ${{ secrets.OVH_FTP_HOTE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +36,19 @@ jobs:
 
       - name: Construire le site
         run: python outils/construire_site.py site
+
+      # le site chez OVH : le contenu de site/ dans le www de l'hebergement,
+      # seuls les fichiers qui ont change sont renvoyes
+      - name: Envoyer chez OVH
+        if: env.OVH_FTP_HOTE != ''
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.OVH_FTP_HOTE }}
+          username: ${{ secrets.OVH_FTP_UTILISATEUR }}
+          password: ${{ secrets.OVH_FTP_MOTDEPASSE }}
+          protocol: ftps
+          local-dir: site/
+          server-dir: www/
 
       - uses: actions/configure-pages@v5
 
