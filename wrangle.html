@@ -1500,6 +1500,7 @@ function renderShoot(){
 
   majMarqueurs();
   majFab();
+  ajusterVignettes();
 }
 
 /* Au-dela de cinq prises, la liste d'un plan defile dans sa propre fenetre,
@@ -2245,6 +2246,24 @@ function voirImage(src){
 /* L'image d'un plan : celle qu'on lui a donnee, sinon la vignette du decoupage. */
 const imagePlan = p => (p && (p.image || vignette(p.ref))) || '';
 /* la vignette d'une carte : la photo ajoutee sur le plateau, sinon celle du decoupage */
+/* La vignette au format 2:1 sur grand ecran : sa hauteur suit le bloc du plan,
+   sa largeur en decoule. Le texte se replie sur ce qui reste, ce qui peut
+   rehausser le bloc : on repasse jusqu'a ce que ca tienne, en trois fois au plus. */
+function ajusterVignettes(){
+  const grand = innerWidth >= 760;
+  document.querySelectorAll('#l-shoot .phead').forEach(h => {
+    const v = h.querySelector('.vig'), m = h.querySelector('.pmain');
+    if (!v || !m) return;
+    if (!grand){ v.style.width = v.style.height = ''; return; }
+    for (let i = 0; i < 3; i++){
+      const hh = m.offsetHeight, w = Math.min(360, hh * 2);
+      if (v.style.height === hh + 'px') break;
+      v.style.height = hh + 'px'; v.style.width = w + 'px';
+    }
+  });
+}
+window.addEventListener('resize', () => { clearTimeout(ajusterVignettes.t); ajusterVignettes.t = setTimeout(ajusterVignettes, 120); });
+
 const vigPlan = (p, style) => {
   const img = imagePlan(p);
   const css = (style || '') + (img ? `background-image:url(${img})` : '');
