@@ -1057,6 +1057,11 @@ select option{background:var(--surface);color:var(--txt)}
   margin-top:6px;font-weight:700}
 
 .bloc{margin-bottom:30px}
+/* au-dela de cinq lignes, une liste du rapport defile dans sa propre fenetre,
+   comme les prises d'un plan : la page reste courte, rien n'est perdu */
+.cinq{max-height:216px;overflow-y:auto;overscroll-behavior:contain;padding-right:10px;
+  scroll-snap-type:y proximity;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.cinq > .alert,.cinq > .ligne{scroll-snap-align:start}
 .bloc h3{margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line2);font:700 15.5px var(--font-titre);letter-spacing:0;color:var(--dim)}
 .alert{display:flex;gap:12px;padding:11px 2px;font-size:13.5px;line-height:1.5;align-items:flex-start;
   border-bottom:1px solid var(--line);color:var(--dim)}
@@ -1173,7 +1178,7 @@ select option{background:var(--surface);color:var(--txt)}
   nav,.top,.fbar,.sheet,.fabs,.voile,.addplan,.addtake,.btns,.noprint{display:none!important}
   body{background:#fff;color:#000;background-image:none}
   .plan,.kpi,.specs{border-color:#ccc;background:#fff}
-  .prises.defile{max-height:none!important;overflow:visible}
+  .prises.defile,.cinq{max-height:none!important;overflow:visible}
   .jour b{color:#000}
   main{padding:0}
 }

@@ -3610,22 +3610,22 @@ function renderReport(){
 
     <div class="bloc">
       <h3>À vérifier avant de rendre la journée</h3>
-      ${al.length ? al.map(a => `<div class="alert ${a[0]}"><i>${a[0] === 'g' ? '&#10003;' : '&#9888;'}</i><div>${a[1]}</div></div>`).join('')
-                  : '<div style="color:var(--dim2);font-size:13.5px">Rien d’enregistré pour l’instant.</div>'}
+      <div class="cinq">${al.length ? al.map(a => `<div class="alert ${a[0]}"><i>${a[0] === 'g' ? '&#10003;' : '&#9888;'}</i><div>${a[1]}</div></div>`).join('')
+                  : '<div style="color:var(--dim2);font-size:13.5px">Rien d’enregistré pour l’instant.</div>'}</div>
     </div>
 
     ${compte.length ? `<div class="bloc"><h3>Éléments captés</h3>
-      ${compte.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div>` : ''}
+      <div class="cinq">${compte.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div></div>` : ''}
 
     <div class="bloc">
       <h3>Prises par jour</h3>
-      ${parJour.map(([j, n]) => `<div class="ligne"><span>${nomJour(j)}</span>
+      <div class="cinq">${parJour.map(([j, n]) => `<div class="ligne"><span>${nomJour(j)}</span>
           <span class="jauge"><i style="width:${n / maxJ * 100}%"></i></span>
-          <b>${n}</b></div>`).join('') || '<div style="color:var(--dim2);font-size:13.5px">Aucun plan.</div>'}
+          <b>${n}</b></div>`).join('') || '<div style="color:var(--dim2);font-size:13.5px">Aucun plan.</div>'}</div>
     </div>
 
     ${parQui.length > 1 || (parQui.length && parQui[0][0] !== '—') ? `<div class="bloc"><h3>Prises saisies par</h3>
-      ${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div>` : ''}
+      <div class="cinq">${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div></div>` : ''}
 
     <div class="btns noprint" style="margin-bottom:30px">
       <button class="btn p" onclick="telechargerDIT()">Journal DIT (PDF)</button>

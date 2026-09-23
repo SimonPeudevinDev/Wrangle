@@ -78,5 +78,13 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
                     banc.js("""!!document.querySelector('#report button[onclick="telechargerDIT()"]')"""), True)
     banc.js('telechargerDIT()'); time.sleep(0.5)
     essais.verifier('cliquer telecharge le fichier', banc.js("$('toast-msg').textContent"), 'Fichier exporté')
+
+    # -- les listes du rapport : cinq lignes, puis elles defilent
+    banc.js("""for (let k = 0; k < 7; k++){ const t = ajouterPrise(%s, false, { clip:'B00' + k }); patch('prise', t.id, { carte:'' }); }
+               renderReport()""" % json.dumps(ids[2])); time.sleep(0.4)
+    mesure = banc.js("""(() => { const c = document.querySelector('#report .cinq'); const l = c.querySelectorAll('.alert');
+      return [l.length, c.scrollHeight > c.clientHeight, c.clientHeight <= 5 * l[0].getBoundingClientRect().height + 2]; })()""")
+    essais.verifier('sept alertes : la liste defile au-dela de cinq', mesure, [mesure[0], True, True])
+    essais.verifier('et il y en a bien plus de cinq', mesure[0] > 5, True)
     essais.exceptions(banc)
 essais.bilan()
