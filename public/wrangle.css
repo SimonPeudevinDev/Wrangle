@@ -352,9 +352,7 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
 #l-pick{padding-top:12px}
 
 .phead{display:flex;gap:14px;cursor:pointer;align-items:flex-start}
-/* la vignette : au format 2:1. Sur grand ecran elle prend toute la hauteur du
-   bloc du plan et sa largeur en decoule (voir ajusterVignettes) ; ici sa
-   taille de depart, et celle du telephone. */
+/* la vignette : au format 2:1, la meme taille sur toutes les cartes */
 .vig{
   width:96px;height:48px;flex:none;border-radius:4px;
   background:var(--surface2) center/cover no-repeat;
@@ -1184,7 +1182,7 @@ select option{background:var(--surface);color:var(--txt)}
     width:min(620px,100%);border-left:1px solid var(--line2)}
   .sheet.on + .voile-fiche{display:block}
   .kpis{grid-template-columns:repeat(4,1fr)}
-  .vig{width:128px;height:64px}
+  .vig{width:240px;height:120px}
   .fabs{right:calc(var(--marge) + 20px)}
   /* a droite, dans la colonne de la fiche */
   .toast{left:auto;right:max(24px, var(--marge));width:340px;max-width:none;transform:translateY(-8px)}
