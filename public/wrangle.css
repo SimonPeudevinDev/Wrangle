@@ -362,16 +362,14 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
 .pnum{font:700 26px/1 var(--font-titre);letter-spacing:-.02em;display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px}
 /* le plan vise : celui que le Moteur et + Prise vont tourner. Un anneau discret
    sur chaque carte ; en caramel, avec son mot, sur le plan choisi. */
-.viser{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:var(--rp);
-  border:1px solid var(--line);background:none;color:var(--dim2);cursor:pointer;
-  font:700 10.5px var(--font);letter-spacing:.08em;text-transform:uppercase}
-.viser svg{width:14px;height:14px}
-.viser span{display:none}
-.viser:hover{color:var(--txt);border-color:var(--line2);background:var(--surface2)}
+.viser{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px 0 10px;border-radius:var(--rp);
+  border:1px solid var(--line2);background:none;color:var(--dim);cursor:pointer;
+  font:700 11.5px var(--font);letter-spacing:.09em;text-transform:uppercase}
+.viser svg{width:17px;height:17px}
+.viser:hover{color:var(--txt);background:var(--surface2)}
 /* le plan vise se voit de loin : rouge, la couleur du Moteur */
 .viser.on{background:var(--ng);color:var(--ng-txt);border-color:var(--ng)}
 .viser.on:hover{background:var(--ng-g1);border-color:var(--ng-g1);color:var(--ng-txt)}
-.viser.on span{display:inline}
 /* les etiquettes du decoupage (LIVE, VFX, TBC...) : des micro-capsules au
    trait, la langue des boutons. Elles ne se confondent plus avec la ligne
    des elements captes, en petites capitales juste dessous. */
