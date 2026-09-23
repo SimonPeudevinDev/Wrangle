@@ -32,8 +32,9 @@
   --g1:#f0c060;--g2:#e7b04a;--g3:#c48b2e;
   --ok:#84cc8e;--ok-rgb:132,204,142;--ok-g1:#9adba2;--ok-g2:#6fbf7a;--ok-txt:#08210e;
   --ng:#e8675e;--ng-rgb:232,103,94;--ng-g1:#f07a70;--ng-g2:#d14e45;--ng-txt:#fff;
-  /* les etiquettes du decoupage : une couleur par famille (LIVE, VFX, CG / VAL, TBC, KILLED) */
-  --tag-vert:var(--ok);--tag-rouge:var(--ng);--tag-bleu:#6fa8e6;--tag-orange:#f0953f;
+  /* les etiquettes du decoupage : une couleur par famille (LIVE, VFX, CG / VAL, TBC, KILLED),
+     dans les memes teintes que les etats mais moins saturees : elles se lisent sans crier */
+  --tag-vert:#93b898;--tag-rouge:#d2837c;--tag-bleu:#86a5c9;--tag-orange:#d9a066;
   --r:8px;                          /* ce qui reste arrondi : vignettes, boites */
   --rp:999px;                       /* les capsules */
   --nav:62px;                       /* la barre du bas */
@@ -58,7 +59,7 @@
   --dim2:#8c7b6f;
   --gris:96,76,62;
   --acc:#9a6a14;
-  --tag-bleu:#2f6fbf;--tag-orange:#c9741c;
+  --tag-vert:#5a9266;--tag-rouge:#bf6f68;--tag-bleu:#4f7aa8;--tag-orange:#b5834a;
   --acc-rgb:154,106,20;
   --acc-txt:#fff;
   --ok:#2f8a4a;--ok-rgb:47,138,74;--ok-g1:#4aa866;--ok-g2:#2f8a4a;--ok-txt:#fff;
@@ -1214,22 +1215,6 @@ select option{background:var(--surface);color:var(--txt)}
   #post .prel em{font-style:normal;color:#666}
   #post .pautres{margin-top:6pt;font-size:8.5pt;color:#555}
   #post .ppied{margin-top:16pt;padding-top:6pt;border-top:.75pt solid #bbb;font-size:8pt;color:#777}
-
-  /* le journal DIT : un jour, ses sequences, un plan par bloc et ses prises en lignes */
-  #post .djour{font-size:10.5pt;font-weight:800;margin:16pt 0 2pt;break-after:avoid}
-  #post .dseq{font-size:7.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#444;
-    margin:10pt 0 2pt;break-after:avoid}
-  #post .dseq span{text-transform:none;letter-spacing:0;font-weight:600;color:#888;margin-left:4pt}
-  #post .dplan{break-inside:avoid;padding:5pt 0 6pt;border-bottom:.5pt solid #ddd}
-  #post .dtete{display:flex;align-items:baseline;gap:8pt;flex-wrap:wrap}
-  #post .dtete b{font-size:11pt;font-weight:800;letter-spacing:-.01em}
-  #post .dtete i{font-style:normal;font-size:8.5pt;color:#555}
-  #post .dprises{margin-top:3pt}
-  #post .dprises th{font-size:7pt;padding-bottom:2pt}
-  #post .dprises td{padding:2.5pt 6pt 2.5pt 0;font-size:8.5pt}
-  #post tr.ret td{font-weight:700;background:#f1f1f1}
-  #post td.qui{color:#666;white-space:nowrap}
-  #post .dvide{font-size:8.5pt;color:#888;font-style:italic;margin-top:1pt}
 }
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 :focus-visible{outline:2px solid rgba(var(--acc-rgb),.8);outline-offset:2px}

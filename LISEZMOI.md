@@ -152,7 +152,7 @@ py tests/verif_barre_jours.py      la rangée des jours, calée sur trois sur t�
 py tests/verif_enchainement.py     les lignes de la fiche s'ouvrent l'une après l'autre
 py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
-py tests/verif_journal_dit.py      le journal DIT : prises retenues, puis tous les plans et qui a saisi quoi
+py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues, plans tournés, reste à tourner
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 ```
 

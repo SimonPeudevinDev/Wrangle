@@ -3600,17 +3600,17 @@ function renderReport(){
       ${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div>` : ''}
 
     <div class="btns noprint" style="margin-bottom:30px">
-      <button class="btn p" onclick="imprimerDIT()">Journal DIT (PDF)</button>
+      <button class="btn p" onclick="telechargerDIT()">Journal DIT (PDF)</button>
       <button class="btn p" onclick="imprimerPost()">Fiche pour la post (PDF)</button>
       <button class="btn" onclick="exportCSV('montage')">Feuille de montage</button>
       <button class="btn" onclick="exportALE()">ALE</button>
       <button class="btn" onclick="window.print()">Imprimer ce bilan</button>
     </div>
     <div class="note noprint" style="margin:-18px 0 30px">Les deux fiches reprennent le jour choisi en haut.
-      Le journal DIT s’ouvre sur les prises retenues pour le montage, puis liste tous les plans avec
-      leurs prises, celle qui est retenue, et qui a saisi quoi à quelle heure. La fiche pour la post
-      donne les prises retenues, les éléments et relevés matchmove plan par plan.
-      Dans la fenêtre d’impression, choisir « Enregistrer au format PDF ».</div>`;
+      Le journal DIT se télécharge tout de suite : les prises retenues pour le montage, puis tous les plans
+      avec leurs prises, celle qui est retenue, et qui a saisi quoi à quelle heure. La fiche pour la post
+      donne les prises retenues, les éléments et relevés matchmove plan par plan ; dans sa fenêtre
+      d’impression, choisir « Enregistrer au format PDF ».</div>`;
 }
 
 /* -------------------------------------- Fiche de transmission a la post */
@@ -3731,99 +3731,285 @@ function htmlPost(j){
    attend en temps reel (les prises retenues, avec leurs clips), puis liste
    tous les plans, chacun avec ses prises, celle qui est retenue, et qui a
    saisi quoi a quelle heure. Les plans sans prise y figurent aussi, en une
-   ligne : le journal dit ce qui reste a tourner. */
-function htmlDIT(j){
-  const tous = j === '*';
-  const P = tous ? DB.plans : plansDuJour(j);
-  const T = tous ? DB.prises : prisesDuJour(j);
-  const p = DB.prod;
-  const gardees = T.filter(t => t.retenue);
-  const cartes = [...new Set(T.map(t => (t.carte || '').trim()).filter(Boolean))];
-  const d = new Date();
+   ligne : le journal dit ce qui reste a tourner. Il se telecharge en PDF,
+   ecrit par la page elle-meme (voir plus bas). */
+/* Un journal par journee : « Tout » en donne un par jour, a la suite, chacun
+   sur sa page. Une journee dit ses chiffres, les prises retenues, les plans
+   tournes avec leurs prises, puis ce qui reste a tourner, en liste. */
+function modeleDIT(j){
+  const jours = j === '*' ? joursConnus().filter(x => plansDuJour(x).length) : [j];
+  const p = DB.prod, d = new Date();
+  const pied = [p.titre || '', 'journal DIT édité le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+                ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · ');
   const qui = t => [t.par, t.heure].filter(Boolean).join(' · ');
-
-  /* 1. Pour le montage, dans l'ordre du tournage. */
+  const prise = t => ({ n: String(t.n || ''), clip: t.clip || '', carte: t.carte || '', statut: t.statut || '',
+                        retenue: !!t.retenue, tcIn: t.tcIn || '', tcOut: t.tcOut || '', duree: t.duree || '',
+                        note: t.notes || '', qui: qui(t), seq: t.seq || '', plan: t.plan || '' });
   const ordre = new Map(DB.plans.map((x, i) => [x.id, i]));
-  const suite = gardees.slice().sort((a, b) =>
-    rangJour(a.jour || '') - rangJour(b.jour || '') ||
-    (ordre.get(a.planId) || 0) - (ordre.get(b.planId) || 0) || (a.n || 0) - (b.n || 0));
-  const montage = suite.length ? `<table>
-      <thead><tr>${tous ? '<th>Jour</th>' : ''}<th>Clip</th><th>Séq</th><th>Plan</th><th>Pr.</th><th>Statut</th>
-        <th>TC in</th><th>TC out</th><th>Durée</th><th>Carte</th><th>Note</th><th>Saisi par</th></tr></thead>
-      <tbody>${suite.map(t => `<tr>
-        ${tous ? `<td>${esc(miniJour(t.jour || ''))}</td>` : ''}
-        <td class="mono">${esc(t.clip || '—')}</td><td>${esc(t.seq || '')}</td><td>${esc(t.plan || '')}</td>
-        <td>${esc(t.n)}</td><td>${esc(t.statut || '')}</td>
-        <td class="mono">${esc(t.tcIn || '')}</td><td class="mono">${esc(t.tcOut || '')}</td>
-        <td>${esc(t.duree || '')}</td><td>${esc(t.carte || '')}</td>
-        <td>${esc(t.notes || '')}</td><td class="qui">${esc(qui(t))}</td></tr>`).join('')}</tbody>
-    </table>` : `<div class="pvide">Aucune prise marquée à monter pour l’instant.</div>`;
 
-  /* 2. Tous les plans, dans l'ordre du tournage, sous leur jour et leur sequence. */
-  let jourCourant = null, seqCourante = null;
-  const plans = P.map(x => {
-    const pr = prisesDe(x.id);
-    let tete = '';
-    if (tous && (x.jour || '') !== jourCourant){
-      jourCourant = x.jour || ''; seqCourante = null;
-      const dec = jourCourant === 'CG' ? 'Full CG' : decorJour(jourCourant);
-      tete += `<h3 class="djour">${esc(nomJour(jourCourant))}${dec ? ' · ' + esc(dec) : ''}</h3>`;
-    }
-    if ((x.seq || '') !== seqCourante){
-      seqCourante = x.seq || '';
-      tete += `<div class="dseq">Séquence ${esc(seqCourante || '—')}${x.seqTitre ? ' <span>' + esc(x.seqTitre) + '</span>' : ''}</div>`;
-    }
-    const prises = pr.length ? `<table class="dprises">
-        <thead><tr><th>Pr.</th><th>Clip</th><th>Carte</th><th>Statut</th><th>Montage</th>
-          <th>TC in</th><th>TC out</th><th>Durée</th><th>Note</th><th>Saisi par</th></tr></thead>
-        <tbody>${pr.map(t => `<tr${t.retenue ? ' class="ret"' : ''}>
-          <td>${esc(t.n)}</td><td class="mono">${esc(t.clip || '')}</td><td>${esc(t.carte || '')}</td>
-          <td>${esc(t.statut || '')}</td><td>${t.retenue ? '&#9679; retenue' : ''}</td>
-          <td class="mono">${esc(t.tcIn || '')}</td><td class="mono">${esc(t.tcOut || '')}</td>
-          <td>${esc(t.duree || '')}</td><td>${esc(t.notes || '')}</td><td class="qui">${esc(qui(t))}</td></tr>`).join('')}</tbody>
-      </table>` : `<div class="dvide">Aucune prise${x.etat === 'drop' ? ' · plan abandonné' : ''}</div>`;
-    return `${tete}<article class="dplan">
-      <div class="dtete"><b>Plan ${esc(x.plan || '—')}</b>
-        <i>${[ETATS[x.etat], x.cadrage, x.mouv, x.support, x.focale,
-              pr.length ? pr.length + ' prise' + plur(pr.length) : ''].filter(Boolean).map(esc).join(' · ')}</i></div>
-      ${prises}
-    </article>`;
-  }).join('');
-
-  return `
-    <h1>${esc(p.titre || 'Projet sans titre')} — journal DIT</h1>
-    <div class="psous">${[tous ? 'Tout le tournage' : nomJour(j), p.date, p.lieu, p.unit,
-        p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler].filter(Boolean).map(esc).join(' · ')}</div>
-    <div class="pchiffres">
-      <span><b>${P.filter(x => x.etat === 'done').length}</b>plans tournés sur ${P.length}</span>
-      <span><b>${gardees.length}</b>prises à monter</span>
-      <span><b>${T.length}</b>prises au total</span>
-      <span><b>${T.filter(t => t.statut === 'OK').length}</b>OK</span>
-      <span><b>${T.filter(t => t.statut === 'NG').length}</b>NG</span>
-      <span><b>${cartes.length}</b>carte${plur(cartes.length)}${cartes.length && cartes.length <= 6 ? ' · ' + cartes.map(esc).join(', ') : ''}</span>
-    </div>
-
-    <h2>Pour le montage — prises retenues</h2>
-    ${montage}
-
-    <h2>Tous les plans — prises et saisies</h2>
-    ${plans || '<div class="pvide">Aucun plan sur cette période.</div>'}
-
-    <div class="ppied">${esc(p.titre || '')} · journal DIT édité le ${deuxCh(d.getDate())}/${deuxCh(d.getMonth() + 1)}/${d.getFullYear()}
-      à ${hhmm(d)}${UI.nom ? ' par ' + esc(UI.nom) : ''} ·
-      Wrangle</div>`;
+  return jours.map(jour => {
+    const P = plansDuJour(jour), T = prisesDuJour(jour);
+    const gardees = T.filter(t => t.retenue);
+    const cartes = [...new Set(T.map(t => (t.carte || '').trim()).filter(Boolean))];
+    /* 1. Pour le montage, dans l'ordre du tournage. */
+    const montage = gardees.slice().sort((a, b) =>
+      (ordre.get(a.planId) || 0) - (ordre.get(b.planId) || 0) || (a.n || 0) - (b.n || 0)).map(prise);
+    /* 2. Les plans tournes (ou marques tels), sous leur sequence ; le reste en liste. */
+    const tournes = [], reste = [], abandonnes = [];
+    let seqCourante = null;
+    P.forEach(x => {
+      const pr = prisesDe(x.id);
+      const meta = [x.cadrage, x.mouv, x.support, x.focale].filter(Boolean).join(' · ');
+      const ref = 'Séquence ' + (x.seq || '—') + ' · Plan ' + (x.plan || '—');
+      if (pr.length || x.etat === 'done'){
+        const b = { seq: '', seqTitre: '', plan: x.plan || '—', prises: pr.map(prise),
+                    meta: [ETATS[x.etat], meta, pr.length ? pr.length + ' prise' + plur(pr.length) : 'aucune prise'].filter(Boolean).join(' · ') };
+        if ((x.seq || '') !== seqCourante){
+          seqCourante = x.seq || '';
+          b.seq = 'Séquence ' + (seqCourante || '—'); b.seqTitre = x.seqTitre || '';
+        }
+        tournes.push(b);
+      } else if (x.etat === 'drop') abandonnes.push({ ref, meta });
+      else reste.push({ ref, meta });
+    });
+    const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
+    return {
+      jour, titre: (p.titre || 'Projet sans titre') + ' — journal DIT',
+      sous: [nomJour(jour), dec, p.date, p.unit, p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler]
+              .filter(Boolean).join(' · '),
+      chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
+                 [gardees.length, 'prises à monter'], [T.length, 'prises au total'],
+                 [T.filter(t => t.statut === 'OK').length, 'OK'], [T.filter(t => t.statut === 'NG').length, 'NG'],
+                 [cartes.length, 'carte' + plur(cartes.length) + (cartes.length && cartes.length <= 6 ? ' · ' + cartes.join(', ') : '')]],
+      montage, tournes, reste, abandonnes, pied
+    };
+  });
 }
 
-/* Le document est monte a la demande puis rendu au navigateur : on n'imprime
-   pas la page de saisie, on imprime la fiche. Dans la fenetre d'impression,
-   « Enregistrer au format PDF » fait le fichier. */
-function imprimer(html){
-  $('post').innerHTML = html;
+/* ------------------------------------------------ Un PDF ecrit a la main */
+/* Le journal se telecharge sans passer par la fenetre d'impression : la page
+   ecrit le PDF elle-meme. Helvetica et Courier, que tout lecteur possede,
+   en WinAnsi pour les accents ; pas de compression, le fichier se relit tel
+   quel. A4, marges de 40 points, l'origine en bas a gauche comme dans tout PDF. */
+const PDF_L = 595.28, PDF_H = 841.89, PDF_M = 40;
+/* les largeurs d'Helvetica, en milliemes de cadratin : pour couper les lignes au bon endroit */
+const PDF_HELV = { ' ':278, '!':278, '"':355, '#':556, '$':556, '%':889, '&':667, "'":191, '(':333, ')':333, '*':389,
+  '+':584, ',':278, '-':333, '.':278, '/':278, ':':278, ';':278, '<':584, '=':584, '>':584, '?':556, '@':1015, '[':278,
+  '\\':278, ']':278, '_':556, '`':333, '{':334, '|':260, '}':334, 'a':556, 'b':556, 'c':500, 'd':556, 'e':556, 'f':278,
+  'g':556, 'h':556, 'i':222, 'j':222, 'k':500, 'l':222, 'm':833, 'n':556, 'o':556, 'p':556, 'q':556, 'r':333, 's':500,
+  't':278, 'u':556, 'v':500, 'w':722, 'x':500, 'y':500, 'z':500, 'A':667, 'B':667, 'C':722, 'D':722, 'E':667, 'F':611,
+  'G':778, 'H':722, 'I':278, 'J':500, 'K':667, 'L':556, 'M':833, 'N':722, 'O':778, 'P':667, 'Q':778, 'R':722, 'S':667,
+  'T':611, 'U':722, 'V':667, 'W':944, 'X':667, 'Y':667, 'Z':611, '•':350, '–':556, '—':1000, '…':1000, '«':556, '»':556,
+  '°':400, '€':556, '·':278, 'œ':944, 'Œ':1000 };
+/* ce que WinAnsi place au-dela du latin-1 */
+const PDF_WINANSI = { '€':128, '‚':130, 'ƒ':131, '„':132, '…':133, '†':134, '‡':135, 'ˆ':136, '‰':137, 'Š':138, '‹':139,
+  'Œ':140, 'Ž':142, '‘':145, '’':146, '“':147, '”':148, '•':149, '–':150, '—':151, '˜':152, '™':153, 'š':154, '›':155,
+  'œ':156, 'ž':158, 'Ÿ':159 };
+
+function largeurPdf(s, taille, police){
+  if (police === 'C' || police === 'CB') return String(s || '').length * 600 * taille / 1000;
+  let l = 0;
+  for (const ch of String(s || '')){
+    const base = ch.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    l += PDF_HELV[ch] || PDF_HELV[base] || 556;
+  }
+  return l * taille / 1000 * (police === 'HB' ? 1.05 : 1);
+}
+/* Une chaine PDF : en WinAnsi, parentheses et barres echappees. */
+function chainePdf(s){
+  let out = '';
+  for (const ch of String(s || '')){
+    let c = ch.charCodeAt(0);
+    if (c > 255) c = PDF_WINANSI[ch] || 63;
+    if (c < 32) c = 32;
+    if (c === 40 || c === 41 || c === 92) out += '\\';
+    out += String.fromCharCode(c);
+  }
+  return out;
+}
+/* Coupe un texte en lignes qui tiennent dans `larg` points ; un mot trop long est brise. */
+function lignesPdf(s, larg, taille, police){
+  const out = []; let l = '';
+  for (let m of String(s || '').replace(/\s+/g, ' ').trim().split(' ')){
+    while (largeurPdf(m, taille, police) > larg && m.length > 1){
+      let k = m.length; while (k > 1 && largeurPdf(m.slice(0, k), taille, police) > larg) k--;
+      if (l){ out.push(l); l = ''; }
+      out.push(m.slice(0, k)); m = m.slice(k);
+    }
+    const essai = l ? l + ' ' + m : m;
+    if (!l || largeurPdf(essai, taille, police) <= larg) l = essai; else { out.push(l); l = m; }
+  }
+  if (l) out.push(l);
+  return out.length ? out : [''];
+}
+
+function nouveauPdf(){
+  const pages = [];
+  const doc = {
+    y: 0, page: null,
+    nouvellePage(){ doc.page = { ops: [] }; pages.push(doc.page); doc.y = PDF_H - PDF_M; },
+    /* du texte a partir de (x, y), y etant la ligne de base */
+    texte(x, y, s, o){
+      o = o || {};
+      doc.page.ops.push(`BT /${o.police || 'H'} ${o.taille || 9} Tf ${(o.gris || 0).toFixed(2)} g ` +
+                        `${x.toFixed(2)} ${y.toFixed(2)} Td (${chainePdf(s)}) Tj ET`);
+    },
+    ligne(x1, y1, x2, y2, ep, gris){
+      doc.page.ops.push(`${(gris || 0).toFixed(2)} G ${ep || .5} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
+    },
+    rect(x, y, w, h, gris){ doc.page.ops.push(`${gris.toFixed(2)} g ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); },
+    /* assez de place pour `h` points, sinon page suivante */
+    place(h){ if (doc.y - h < PDF_M) doc.nouvellePage(); },
+    /* le fichier : les objets, la table des adresses, le pied de chaque page */
+    fichier(pied){
+      pages.forEach((pg, i) => {
+        const s = (i + 1) + ' / ' + pages.length;
+        pg.ops.push(`0.60 G 0.5 w ${PDF_M} ${PDF_M - 10} m ${(PDF_L - PDF_M).toFixed(2)} ${PDF_M - 10} l S`);
+        pg.ops.push(`BT /H 7 Tf 0.45 g ${PDF_M} ${PDF_M - 20} Td (${chainePdf(pied)}) Tj ET`);
+        pg.ops.push(`BT /H 7 Tf 0.45 g ${(PDF_L - PDF_M - largeurPdf(s, 7, 'H')).toFixed(2)} ${PDF_M - 20} Td (${chainePdf(s)}) Tj ET`);
+      });
+      const objets = [];
+      const ajouter = s => { objets.push(s); return objets.length; };
+      const fontes = ['Helvetica', 'Helvetica-Bold', 'Courier', 'Courier-Bold'].map(f =>
+        ajouter(`<< /Type /Font /Subtype /Type1 /BaseFont /${f} /Encoding /WinAnsiEncoding >>`));
+      const res = `<< /Font << /H ${fontes[0]} 0 R /HB ${fontes[1]} 0 R /C ${fontes[2]} 0 R /CB ${fontes[3]} 0 R >> >>`;
+      const noPages = ajouter('');
+      const kids = pages.map(pg => {
+        const flux = pg.ops.join('\n');
+        const c = ajouter(`<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`);
+        return ajouter(`<< /Type /Page /Parent ${noPages} 0 R /MediaBox [0 0 ${PDF_L} ${PDF_H}] /Resources ${res} /Contents ${c} 0 R >>`);
+      });
+      objets[noPages - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
+      const racine = ajouter(`<< /Type /Catalog /Pages ${noPages} 0 R >>`);
+      let s = '%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';
+      const adresses = objets.map((o, i) => { const a = s.length; s += `${i + 1} 0 obj\n${o}\nendobj\n`; return a; });
+      const xref = s.length;
+      s += `xref\n0 ${objets.length + 1}\n0000000000 65535 f \n` +
+           adresses.map(a => String(a).padStart(10, '0') + ' 00000 n \n').join('') +
+           `trailer\n<< /Size ${objets.length + 1} /Root ${racine} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+      return Uint8Array.from(s, ch => ch.charCodeAt(0) & 255);
+    }
+  };
+  doc.nouvellePage();
+  return doc;
+}
+
+/* Un tableau : des colonnes [titre, largeur, police], des lignes { v: cellules, fond, gras }.
+   Une ligne tient d'un seul tenant ; l'en-tete se repete apres un saut de page. */
+function tableauPdf(doc, cols, lignes, taille){
+  const inter = taille * 1.4, x0 = PDF_M, larg = cols.reduce((a, c) => a + c[1], 0);
+  const entete = () => {
+    doc.place(inter + 8);
+    let x = x0;
+    cols.forEach(c => { doc.texte(x, doc.y - 7, c[0].toUpperCase(), { taille: 6.2, police: 'HB', gris: .4 }); x += c[1]; });
+    doc.y -= 10;
+    doc.ligne(x0, doc.y, x0 + larg, doc.y, .6, .55);
+    doc.y -= 2;
+  };
+  entete();
+  lignes.forEach(li => {
+    const lg = cols.map((c, i) => lignesPdf(li.v[i], c[1] - 5, taille, c[2] || 'H'));
+    const h = Math.max(...lg.map(l => l.length)) * inter + 4;
+    if (doc.y - h < PDF_M){ doc.nouvellePage(); entete(); }
+    if (li.fond) doc.rect(x0 - 2, doc.y - h + 2, larg + 4, h, .93);
+    let x = x0;
+    lg.forEach((l, i) => {
+      const police = (cols[i][2] || 'H') === 'C' ? (li.gras ? 'CB' : 'C') : (li.gras ? 'HB' : 'H');
+      l.forEach((s, k) => doc.texte(x, doc.y - taille - 1 - k * inter, s, { taille, police }));
+      x += cols[i][1];
+    });
+    doc.y -= h;
+    doc.ligne(x0, doc.y + 1, x0 + larg, doc.y + 1, .3, .82);
+  });
+}
+
+function pdfDIT(j){
+  const jours = modeleDIT(j), doc = nouveauPdf(), L = PDF_L - 2 * PDF_M;
+  const section = s => {
+    doc.place(40); doc.y -= 14;
+    doc.texte(PDF_M, doc.y - 8, s.toUpperCase(), { taille: 7.5, police: 'HB' });
+    doc.y -= 11; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 0); doc.y -= 6;
+  };
+  // un timecode fait onze caracteres de Courier : 60 points a 7,5 points de corps
+  const colsM = [['Clip', 66, 'C'], ['Séq', 26], ['Plan', 40], ['Pr.', 20], ['Statut', 44], ['TC in', 60, 'C'],
+                 ['TC out', 60, 'C'], ['Durée', 32], ['Carte', 36], ['Note', L - 66 - 26 - 40 - 20 - 44 - 60 - 60 - 32 - 36 - 68], ['Saisi par', 68]];
+  const colsP = [['Pr.', 20], ['Clip', 66, 'C'], ['Carte', 36], ['Statut', 44], ['Montage', 46], ['TC in', 60, 'C'],
+                 ['TC out', 60, 'C'], ['Durée', 32], ['Note', L - 20 - 66 - 36 - 44 - 46 - 60 - 60 - 32 - 68], ['Saisi par', 68]];
+
+  jours.forEach((m, i) => {
+    if (i) doc.nouvellePage();
+    // l'en-tete de la journee : le titre, la journee, puis ses chiffres en une ligne
+    doc.texte(PDF_M, doc.y - 15, m.titre, { taille: 16, police: 'HB' }); doc.y -= 22;
+    doc.texte(PDF_M, doc.y - 8, m.sous, { taille: 8.5, gris: .35 }); doc.y -= 14;
+    doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, .6); doc.y -= 5;
+    let x = PDF_M;
+    m.chiffres.forEach(([n, l]) => {
+      const s = String(n);
+      doc.texte(x, doc.y - 11, s, { taille: 11, police: 'HB' }); x += largeurPdf(s, 11, 'HB') + 3;
+      doc.texte(x, doc.y - 11, l, { taille: 8, gris: .35 }); x += largeurPdf(l, 8, 'H') + 12;
+    });
+    doc.y -= 17; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, .6);
+
+    // 1. ce que le montage attend
+    section('Pour le montage — prises retenues');
+    if (m.montage.length)
+      tableauPdf(doc, colsM, m.montage.map(t => ({ v: [t.clip || '—', t.seq, t.plan, t.n, t.statut, t.tcIn, t.tcOut,
+                                                       t.duree, t.carte, t.note, t.qui] })), 7.5);
+    else { doc.texte(PDF_M, doc.y - 8, 'Aucune prise marquée à monter pour l’instant.', { taille: 8, gris: .45 }); doc.y -= 12; }
+
+    // 2. les plans tournes, chacun avec ses prises
+    section('Plans tournés — prises et saisies');
+    if (!m.tournes.length){ doc.texte(PDF_M, doc.y - 8, 'Aucun plan tourné pour l’instant.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    m.tournes.forEach(b => {
+      // un plan ne se coupe pas en deux pages, sauf s'il ne tient sur aucune
+      const h = 18 + (b.seq ? 14 : 0) + (b.prises.length ? 16 + b.prises.length * 15 : 12);
+      if (doc.y - Math.min(h, 400) < PDF_M) doc.nouvellePage();
+      if (b.seq){
+        doc.y -= 6; doc.texte(PDF_M, doc.y - 7, b.seq.toUpperCase(), { taille: 6.8, police: 'HB', gris: .3 });
+        if (b.seqTitre) doc.texte(PDF_M + largeurPdf(b.seq.toUpperCase(), 6.8, 'HB') + 6, doc.y - 7, b.seqTitre, { taille: 7.2, gris: .55 });
+        doc.y -= 12;
+      }
+      doc.texte(PDF_M, doc.y - 10, 'Plan ' + b.plan, { taille: 10.5, police: 'HB' });
+      const xm = PDF_M + largeurPdf('Plan ' + b.plan, 10.5, 'HB') + 8;
+      doc.texte(xm, doc.y - 10, lignesPdf(b.meta, L - (xm - PDF_M), 7.5, 'H')[0], { taille: 7.5, gris: .4 });
+      doc.y -= 15;
+      if (b.prises.length)
+        tableauPdf(doc, colsP, b.prises.map(t => ({ v: [t.n, t.clip, t.carte, t.statut, t.retenue ? '• retenue' : '',
+          t.tcIn, t.tcOut, t.duree, t.note, t.qui], fond: t.retenue, gras: t.retenue })), 7.5);
+      else { doc.texte(PDF_M, doc.y - 8, 'Marqué tourné, aucune prise enregistrée.', { taille: 7.5, gris: .5 }); doc.y -= 12; }
+      doc.y -= 3; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .3, .85); doc.y -= 4;
+    });
+
+    // 3. ce qui reste, en liste : une ligne par plan, dans l'ordre du tournage
+    section('Reste à tourner : ' + m.reste.length + ' plan' + plur(m.reste.length));
+    if (!m.reste.length){ doc.texte(PDF_M, doc.y - 8, 'Rien : la journée est tournée.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    m.reste.forEach(r => {
+      doc.place(13);
+      doc.texte(PDF_M, doc.y - 8, r.ref, { taille: 8, police: 'HB' });
+      const xr = PDF_M + largeurPdf(r.ref, 8, 'HB') + 8;
+      if (r.meta) doc.texte(xr, doc.y - 8, lignesPdf(r.meta, L - (xr - PDF_M), 7.5, 'H')[0], { taille: 7.5, gris: .4 });
+      doc.y -= 12;
+    });
+    if (m.abandonnes.length){
+      doc.place(24); doc.y -= 6;
+      doc.texte(PDF_M, doc.y - 8, 'Abandonnés : ' + m.abandonnes.map(a => a.ref).join(' · '), { taille: 7.5, gris: .5 });
+      doc.y -= 12;
+    }
+  });
+  return doc.fichier(jours.length ? jours[0].pied : '');
+}
+function telechargerDIT(){
+  download(fname('journal-DIT' + (fJourR === '*' ? '' : '-' + fJourR), 'pdf'), pdfDIT(fJourR), 'application/pdf');
+}
+
+/* La fiche pour la post est montee a la demande puis rendue au navigateur :
+   on n'imprime pas la page de saisie, on imprime la fiche. Dans la fenetre
+   d'impression, « Enregistrer au format PDF » fait le fichier. */
+function imprimerPost(){
+  $('post').innerHTML = htmlPost(fJourR);
   document.body.classList.add('impr-post');
   window.print();
 }
-function imprimerPost(){ imprimer(htmlPost(fJourR)); }
-function imprimerDIT(){ imprimer(htmlDIT(fJourR)); }
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('impr-post');
   const z = $('post'); if (z) z.innerHTML = '';
