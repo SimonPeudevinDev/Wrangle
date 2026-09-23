@@ -4034,17 +4034,17 @@ function pdfDIT(j){
 
   jours.forEach((m, i) => {
     if (i) doc.nouvellePage();
-    // l'en-tete de la journee : le logo, le projet, la journee, puis ses chiffres en une ligne
+    // l'en-tete de la journee : le logo a gauche, le projet et la journee a droite,
+    // puis les chiffres en une ligne
     const hl = 24, kl = hl / LOGO_BOITE.h;
-    let xt = PDF_M;
     if (LOGO_PDF){
       const ox = PDF_M - LOGO_BOITE.x * kl, oy = doc.y + LOGO_BOITE.y * kl;
       doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
       doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
-      xt += LOGO_BOITE.l * kl + 20;
     }
-    doc.texte(xt, doc.y - 14, m.titre, { taille: 17, police: 'HB', couleur: 'encre' });
-    doc.texte(xt, doc.y - 26, m.sous, { taille: 8.5, couleur: 'tan' });
+    const xd = PDF_M + L;
+    doc.texte(xd - largeurPdf(m.titre, 17, 'HB'), doc.y - 14, m.titre, { taille: 17, police: 'HB', couleur: 'encre' });
+    doc.texte(xd - largeurPdf(m.sous, 8.5, 'H'), doc.y - 26, m.sous, { taille: 8.5, couleur: 'tan' });
     doc.y -= 36;
     doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 'caramel'); doc.y -= 6;
     let x = PDF_M;
