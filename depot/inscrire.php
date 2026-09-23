@@ -1,11 +1,8 @@
 <?php
-// Cree ou remplace un compte : POST { cle, nom, mdp, dit }. La cle du tournage
-// est obligatoire : c'est le DIT qui ouvre les comptes de l'equipe.
+// Cree ou remplace un compte : POST { nom, mdp, dit }. Refaire son compte
+// change son mot de passe.
 require __DIR__ . '/commun.php';
 $c = corps();
-if (!hash_equals(cle_tournage(), (string) ($c['cle'] ?? ''))) {
-    repondre(401, ['erreur' => 'clé du tournage refusée']);
-}
 $nom = trim(str_replace('|', ' ', (string) ($c['nom'] ?? '')));
 $mdp = (string) ($c['mdp'] ?? '');
 if ($nom === '' || strlen($mdp) < 4) {

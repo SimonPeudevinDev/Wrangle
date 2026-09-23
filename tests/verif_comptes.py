@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Les comptes : prenom et mot de passe a l'entree, crees avec la cle du
-tournage. La connexion tient d'un chargement a l'autre, un mauvais mot de
+"""Les comptes : prenom et mot de passe a l'entree, crees sur place.
+La connexion tient d'un chargement a l'autre, un mauvais mot de
 passe est refuse, le DIT voit les comptes de l'equipe. Sans reseau, on
 continue sans compte, avec un prenom."""
 import json
@@ -33,15 +33,11 @@ with Banc(8776, 9376, taille=(1100, 900)) as banc:
     # -- personne n'a encore de compte : on en cree un, celui du DIT
     banc.js("basculerEntree()")
     essais.verifier('creer un compte demande la cle du tournage', banc.js("!document.querySelector('.entree-creer').hidden && $('entree-ok').textContent"), 'Créer et entrer')
-    with open(os.path.join(banc.data, 'cle.txt'), 'w', encoding='utf-8') as f:   # la cle du tournage, posee sur le serveur
-        f.write('foresight\n')
-    banc.js("$('entree-nom').value = 'Simon'; $('entree-mdp').value = 'abc'; $('entree-cle').value = 'foresight'; validerEntree()"); time.sleep(0.5)
+    banc.js("$('entree-nom').value = 'Simon'; $('entree-mdp').value = 'abc'; validerEntree()"); time.sleep(0.5)
     essais.verifier('un mot de passe trop court est refuse', banc.js("$('entree-erreur').textContent"), 'prénom et mot de passe (quatre caractères au moins) attendus')
-    banc.js("$('entree-mdp').value = 'plateau-2026'; $('entree-cle').value = 'devine'; validerEntree()"); time.sleep(0.5)
-    essais.verifier('une mauvaise cle du tournage aussi', [banc.js("$('entree-erreur').textContent"), banc.js('UI.nom')], ['clé du tournage refusée', ''])
-    banc.js("$('entree-cle').value = 'foresight'; validerEntree()"); time.sleep(0.6)
-    essais.verifier('avec la cle, le compte est cree et on est entre, sans etre DIT', [banc.js('UI.nom'), banc.js('UI.dit'), banc.js("!!UI.jeton"), banc.js("$('voile-nom').hidden")], ['Simon', False, True, True])
-    banc.js("ouvrirCreation(); $('entree-nom').value = 'Simon'; $('entree-mdp').value = 'plateau-2026'; $('entree-cle').value = 'foresight'; $('entree-dit').checked = true; validerEntree()"); time.sleep(0.6)
+    banc.js("$('entree-mdp').value = 'plateau-2026'; validerEntree()"); time.sleep(0.6)
+    essais.verifier('le compte est cree et on est entre, sans etre DIT', [banc.js('UI.nom'), banc.js('UI.dit'), banc.js("!!UI.jeton"), banc.js("$('voile-nom').hidden")], ['Simon', False, True, True])
+    banc.js("ouvrirCreation(); $('entree-nom').value = 'Simon'; $('entree-mdp').value = 'plateau-2026'; $('entree-dit').checked = true; validerEntree()"); time.sleep(0.6)
     essais.verifier('refaire son propre compte en DIT : le role suit', [banc.js('UI.nom'), banc.js('UI.dit'), banc.js("$('voile-nom').hidden")], ['Simon', True, True])
     essais.verifier('et salue', banc.js("$('toast-msg').textContent"), 'Bonjour Simon')
 
@@ -61,7 +57,7 @@ with Banc(8776, 9376, taille=(1100, 900)) as banc:
     banc.js("openProd(); voirComptes()"); time.sleep(0.6)
     essais.verifier('la fiche Journee montre le compte et son role', 'Simon · DIT' in banc.js("$('sbody').textContent"), True)
     essais.verifier('le DIT voit les comptes de l equipe', banc.js("[...document.querySelectorAll('#comptes-liste .ligne')].map(l => l.textContent.trim())"), ['SimonDIT'])
-    banc.js("ouvrirCreation(); $('entree-nom').value = 'Alice'; $('entree-mdp').value = 'scripte-2026'; $('entree-cle').value = 'foresight'; $('entree-dit').checked = false; validerEntree()"); time.sleep(0.6)
+    banc.js("ouvrirCreation(); $('entree-nom').value = 'Alice'; $('entree-mdp').value = 'scripte-2026'; $('entree-dit').checked = false; validerEntree()"); time.sleep(0.6)
     essais.verifier('le compte d Alice est cree, Simon reste connecte', [banc.js("$('toast-msg').textContent"), banc.js('UI.nom'), banc.js("$('voile-nom').hidden")], ['Compte créé pour Alice', 'Simon', True])
     statut, rep = api(8776, 'connecter', {'nom': 'alice', 'mdp': 'scripte-2026'})
     essais.verifier('Alice peut se connecter, sans etre DIT', [statut, rep.get('nom'), rep.get('dit')], [200, 'Alice', False])

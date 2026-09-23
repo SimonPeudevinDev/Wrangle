@@ -105,25 +105,13 @@ def ecrire_json(chemin, db):
 
 
 # --------------------------------------------------------------- Comptes ---
-# Un compte par personne : prénom et mot de passe, créés avec la clé du
-# tournage (le mot de passe du serveur, ou WRANGLE_CLE, ou data/cle.txt ;
-# sans clé, le plateau est ouvert et n'importe qui peut créer un compte).
-# La connexion rend un jeton signé que la page garde : il dit qui saisit, et
-# si c'est le DIT. Mêmes appels et mêmes réponses que depot/*.php chez l'hébergeur.
+# Un compte par personne : prénom et mot de passe, créés sur place (le
+# plateau est entre gens de l'équipe ; le mot de passe du serveur, s'il y en
+# a un, garde déjà la porte). La connexion rend un jeton signé que la page
+# garde : il dit qui saisit, et si c'est le DIT. Mêmes appels et mêmes
+# réponses que depot/*.php chez l'hébergeur.
 
 JETON_DUREE = 90 * 24 * 3600
-
-
-def cle_tournage():
-    if MOT_DE_PASSE:
-        return MOT_DE_PASSE
-    if os.environ.get('WRANGLE_CLE'):
-        return os.environ['WRANGLE_CLE']
-    try:
-        with open(os.path.join(DATA, 'cle.txt'), 'r', encoding='utf-8') as f:
-            return f.read().strip()
-    except OSError:
-        return ''
 
 
 def lire_comptes():
@@ -803,10 +791,7 @@ class Requete(BaseHTTPRequestHandler):
     # -- comptes -----------------------------------------------------------
 
     def _inscrire(self, corps):
-        cle = cle_tournage()
-        if cle and not pareils(str(corps.get('cle') or ''), cle):
-            return self._json(401, {'erreur': 'clé du tournage refusée'})
-        nom = str(corps.get('nom') or '').replace('|', ' ').strip()[:40]
+        nom =str(corps.get('nom') or '').replace('|', ' ').strip()[:40]
         mdp = str(corps.get('mdp') or '')
         if not nom or len(mdp) < 4:
             return self._json(400, {'erreur': 'prénom et mot de passe (quatre caractères au moins) attendus'})

@@ -106,18 +106,14 @@ rapprochement.
 ## Les comptes
 
 À l'entrée, chacun donne son prénom et son mot de passe ; l'appareil reste connecté 90 jours. Les
-comptes se créent avec la **clé du tournage** (« Créer un compte » sur l'écran d'entrée, ou ⚙ →
-Journée → « Comptes de l'équipe » pour le DIT) ; la case « Ce compte est le DIT » donne le droit
-de récupérer les dépôts et de voir les comptes. Sans réseau, « Continuer sans compte » pose un
+comptes se créent sur place, sans clé (« Créer un compte » sur l'écran d'entrée, ou ⚙ → Journée →
+« Comptes de l'équipe » pour le DIT) : le site est privé, seule l'équipe en connaît l'adresse.
+Refaire son compte change son mot de passe. La case « Ce compte est le DIT » donne le droit de
+récupérer les dépôts et de voir les comptes. Sans réseau, « Continuer sans compte » pose un
 prénom seul, sans dépôt possible.
 
-- Chez l'hébergeur, la clé est le secret GitHub `DEPOT_CLE` : la publication l'écrit dans
-  `depot/cle.php` chez OVH seulement, jamais sur GitHub Pages. Les comptes vivent dans
-  `depot/comptes/`, interdit au web.
-- Sur le serveur du plateau, la clé est le mot de passe du serveur (`--motdepasse`), ou la
-  variable `WRANGLE_CLE`, ou le contenu de `data/cle.txt`. Sans clé, le plateau est ouvert :
-  n'importe qui sur le Wi-Fi peut créer un compte, ce qui va bien entre gens de l'équipe. Les
-  comptes vivent dans `data/comptes.json`, mots de passe hachés.
+Chez l'hébergeur, les comptes vivent dans `depot/comptes/`, interdit au web ; sur le serveur du
+plateau, dans `data/comptes.json`. Mots de passe hachés dans les deux cas.
 
 ## Le journal DIT par mail
 

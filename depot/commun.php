@@ -1,8 +1,8 @@
 <?php
 // Wrangle, la boite de depot chez l'hebergeur : ce que les scripts partagent.
 // Les comptes (prenom, mot de passe hache, DIT ou pas) et le secret qui signe
-// les jetons vivent dans comptes/, interdit au web. La cle du tournage, dans
-// cle.php ecrit a la publication, ne sert qu'a creer les comptes.
+// les jetons vivent dans comptes/, interdit au web. Creer un compte est ouvert :
+// le site est prive, personne d'autre que l'equipe ne le connait.
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -15,14 +15,6 @@ function repondre($code, $obj) {
 function corps() {
     $c = json_decode(file_get_contents('php://input'), true);
     return is_array($c) ? $c : [];
-}
-
-function cle_tournage() {
-    if (!file_exists(__DIR__ . '/cle.php')) {
-        repondre(503, ['erreur' => 'dépôt non configuré : la clé du tournage manque']);
-    }
-    require_once __DIR__ . '/cle.php';
-    return CLE;
 }
 
 // un dossier a l'abri du web, cree au premier besoin

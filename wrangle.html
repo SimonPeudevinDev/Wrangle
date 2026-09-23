@@ -114,7 +114,6 @@
     <form class="specs" onsubmit="event.preventDefault();validerEntree()">
       <div class="spec"><label>Prénom</label><input id="entree-nom" autocomplete="username" autocapitalize="words" placeholder="Marie"></div>
       <div class="spec"><label>Mot de passe</label><input id="entree-mdp" type="password" autocomplete="current-password" placeholder="••••••"></div>
-      <div class="spec entree-creer" hidden><label>Clé du tournage</label><input id="entree-cle" type="password" autocomplete="off" placeholder="donnée par le DIT"></div>
       <div class="spec entree-creer" hidden><label>Rôle</label>
         <label class="case"><input type="checkbox" id="entree-dit">Ce compte est le DIT</label></div>
       <div class="entree-erreur" id="entree-erreur" hidden></div>
@@ -702,7 +701,7 @@ function setNom(v){
 }
 /* ------------------------------------------------------------ Comptes */
 /* Un compte par personne, prenom et mot de passe : la page sait qui saisit,
-   et si c'est le DIT. Les comptes se creent avec la cle du tournage. Le
+   et si c'est le DIT. Creer un compte est ouvert, le site est prive. Le
    serveur du plateau (/api/…) et l'hebergeur du site (depot/….php) repondent
    aux memes appels. La connexion tient 90 jours sur l'appareil. Sans reseau,
    « Continuer sans compte » pose juste un prenom, comme avant. */
@@ -720,7 +719,7 @@ function demanderNom(){
 function dessinerEntree(){
   const c = entreeCreation;
   $('entree-titre').textContent = c ? 'Créer un compte' : connecte() ? 'Changer de compte' : 'Qui saisit sur cet appareil ?';
-  $('entree-texte').textContent = c ? 'Il faut la clé du tournage : c’est le DIT qui l’a.'
+  $('entree-texte').textContent = c ? 'Votre prénom, et un mot de passe à vous. Le DIT est celui qui récupère les saisies de tous.'
     : 'Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.';
   document.querySelectorAll('.entree-creer').forEach(e => { e.hidden = !c; });
   $('entree-mdp').autocomplete = c ? 'new-password' : 'current-password';
@@ -743,7 +742,7 @@ function validerEntree(){
   if (!nom || !mdp) return erreurEntree('Prénom et mot de passe, s’il vous plaît.');
   const dejaLa = connecte();
   const suite = entreeCreation
-    ? appelCompte('inscrire', { cle: $('entree-cle').value, nom, mdp, dit: $('entree-dit').checked })
+    ? appelCompte('inscrire', { nom, mdp, dit: $('entree-dit').checked })
         .then(({ rep, statut }) => {
           if (!rep.ok) throw new Error(rep.erreur || ('réponse ' + statut));
           // le DIT qui ouvre un compte a quelqu'un d'autre reste sur le sien ;
@@ -3602,7 +3601,7 @@ function openProd(){
       ${RESEAU.possible ? '' : `<div class="btns" style="margin-top:10px">
         <button class="btn p" onclick="deposerSaisies()">Déposer mes saisies</button>
       </div>
-      <div class="note">Vos saisies partent chez l’hébergeur du site, sous la clé du tournage, pour que le DIT les
+      <div class="note">Vos saisies partent chez l’hébergeur du site, sous votre compte, pour que le DIT les
         récupère. ${UI.depose ? 'Dernier dépôt : ' + esc(quandDepot(UI.depose)) + '.' : 'Aucun dépôt pour l’instant.'}</div>`}
       <div class="note">Recharger le découpage remet à jour les fiches depuis le DT d’origine${multi}.
         Les prises, éléments, notes, états et jours sont conservés.
