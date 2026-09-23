@@ -12,3 +12,7 @@ __pycache__/
 .claude/
 Thumbs.db
 desktop.ini
+
+# Le serveur chez l hebergeur : projet, journal, presence, sauvegardes
+api/donnees/*
+!api/donnees/.htaccess

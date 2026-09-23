@@ -202,8 +202,15 @@ class Banc:
                 [sys.executable, os.path.join(RACINE, 'serveur.py'), str(self.port), '--data', self.data],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.base = 'http://localhost:%d' % self.port
-        if not patienter(lambda: urllib.request.urlopen(self.base + '/api/etat', timeout=2).read() or True,
-                         tours=60, pause=0.25):
+        # serveur.py repond a /api/etat ; le site chez l'hebergeur, a api/etat.php
+        def repond():
+            for chemin in ('/api/etat', '/api/etat.php'):
+                try:
+                    return urllib.request.urlopen(self.base + chemin, timeout=4).read() or True
+                except Exception:
+                    pass
+            raise RuntimeError('pas de serveur')
+        if not patienter(repond, tours=60, pause=0.25):
             self.fermer()
             raise SystemExit('Serveur injoignable sur %s. Un serveur d une precedente '
                              'execution occupe peut-etre le port.' % self.base)

@@ -32,6 +32,7 @@ import hmac
 import json
 import os
 import queue
+import re
 import socket
 import sys
 import threading
@@ -381,8 +382,38 @@ def appliquer(ops, client):
 
     if sortie:
         etat['rev'] += 1
+        noter_journal(etat['rev'], client, sortie)
         planifier_ecriture()
     return sortie
+
+
+# ----------------------------------------------------------------- Journal ---
+# Les dernières opérations, pour les appareils qui interrogent le serveur au
+# lieu d'écouter son flux (la page en mode « php », comme chez l'hébergeur :
+# mêmes réponses qu'api/depuis.php, ce qui permet de tester ce mode ici).
+
+JOURNAL_GARDE = 400
+journal = []      # [{'rev', 'client', 'ops'}], un remplacement noté sans son contenu
+
+
+def noter_journal(rev, client, faites):
+    journal.append({'rev': rev, 'client': client,
+                    'ops': [op if op['op'] != 'remplacer' else {'op': 'remplacer'} for op in faites]})
+    del journal[:-JOURNAL_GARDE]
+
+
+def journal_depuis(rev):
+    """Les entrées après rev, ou None s'il faut le projet entier (trop de
+    retard, ou un remplacement entre-temps)."""
+    entrees, attendu = [], rev + 1
+    for e in journal:
+        if e['rev'] <= rev:
+            continue
+        if e['rev'] != attendu or any(op['op'] == 'remplacer' for op in e['ops']):
+            return None
+        entrees.append(e)
+        attendu += 1
+    return entrees
 
 
 # --------------------------------------------------------------- Diffusion ---
@@ -586,8 +617,14 @@ class Requete(BaseHTTPRequestHandler):
 
     # -- GET ---------------------------------------------------------------
 
-    def do_GET(self):
+    def _url(self):
+        """L'adresse demandée. « api/etat.php » vaut « /api/etat » : la page
+        en mode php (celle du site chez l'hébergeur) se teste sur ce serveur."""
         u = urlparse(self.path)
+        return u._replace(path=re.sub(r'^/api/(\w+)\.php$', r'/api/\1', u.path))
+
+    def do_GET(self):
+        u = self._url()
         if u.path == '/entrer':
             return self._page_entree()
         if not self._entre():
@@ -599,6 +636,8 @@ class Requete(BaseHTTPRequestHandler):
                 return self._json(200, {'db': etat['db'], 'rev': etat['rev'],
                                         'presence': message_presence()['liste'],
                                         'adresses': self.server.adresses})
+        if u.path == '/api/depuis':
+            return self._depuis(parse_qs(u.query))
         if u.path == '/api/flux':
             return self._flux(parse_qs(u.query))
         if u.path == '/api/mail':
@@ -633,6 +672,32 @@ class Requete(BaseHTTPRequestHandler):
         corps = corps.replace(b'<head>',
                               b'<head><script>window.WRANGLE_SERVEUR=1</script>', 1)
         self._repondre(200, corps, HTML)
+
+    def _depuis(self, q):
+        """Ce qui a changé depuis une révision, pour un appareil qui interroge
+        au lieu d'écouter : les opérations du journal, ou le projet entier
+        (première fois, trop de retard, remplacement entre-temps)."""
+        try:
+            rev = int((q.get('rev') or ['0'])[0] or 0)
+        except ValueError:
+            rev = 0
+        client = (q.get('client') or [''])[0][:40]
+        nom = (q.get('nom') or [None])[0]
+        with verrou:
+            actuel = etat['rev']
+            rep = {'rev': actuel}
+            if rev <= 0 or rev > actuel:
+                rep['db'] = etat['db']
+            elif rev < actuel:
+                entrees = journal_depuis(rev)
+                if entrees is None:
+                    rep['db'] = etat['db']
+                else:
+                    rep['ops'] = entrees
+            if client:
+                noter_presence(client, nom=nom)
+            rep['presence'] = message_presence()['liste']
+        return self._json(200, rep)
 
     def _flux(self, q):
         client = (q.get('client') or [''])[0][:40]
@@ -680,7 +745,7 @@ class Requete(BaseHTTPRequestHandler):
     # -- POST --------------------------------------------------------------
 
     def do_POST(self):
-        u = urlparse(self.path)
+        u = self._url()
         if u.path == '/entrer':
             return self._connexion()
         if not self._entre():

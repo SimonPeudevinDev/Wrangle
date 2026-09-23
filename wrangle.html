@@ -481,6 +481,9 @@ function serveurPossible(h){
 
 const RESEAU = {
   possible: PROJET_COMMUN,
+  // le site chez l'hebergeur fait serveur en PHP : pas de flux, la page
+  // l'interroge (window.WRANGLE_SERVEUR = 'php', ou ?php=1 pour l'essayer ici)
+  php: PROJET_COMMUN && (window.WRANGLE_SERVEUR === 'php' || QP.has('php')),
   etat: 'local',          // local | ok | coupe
   rev: 0,
   attente: [],            // operations pas encore acceptees par le serveur
@@ -489,8 +492,10 @@ const RESEAU = {
   adresses: [],
   src: null,
   envoi: false,
-  tTampon: null, tEnvoi: null, tPresence: null
+  tTampon: null, tEnvoi: null, tPresence: null, tInterroge: null
 };
+/* l'adresse d'un appel : /api/etat chez serveur.py, api/etat.php chez l'hebergeur */
+const API = nom => RESEAU.php ? 'api/' + nom + '.php' : '/api/' + nom;
 try{ if (RESEAU.possible) RESEAU.attente = JSON.parse(sessionStorage.getItem('fstdw.attente.' + CLIENT) || '[]') || []; }catch(e){}
 function ecrireAttente(){ try{ sessionStorage.setItem('fstdw.attente.' + CLIENT, JSON.stringify(RESEAU.attente)); }catch(e){} }
 
@@ -531,15 +536,18 @@ function envoyer(){
   if (RESEAU.envoi || !RESEAU.attente.length || !RESEAU.possible) return;
   RESEAU.envoi = true;
   const lot = RESEAU.attente.slice(0, 200);
-  poster('/api/ops', corpsOps(lot))
+  poster(API('ops'), corpsOps(lot))
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(rep => {
     RESEAU.attente.splice(0, lot.length); ecrireAttente();
-    RESEAU.rev = rep.rev || RESEAU.rev;
+    // en interrogation, c'est l'interrogation qui avance la revision : sauter
+    // dessus ici ferait manquer ce que les autres ont fait entre-temps
+    if (!RESEAU.php) RESEAU.rev = rep.rev || RESEAU.rev;
     let change = false;
     (rep.ops || []).forEach(op => { if (appliquerEcho(op)) change = true; });
     if (change) rafraichirDoux();
     setEtatReseau('ok');
+    interrogerBientot();
   })
   .catch(() => { setEtatReseau('coupe'); RESEAU.tEnvoi = setTimeout(envoyer, 3000); })
   .then(() => { RESEAU.envoi = false; if (RESEAU.attente.length && RESEAU.etat === 'ok' && !RESEAU.tEnvoi) planifierEnvoi(); });
@@ -603,7 +611,9 @@ function appliquerOp(op){
 }
 
 function connecter(){
-  if (!RESEAU.possible || !('EventSource' in window)) return;
+  if (!RESEAU.possible) return;
+  if (RESEAU.php){ interroger(); return; }
+  if (!('EventSource' in window)) return;
   if (RESEAU.src) RESEAU.src.close();
   const src = new EventSource('/api/flux?client=' + encodeURIComponent(CLIENT) +
                               '&nom=' + encodeURIComponent(UI.nom || ''));
@@ -613,6 +623,35 @@ function connecter(){
   RESEAU.src = src;
 }
 
+/* Sans flux (le site chez l'hebergeur), la page interroge le serveur : toutes
+   les deux secondes quand elle est visible, toutes les quinze sinon, et tout
+   de suite apres un envoi. Elle recoit ce qui a change depuis sa revision, ou
+   le projet entier quand elle a trop de retard. */
+function interroger(){
+  clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = null;
+  if (!RESEAU.php) return;
+  const suivant = ms => { clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = setTimeout(interroger, ms); };
+  fetch(API('depuis') + '?rev=' + RESEAU.rev + '&client=' + encodeURIComponent(CLIENT) +
+        '&nom=' + encodeURIComponent(UI.nom || ''), { cache:'no-store' })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(m => {
+    recevoir({ type:'presence', liste: m.presence || [] });   // d'abord : les noms servent aux ops
+    if ('db' in m) recevoir({ type:'etat', db: m.db, rev: m.rev, adresses: [] });
+    else {
+      (m.ops || []).forEach(e => recevoir({ type:'ops', client: e.client, rev: e.rev, ops: e.ops }));
+      RESEAU.rev = m.rev || RESEAU.rev;
+    }
+    setEtatReseau('ok');
+    suivant(document.hidden ? 15000 : 2000);
+  })
+  .catch(() => { setEtatReseau('coupe'); suivant(5000); });
+}
+function interrogerBientot(){
+  if (!RESEAU.php) return;
+  clearTimeout(RESEAU.tInterroge); RESEAU.tInterroge = setTimeout(interroger, 50);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) interrogerBientot(); });
+
 function recevoir(m){
   if (m.type === 'etat'){
     RESEAU.adresses = m.adresses || [];
@@ -620,8 +659,11 @@ function recevoir(m){
     if (!m.db){
       // le serveur n'a encore rien : cet appareil envoie son projet, decoupage compris.
       // siVide : si un autre appareil l'a devance, le sien reste et celui-ci est ignore
-      operer({ op:'remplacer', db: DB, siVide: true });
-      toast('Projet envoyé au serveur');
+      // (une seule fois : en interrogation, la reponse suivante peut arriver avant l'envoi)
+      if (!RESEAU.attente.some(op => op.op === 'remplacer')){
+        operer({ op:'remplacer', db: DB, siVide: true });
+        toast('Projet envoyé au serveur');
+      }
     } else {
       DB = normaliser(m.db);
       // ce qui a ete saisi hors ligne est rejoue par-dessus, puis renvoye
@@ -664,7 +706,7 @@ function envoyerPresence(){
   clearTimeout(RESEAU.tPresence);
   RESEAU.tPresence = setTimeout(() => {
     const actif = openType === 'prise' || openType === 'plan' ? openType + ':' + openId : '';
-    poster('/api/presence', JSON.stringify({ client: CLIENT, nom: UI.nom, actif })).catch(() => {});
+    poster(API('presence'), JSON.stringify({ client: CLIENT, nom: UI.nom, actif })).catch(() => {});
   }, 300);
 }
 const initiale = n => ((n || '').trim().charAt(0) || '?').toUpperCase();
@@ -3455,6 +3497,8 @@ function htmlEquipe(){
       <div class="note">Les données de cette page et celles de la version partagée
         sont séparées : ce bouton copie le projet d’ici vers le serveur, prises comprises.</div>`;
   return moi + `<div id="equipe" style="margin-top:14px">${htmlListeEquipe()}</div>` +
+    (RESEAU.php ? `<div class="note" style="margin-top:16px">Le site fait serveur : tout le monde travaille sur le
+      même projet, où qu’il soit, et ce que chacun saisit arrive chez les autres en quelques secondes.</div>` : '') +
     (RESEAU.adresses.length ? `<div class="note" style="margin-top:16px"><b>Sur les autres appareils</b>
       Même Wi-Fi que cet ordinateur, puis ouvrir dans le navigateur&nbsp;:</div>
       ${RESEAU.adresses.map(a => `<div class="url">${esc(a)}</div>`).join('')}` : '');
@@ -4572,7 +4616,7 @@ function envoyerJournalMail(auto, creneau){
   const jour = jourDuJournal(), d = new Date(), titre = DB.prod.titre || 'Wrangle', empreinte = empreinteMail();
   const dateFr = deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear();
   const quoi = jour === '*' ? 'du tournage' : 'de ' + nomJour(jour).toLowerCase();
-  return chargerLogo().then(() => poster('/api/mail', JSON.stringify({
+  return chargerLogo().then(() => poster(API('mail'), JSON.stringify({
       jour, auto: !!auto, creneau: creneau || '', destinataires: a, nomClient: UI.nom,
       nom: fname('journal-DIT' + (jour === '*' ? '' : '-' + jour), 'pdf'),
       sujet: titre + ' — journal DIT ' + quoi + ' · ' + dateFr + ' ' + hhmm(d),
@@ -4714,7 +4758,7 @@ setInterval(() => verifierEnvoiAuto(), 30000);
 /* dans la fiche Journee : la boite du serveur et les derniers envois */
 function majEtatMail(){
   const z = $('mail-etat'); if (!z) return;
-  fetch('/api/mail').then(r => r.json()).then(m => {
+  fetch(API('mail')).then(r => r.json()).then(m => {
     if (!$('mail-etat')) return;
     const l = (m.envois || []).slice(-3).reverse().map(e => esc(e.quand) + (e.auto ? ' (automatique)' : '') + ' → ' + esc(e.a.join(', ')));
     $('mail-etat').innerHTML = (m.possible ? 'Boîte d’envoi : ' + esc(m.expediteur) + '.'
@@ -4982,7 +5026,7 @@ function envoyerBalise(){
   viderTampon();
   if (!RESEAU.possible || !RESEAU.attente.length || !navigator.sendBeacon) return;
   try{
-    navigator.sendBeacon('/api/ops', new Blob([corpsOps(RESEAU.attente)], { type:'application/json' }));
+    navigator.sendBeacon(API('ops'), new Blob([corpsOps(RESEAU.attente)], { type:'application/json' }));
   }catch(e){}
 }
 window.addEventListener('pagehide', () => { flush(); envoyerBalise(); });

@@ -52,7 +52,24 @@ navigateur, comme avant. La pastille en haut indique « Local ».
 
 Le serveur n'a pas besoin d'être sur le Wi-Fi du plateau. Posé sur une machine joignable depuis
 internet, il laisse chacun saisir depuis son téléphone en 4G, sous son prénom, tout le monde
-voyant les saisies des autres en direct — exactement comme sur le plateau. Deux précautions.
+voyant les saisies des autres en direct — exactement comme sur le plateau.
+
+**Chez l'hébergeur (OVH), sans rien d'autre.** Le site publié chez un hébergeur qui exécute PHP
+fait serveur lui-même : les scripts d'`api/` tiennent le projet partagé, le journal des
+opérations et la liste des connectés, avec les mêmes appels et les mêmes réponses que
+`serveur.py`. La page le sait par une ligne en tête (`window.WRANGLE_SERVEUR='php'`, posée par
+`construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH) et
+l'interroge toutes les deux secondes au lieu d'écouter un flux. Chacun ouvre le site sur son
+téléphone, choisit son prénom, et ce qu'il saisit arrive chez les autres en quelques secondes.
+Rien à installer ni à laisser allumé. Les données vivent dans `api/donnees/`, interdit au web :
+le projet, le journal, une sauvegarde horodatée toutes les dix minutes (60 gardées). Le journal
+DIT par mail part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans
+`api/donnees/mail.json` (`{"expediteur": "journal@foresight-movie.com"}`). Pas de mot de passe :
+le site est privé, seule l'équipe en connaît l'adresse. `py tests/verif_ovh.py` parle au site
+publié pour vérifier que tout répond (il faut le réseau ; le projet en place est remis à la fin).
+
+**Sur une machine à soi.** `serveur.py` posé sur un VPS fait la même chose, avec son flux en
+direct. Deux précautions alors.
 
 **Le mot de passe.** Sans lui, l'API obéit à n'importe qui, y compris pour remplacer le projet
 entier. Dès que le serveur est joignable depuis internet :
@@ -194,7 +211,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Quinze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Seize scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -213,6 +230,7 @@ py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Mo
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
 py tests/verif_personnes.py         chacun ses saisies sur le site : passer de Simon à Romain change de saisies
+py tests/verif_interroger.py       la page en mode php, comme chez l'hébergeur : elle interroge au lieu d'écouter
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un

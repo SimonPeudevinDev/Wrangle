@@ -34,11 +34,17 @@ jobs:
         with:
           python-version: '3.11'
 
+      # deux sites : celui d'OVH fait serveur (les scripts PHP d'api/ et depot/,
+      # et la page le sait), celui de GitHub Pages est la page seule
       - name: Construire le site
-        run: python outils/construire_site.py site
+        run: |
+          python outils/construire_site.py site-ovh --php
+          python outils/construire_site.py site
+          rm -rf site/api site/depot
 
-      # le site chez OVH : le contenu de site/ dans le www de l'hebergement,
-      # seuls les fichiers qui ont change sont renvoyes
+      # le site chez OVH : le contenu de site-ovh/ dans le www de l'hebergement,
+      # seuls les fichiers qui ont change sont renvoyes ; les donnees que PHP
+      # y ecrit (api/donnees, depot/saisies) ne sont pas touchees
       # un envoi rate n'empeche pas GitHub Pages de publier
       - name: Envoyer chez OVH
         if: env.OVH_FTP_HOTE != ''
@@ -50,7 +56,7 @@ jobs:
           username: ${{ secrets.OVH_FTP_UTILISATEUR }}
           password: ${{ secrets.OVH_FTP_MOTDEPASSE }}
           protocol: ftp   # ce cluster OVH ne sait pas le TLS explicite
-          local-dir: site/
+          local-dir: site-ovh/
           server-dir: www/
 
       - uses: actions/configure-pages@v5

@@ -5,11 +5,18 @@ WRANGLE — construit le site publie a partir de la page du plateau.
 
   py outils/construire_site.py [dossier]          (defaut : site/)
   py outils/construire_site.py [dossier] --vide   carnet vide, sans le decoupage
+  py outils/construire_site.py [dossier] --php    pour un hebergeur qui execute PHP :
+                                                  le site fait serveur, la page le sait
 
-Le site publie, c'est la page seule, sans serveur : wrangle.html devient
-index.html a cote de public/. Par defaut la page part telle quelle, decoupage
-et vignettes du tournage compris (window.DT_SEED, window.DT_THUMBS) : tout le
-monde ouvre le site sur les plans de la production, comme sur le plateau.
+Le site publie, c'est la page : wrangle.html devient index.html a cote de
+public/. Par defaut la page part telle quelle, decoupage et vignettes du
+tournage compris (window.DT_SEED, window.DT_THUMBS) : tout le monde ouvre le
+site sur les plans de la production, comme sur le plateau.
+
+Avec --php, une ligne en tete de la page (window.WRANGLE_SERVEUR='php') lui
+dit que les scripts d'api/ repondent a cote d'elle : elle partage alors le
+projet entre tous, comme avec serveur.py. Sans, elle travaille seule, et les
+scripts PHP restent des fichiers inertes (GitHub Pages).
 
 Avec --vide, ces deux lignes et public/vignettes/ sont laisses de cote et le site s'ouvre sur un
 carnet vide, chacun importe son decoupage par le bouton engrenage. Un
@@ -42,8 +49,15 @@ def lignes_page(vide):
     return gardees
 
 
-def construire(sortie, vide=False):
+MARQUE_PHP = "<head><script>window.WRANGLE_SERVEUR='php'</script>"
+
+
+def construire(sortie, vide=False, php=False):
     gardees = lignes_page(vide)
+    if php:
+        # la meme ligne que serveur.py ajoute en tete de la page qu'il sert
+        i = next(i for i, l in enumerate(gardees) if '<head>' in l)
+        gardees[i] = gardees[i].replace('<head>', MARQUE_PHP, 1)
 
     if os.path.isdir(sortie):
         shutil.rmtree(sortie)
@@ -57,9 +71,15 @@ def construire(sortie, vide=False):
     shutil.copytree(PUBLIC, os.path.join(sortie, 'public'),
                     ignore=shutil.ignore_patterns('vignettes') if vide else None)
 
-    # le depot des saisies : deux scripts PHP, utiles chez un hebergeur qui les
-    # execute (OVH) ; ailleurs ils restent des fichiers inertes
-    shutil.copytree(os.path.join(ICI, 'depot'), os.path.join(sortie, 'depot'))
+    # le serveur de plateau en PHP (api/) et le depot des saisies (depot/) :
+    # utiles chez un hebergeur qui les execute (OVH) ; ailleurs, fichiers inertes
+    for dossier in ('api', 'depot'):
+        shutil.copytree(os.path.join(ICI, dossier), os.path.join(sortie, dossier),
+                        ignore=shutil.ignore_patterns('donnees', 'saisies', 'comptes'))
+    for dossier in ('api/donnees', 'depot/saisies'):
+        os.makedirs(os.path.join(sortie, dossier), exist_ok=True)
+        with open(os.path.join(sortie, dossier, '.htaccess'), 'w') as f:
+            f.write('Require all denied\n')
 
     # sans ce fichier, GitHub Pages fait passer le site par Jekyll
     open(os.path.join(sortie, '.nojekyll'), 'w').close()
@@ -89,4 +109,4 @@ if __name__ == '__main__':
     options = [a for a in sys.argv[1:] if a.startswith('--')]
     reste = [a for a in sys.argv[1:] if not a.startswith('--')]
     construire(os.path.join(ICI, reste[0] if reste else 'site'),
-               vide='--vide' in options)
+               vide='--vide' in options, php='--php' in options)
