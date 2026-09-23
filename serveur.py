@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+r"""
 WRANGLE — serveur de plateau.
 
 Un seul fichier, bibliothèque standard uniquement (Python 3.8+).
@@ -14,13 +14,20 @@ Un seul fichier, bibliothèque standard uniquement (Python 3.8+).
 
 Le serveur :
   - sert la page wrangle.html et le dossier public/ (feuille de style, logo) ;
-  - garde l'état partagé du projet (data/projet.json) ;
+  - garde un espace par personne, nommé d'après son prénom
+    (data/espaces/<prénom>/projet.json) : chacun ne voit que ses saisies, sur
+    tous ses appareils ; le DIT réunit celles de tous dans le rapprochement
+    (GET /api/espaces puis /api/etat?espace=…) ;
   - reçoit les modifications de chaque appareil (POST /api/ops) sous forme
-    d'opérations champ par champ, les applique et les rediffuse à tous les
-    appareils connectés par flux SSE (GET /api/flux) ;
-  - tient la liste des personnes connectées et ce qu'elles regardent ;
-  - fait une sauvegarde horodatée dans data/sauvegardes/ toutes les 10 min
-    dès que quelque chose a changé (60 dernières conservées).
+    d'opérations champ par champ, les applique à l'espace et les rediffuse
+    aux appareils branchés sur cet espace par flux SSE (GET /api/flux) ;
+  - tient la liste des personnes connectées, tous espaces confondus ;
+  - fait une sauvegarde horodatée dans chaque espace toutes les 10 min dès
+    que quelque chose y a changé (60 dernières conservées).
+
+Le projet du temps où le serveur n'avait qu'un carnet (data/projet.json)
+devient l'espace « commun » au premier démarrage : le DIT le retrouve dans
+le rapprochement, rien n'est perdu.
 
 Tous les appareils doivent être sur le même réseau (Wi-Fi du plateau) et
 ouvrir l'adresse affichée au démarrage.
@@ -37,6 +44,7 @@ import socket
 import sys
 import threading
 import time
+import unicodedata
 import webbrowser
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -48,14 +56,14 @@ PAGE = os.path.join(ICI, 'wrangle.html')
 
 
 def ranger_donnees(dossier):
-    """Où vivent le projet et ses sauvegardes. `--data` déplace les trois d'un coup."""
-    global DATA, FICHIER, SAUV
+    """Où vivent les espaces (un dossier par prénom : projet, sauvegardes) et
+    la boîte mail. `--data` déplace tout d'un coup."""
+    global DATA, ESPACES
     DATA = os.path.abspath(dossier)
-    FICHIER = os.path.join(DATA, 'projet.json')
-    SAUV = os.path.join(DATA, 'sauvegardes')
+    ESPACES = os.path.join(DATA, 'espaces')
 
 
-DATA = FICHIER = SAUV = ''
+DATA = ESPACES = ''
 ranger_donnees(os.path.join(ICI, 'data'))
 
 SAUV_TOUTES_LES = 10 * 60      # secondes entre deux sauvegardes horodatées
@@ -75,11 +83,9 @@ TYPES = {'.html': HTML, '.js': 'text/javascript; charset=utf-8',
 # ----------------------------------------------------------------- État ---
 
 verrou = threading.RLock()
-etat = {'db': None, 'rev': 0, 'sale': False, 'derniere_sauv': 0.0, 'journal': []}
-espaces = {}          # la page en mode php (?php=1) : un espace par prénom, en mémoire, pour l'essayer ici
-abonnes = []          # files SSE : {'q': Queue, 'client': id}
-presence = {}         # client -> {'nom', 'actif', 'vu'}
-t_ecriture = None
+espaces = {}          # slug -> espace : {'slug', 'db', 'rev', 'journal', 'nom', 'sale', 'derniere_sauv', 'quand', 't_ecriture'}
+abonnes = []          # files SSE : {'q': Queue, 'client': id, 'espace': slug}
+presence = {}         # client -> {'nom', 'actif', 'espace', 'vu'}
 
 
 def collection(db, kind):
@@ -185,60 +191,155 @@ def normaliser(db):
     return db
 
 
+# ---------------------------------------------------------------- Espaces ---
+# Un espace par personne, nommé d'après son prénom (« marie-lou ») : son
+# projet, son journal des opérations, ses sauvegardes. Un appareil qui ne dit
+# pas d'espace tombe dans « commun ». Mêmes noms et mêmes réponses que les
+# scripts d'api/ chez l'hébergeur.
+
+def slug(s):
+    """« Noémie » -> noemie : le nom du dossier d'une personne, sans accent ni
+    majuscule, comme la page le calcule (espaceDe) et comme le fait api/."""
+    s = unicodedata.normalize('NFKD', str(s or ''))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r'[^a-z0-9-]+', '-', s.lower()).strip('-')[:40]
+
+
+def espace_neuf(nom):
+    return {'slug': nom, 'db': None, 'rev': 0, 'journal': [], 'nom': '', 'sale': False,
+            'derniere_sauv': 0.0, 'quand': 0.0, 't_ecriture': None}
+
+
+def espace_etat(nom):
+    """L'espace de ce prénom (déjà en slug ou non), créé au premier appel ;
+    « commun » quand l'appareil n'en dit pas."""
+    s = slug(nom) or 'commun'
+    with verrou:
+        e = espaces.get(s)
+        if e is None:
+            e = espaces[s] = espace_neuf(s)
+        return e
+
+
+def dossier_espace(e):
+    return os.path.join(ESPACES, e['slug'])
+
+
+def fichier_espace(e):
+    return os.path.join(dossier_espace(e), 'projet.json')
+
+
+def noter_nom(e, nom):
+    """Le prénom tel que la personne l'écrit, pour la liste des espaces."""
+    nom = str(nom or '').strip()[:40]
+    if not nom or e['nom'] == nom or e['slug'] == 'commun':   # « commun » n'est a personne
+        return
+    e['nom'] = nom
+    try:
+        os.makedirs(dossier_espace(e), exist_ok=True)
+        with open(os.path.join(dossier_espace(e), 'nom.txt'), 'w', encoding='utf-8') as f:
+            f.write(nom)
+    except OSError:
+        pass
+
+
+def liste_espaces():
+    """Les espaces qui ont un projet, pour le rapprochement du DIT."""
+    with verrou:
+        liste = [{'espace': k, 'nom': e['nom'] or ('Commun' if k == 'commun' else k), 'rev': e['rev'],
+                  'plans': len(e['db']['plans']), 'prises': len(e['db']['prises']),
+                  'quand': datetime.fromtimestamp(e['quand'] or time.time()).isoformat(timespec='seconds')}
+                 for k, e in espaces.items() if e['db'] and e['db']['plans']]
+    return sorted(liste, key=lambda x: x['nom'].lower())
+
+
+def reprendre_ancien_projet():
+    """Le projet du temps où le serveur n'avait qu'un carnet (data/projet.json,
+    et ses sauvegardes) devient l'espace « commun », au lieu de rester orphelin."""
+    vieux = os.path.join(DATA, 'projet.json')
+    if not os.path.exists(vieux):
+        return
+    d = os.path.join(ESPACES, 'commun')
+    os.makedirs(d, exist_ok=True)
+    if os.path.exists(os.path.join(d, 'projet.json')):
+        os.replace(vieux, vieux + '.ancien')    # l'espace commun existe déjà : on garde le fichier de côté
+        return
+    os.replace(vieux, os.path.join(d, 'projet.json'))
+    anciennes = os.path.join(DATA, 'sauvegardes')
+    if os.path.isdir(anciennes) and not os.path.exists(os.path.join(d, 'sauvegardes')):
+        os.replace(anciennes, os.path.join(d, 'sauvegardes'))
+    print('Le projet d avant les espaces est rangé dans l espace « commun » :', d)
+
+
 def charger():
-    if os.path.exists(FICHIER):
+    """Tous les espaces enregistrés sur le disque."""
+    os.makedirs(ESPACES, exist_ok=True)
+    reprendre_ancien_projet()
+    for s in sorted(os.listdir(ESPACES)):
+        f = os.path.join(ESPACES, s, 'projet.json')
+        if not os.path.isfile(f):
+            continue
+        e = espace_etat(s)
         try:
-            with open(FICHIER, 'r', encoding='utf-8') as f:
-                etat['db'] = normaliser(json.load(f))
-            print('Projet chargé :', FICHIER,
-                  '(%d plans, %d prises)' % (
-                      len(etat['db']['plans']), len(etat['db']['prises'])))
-        except Exception as e:  # fichier abîmé : on le met de côté, on ne l'écrase pas
-            cote = FICHIER + '.illisible-' + datetime.now().strftime('%Y%m%d-%H%M%S')
-            os.replace(FICHIER, cote)
-            print('Projet illisible, mis de côté :', cote, '(', e, ')')
-    else:
-        print('Aucun projet enregistré : le premier appareil connecté enverra le sien.')
-
-
-def ecrire_maintenant():
-    """Écriture atomique : fichier temporaire puis remplacement."""
-    global t_ecriture
-    with verrou:
-        t_ecriture = None
-        if etat['db'] is None:
-            return
-        os.makedirs(DATA, exist_ok=True)
-        tmp = FICHIER + '.tmp'
-        ecrire_json(tmp, etat['db'])
-        os.replace(tmp, FICHIER)
-        etat['sale'] = True
-
-
-def planifier_ecriture():
-    global t_ecriture
-    with verrou:
-        if t_ecriture is None:
-            t_ecriture = threading.Timer(0.4, ecrire_maintenant)
-            t_ecriture.daemon = True
-            t_ecriture.start()
-
-
-def sauvegarde_horodatee(force=False):
-    with verrou:
-        if etat['db'] is None or (not etat['sale'] and not force):
-            return
-        os.makedirs(SAUV, exist_ok=True)
-        nom = os.path.join(SAUV, 'projet_' + datetime.now().strftime('%Y-%m-%d_%H%M%S') + '.json')
-        ecrire_json(nom, etat['db'])
-        etat['sale'] = False
-        etat['derniere_sauv'] = time.time()
-        anciennes = sorted(x for x in os.listdir(SAUV) if x.startswith('projet_') and x.endswith('.json'))
-        for x in anciennes[:-SAUV_CONSERVEES]:
+            with open(f, 'r', encoding='utf-8') as fh:
+                e['db'] = normaliser(json.load(fh))
+            e['quand'] = os.path.getmtime(f)
             try:
-                os.remove(os.path.join(SAUV, x))
+                with open(os.path.join(ESPACES, s, 'nom.txt'), 'r', encoding='utf-8') as fh:
+                    e['nom'] = fh.read().strip()[:40]
             except OSError:
                 pass
+            print('Espace %s : %d plans, %d prises' % (e['nom'] or s, len(e['db']['plans']), len(e['db']['prises'])))
+        except Exception as ex:  # fichier abîmé : on le met de côté, on ne l'écrase pas
+            cote = f + '.illisible-' + datetime.now().strftime('%Y%m%d-%H%M%S')
+            os.replace(f, cote)
+            print('Projet illisible, mis de côté :', cote, '(', ex, ')')
+    if not any(e['db'] for e in espaces.values()):
+        print('Aucun projet enregistré : chaque appareil enverra le sien à sa première connexion.')
+
+
+def ecrire_maintenant(e):
+    """Écriture atomique du projet de l'espace : fichier temporaire puis remplacement."""
+    with verrou:
+        e['t_ecriture'] = None
+        if e['db'] is None:
+            return
+        os.makedirs(dossier_espace(e), exist_ok=True)
+        tmp = fichier_espace(e) + '.tmp'
+        ecrire_json(tmp, e['db'])
+        os.replace(tmp, fichier_espace(e))
+        e['sale'] = True
+
+
+def planifier_ecriture(e):
+    with verrou:
+        if e['t_ecriture'] is None:
+            e['t_ecriture'] = threading.Timer(0.4, ecrire_maintenant, args=(e,))
+            e['t_ecriture'].daemon = True
+            e['t_ecriture'].start()
+
+
+def sauvegarde_horodatee(e, force=False):
+    with verrou:
+        if e['db'] is None or (not e['sale'] and not force):
+            return
+        sauv = os.path.join(dossier_espace(e), 'sauvegardes')
+        os.makedirs(sauv, exist_ok=True)
+        nom = os.path.join(sauv, 'projet_' + datetime.now().strftime('%Y-%m-%d_%H%M%S') + '.json')
+        ecrire_json(nom, e['db'])
+        e['sale'] = False
+        e['derniere_sauv'] = time.time()
+        anciennes = sorted(x for x in os.listdir(sauv) if x.startswith('projet_') and x.endswith('.json'))
+        for x in anciennes[:-SAUV_CONSERVEES]:
+            try:
+                os.remove(os.path.join(sauv, x))
+            except OSError:
+                pass
+
+
+def tous_les_espaces():
+    with verrou:
+        return list(espaces.values())
 
 
 def boucle_entretien():
@@ -246,8 +347,9 @@ def boucle_entretien():
     while True:
         time.sleep(15)
         try:
-            if time.time() - etat['derniere_sauv'] >= SAUV_TOUTES_LES:
-                sauvegarde_horodatee()
+            for e in tous_les_espaces():
+                if time.time() - e['derniere_sauv'] >= SAUV_TOUTES_LES:
+                    sauvegarde_horodatee(e)
             maintenant = time.time()
             with verrou:
                 perimes = [c for c, p in presence.items() if maintenant - p['vu'] > PRESENCE_EXPIRE]
@@ -271,12 +373,10 @@ def trouver(db, kind, id_):
     return None
 
 
-def appliquer(ops, client, esp=None):
-    """Applique les opérations d'un appareil au projet commun (ou à l'espace
-    `esp`). Retourne les opérations effectivement réalisées (parfois corrigées
-    ou complétées)."""
-    if esp is None:
-        esp = etat
+def appliquer(ops, client, esp):
+    """Applique les opérations d'un appareil au projet de l'espace `esp`.
+    Retourne les opérations effectivement réalisées (parfois corrigées ou
+    complétées)."""
     sortie = []
     db = esp['db']
     for op in ops:
@@ -386,16 +486,17 @@ def appliquer(ops, client, esp=None):
 
     if sortie:
         esp['rev'] += 1
+        esp['quand'] = time.time()
         noter_journal(esp, esp['rev'], client, sortie)
-        if esp is etat:
-            planifier_ecriture()
+        planifier_ecriture(esp)
     return sortie
 
 
 # ----------------------------------------------------------------- Journal ---
-# Les dernières opérations, pour les appareils qui interrogent le serveur au
-# lieu d'écouter son flux (la page en mode « php », comme chez l'hébergeur :
-# mêmes réponses qu'api/depuis.php, ce qui permet de tester ce mode ici).
+# Les dernières opérations de l'espace, pour les appareils qui interrogent le
+# serveur au lieu d'écouter son flux (la page en mode « php », comme chez
+# l'hébergeur : mêmes réponses qu'api/depuis.php, ce qui permet de tester ce
+# mode ici).
 
 JOURNAL_GARDE = 400
 
@@ -420,33 +521,18 @@ def journal_depuis(e, rev):
     return entrees
 
 
-def slug(s):
-    return re.sub(r'[^a-z0-9-]+', '-', str(s or '').lower()).strip('-')[:40]
-
-
-def espace_etat(nom):
-    """L'état à servir : le projet commun sans nom d'espace, sinon l'espace de
-    ce prénom (celui de la page en mode php), créé au premier appel."""
-    if not nom:
-        return etat
-    return espaces.setdefault(nom, {'db': None, 'rev': 0, 'journal': [], 'nom': ''})
-
-
-def liste_espaces():
-    liste = [{'espace': k, 'nom': e['nom'] or k, 'rev': e['rev'], 'plans': len(e['db']['plans']),
-              'prises': len(e['db']['prises']), 'quand': datetime.now().isoformat(timespec='seconds')}
-             for k, e in espaces.items() if e['db'] and e['db']['plans']]
-    return sorted(liste, key=lambda x: x['nom'].lower())
-
-
 # --------------------------------------------------------------- Diffusion ---
 
-def diffuser(message, sauf=None):
+def diffuser(message, espace=None, sauf=None):
+    """Aux appareils branchés sur cet espace (tous, si aucun n'est dit :
+    la présence est commune)."""
     brut = 'data: ' + json.dumps(message, ensure_ascii=False) + '\n\n'
     with verrou:
         cibles = list(abonnes)
     for a in cibles:
         if sauf is not None and a['client'] == sauf:
+            continue
+        if espace is not None and a['espace'] != espace:
             continue
         try:
             a['q'].put_nowait(brut)
@@ -657,7 +743,7 @@ class Requete(BaseHTTPRequestHandler):
         if u.path in ('/', '/index.html', '/wrangle.html'):
             return self._page()
         if u.path == '/api/etat':
-            e = espace_etat(slug((parse_qs(u.query).get('espace') or [''])[0]))
+            e = espace_etat((parse_qs(u.query).get('espace') or [''])[0])
             with verrou:
                 return self._json(200, {'db': e['db'], 'rev': e['rev'],
                                         'presence': message_presence()['liste'],
@@ -712,8 +798,7 @@ class Requete(BaseHTTPRequestHandler):
             rev = 0
         client = (q.get('client') or [''])[0][:40]
         nom = (q.get('nom') or [None])[0]
-        espace = slug((q.get('espace') or [''])[0])
-        e = espace_etat(espace)
+        e = espace_etat((q.get('espace') or [''])[0])
         with verrou:
             actuel = e['rev']
             rep = {'rev': actuel}
@@ -726,9 +811,8 @@ class Requete(BaseHTTPRequestHandler):
                 else:
                     rep['ops'] = entrees
             if client:
-                noter_presence(client, nom=nom, espace=espace)
-            if e is not etat and nom:
-                e['nom'] = nom[:40]
+                noter_presence(client, nom=nom, espace=e['slug'])
+            noter_nom(e, nom)
             rep['presence'] = message_presence()['liste']
         return self._json(200, rep)
 
@@ -737,6 +821,7 @@ class Requete(BaseHTTPRequestHandler):
         nom = (q.get('nom') or [''])[0]
         if not client:
             return self._json(400, {'erreur': 'client manquant'})
+        e = espace_etat((q.get('espace') or [''])[0])
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
@@ -744,13 +829,14 @@ class Requete(BaseHTTPRequestHandler):
         self.send_header('Connection', 'close')
         self.end_headers()
 
-        abonne = {'q': queue.Queue(maxsize=500), 'client': client}
+        abonne = {'q': queue.Queue(maxsize=500), 'client': client, 'espace': e['slug']}
         with verrou:
             abonnes.append(abonne)
-            noter_presence(client, nom=nom)
-            premier = {'type': 'etat', 'db': etat['db'], 'rev': etat['rev'],
+            noter_presence(client, nom=nom, espace=e['slug'])
+            noter_nom(e, nom)
+            premier = {'type': 'etat', 'db': e['db'], 'rev': e['rev'],
                        'adresses': self.server.adresses}
-        print('+ %s (%s) — %d connecté(s)' % (nom or client, self.client_address[0], len(abonnes)))
+        print('+ %s (%s, espace %s) — %d connecté(s)' % (nom or client, self.client_address[0], e['slug'], len(abonnes)))
         try:
             self.wfile.write(('retry: 2000\ndata: ' + json.dumps(premier, ensure_ascii=False) + '\n\n').encode('utf-8'))
             self.wfile.flush()
@@ -792,20 +878,18 @@ class Requete(BaseHTTPRequestHandler):
             ops = corps.get('ops')
             if not client or not isinstance(ops, list):
                 return self._json(400, {'erreur': 'client et ops attendus'})
-            espace = slug(corps.get('espace') or '')
-            e = espace_etat(espace)
+            e = espace_etat(corps.get('espace') or '')
             with verrou:
-                noter_presence(client, nom=corps.get('nom'), espace=espace)
-                if e is not etat and corps.get('nom'):
-                    e['nom'] = str(corps.get('nom'))[:40]
+                noter_presence(client, nom=corps.get('nom'), espace=e['slug'])
+                noter_nom(e, corps.get('nom'))
                 faites = appliquer(ops, client, e)
                 rev = e['rev']
-            if faites and e is etat:
-                diffuser({'type': 'ops', 'client': client, 'rev': rev, 'ops': faites}, sauf=client)
+            if faites:
+                diffuser({'type': 'ops', 'client': client, 'rev': rev, 'ops': faites}, espace=e['slug'], sauf=client)
                 for op in faites:
                     if op['op'] == 'remplacer':
-                        print('Projet remplacé par', corps.get('nom') or client,
-                              '(%d plans, %d prises)' % (len(op['db']['plans']), len(op['db']['prises'])))
+                        print('Projet de l espace %s remplacé par %s (%d plans, %d prises)' % (
+                            e['slug'], corps.get('nom') or client, len(op['db']['plans']), len(op['db']['prises'])))
             # l'appareil émetteur reçoit ses opérations corrigées, sans le projet complet
             retour = [op if op['op'] != 'remplacer' else {'op': 'remplacer'} for op in faites]
             return self._json(200, {'rev': rev, 'ops': retour})
@@ -814,7 +898,8 @@ class Requete(BaseHTTPRequestHandler):
             client = str(corps.get('client') or '')[:40]
             if not client:
                 return self._json(400, {'erreur': 'client attendu'})
-            noter_presence(client, nom=corps.get('nom'), actif=corps.get('actif'))
+            noter_presence(client, nom=corps.get('nom'), actif=corps.get('actif'),
+                           espace=slug(corps.get('espace') or '') or 'commun')
             diffuser(message_presence())
             return self._json(200, {'ok': True})
 
@@ -890,7 +975,8 @@ def main():
 
     os.makedirs(DATA, exist_ok=True)
     charger()
-    sauvegarde_horodatee(force=True)   # état au démarrage, avant toute modification
+    for e in tous_les_espaces():
+        sauvegarde_horodatee(e, force=True)   # état au démarrage, avant toute modification
 
     try:
         srv = ThreadingHTTPServer((adresse, port), Requete)
@@ -914,7 +1000,7 @@ def main():
     print('  Les téléphones et tablettes doivent être sur le même Wi-Fi.')
     if MOT_DE_PASSE:
         print('  Accès : mot de passe demandé une fois par appareil.')
-    print('  Données : ' + FICHIER)
+    print('  Données : un dossier par prénom dans ' + ESPACES)
     print('  Ctrl+C pour arrêter.')
     print('=' * 62)
     print()
@@ -927,9 +1013,10 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        ecrire_maintenant()
-        sauvegarde_horodatee(force=True)
-        print('Serveur arrêté, projet enregistré.')
+        for e in tous_les_espaces():
+            ecrire_maintenant(e)
+            sauvegarde_horodatee(e, force=True)
+        print('Serveur arrêté, projets enregistrés.')
 
 
 if __name__ == '__main__':

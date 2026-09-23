@@ -64,7 +64,7 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
     essais.verifier('l espace de Simon a le decoupage, une seule fois', [len(e['db']['plans']), e['rev']], [56, 1])
     essais.verifier('le projet commun du plateau n a rien recu', api('etat.php')['db'], None)
     essais.verifier('la page est a la revision du serveur', banc.js('RESEAU.rev'), 1)
-    essais.verifier('la pastille dit en ligne', banc.js("$('pres').textContent.trim()"), 'En ligne')
+    essais.verifier('la pastille porte le prenom de qui saisit', banc.js("$('pres').textContent.trim()"), 'Simon')
 
     # -- le second appareil de Simon ajoute une prise : elle arrive a l'interrogation suivante
     pid = e['db']['plans'][0]['id']
@@ -103,7 +103,7 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
     # -- le DIT ramene les saisies de l'equipe dans le rapprochement
     banc.js("""document.querySelector('nav button[data-v="report"]').click()"""); time.sleep(0.4)
     essais.verifier('le bloc propose de recuperer les saisies de l equipe', banc.js("document.querySelector('#rapprocher .rsources .btn.p').textContent"), 'Récupérer les saisies de l’équipe')
-    banc.js("recupererDepots()")
+    banc.js("recupererEspaces()")
     essais.verifier('Alice arrive dans les sources, pas Simon lui-meme', attendre(lambda: banc.js('RAP.sources.map(s => s.nom)') == ['Alice']), True)
     essais.verifier('et le dit', banc.js("$('toast-msg').textContent"), '1 saisie récupérée')
     r = banc.js('rapprocher(sourcesRap())')

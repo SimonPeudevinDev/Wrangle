@@ -44,13 +44,11 @@ with Banc(8775, 9375, taille=(1200, 900)) as banc:
     essais.verifier('Simon est entre', [banc.js('UI.nom'), banc.js("$('voile-nom').hidden")], ['Simon', True])
     banc.js("ajouterPrise(DB.plans[0].id, false, { clip:'A001C001', par:'Simon' }); flush()")
     essais.verifier('sa copie locale est rangee sous son prenom', [banc.js("!!localStorage.getItem('fstdw.v1:simon')"), banc.js("localStorage.getItem('fstdw.v1')")], [True, None])
-    banc.js("noterDepose('2026-10-05T18:40:00+02:00')")
 
     # -- Romain prend l'appareil : ses saisies a lui, vides
     banc.js("choisirNom(0)"); time.sleep(0.4)
     essais.verifier('Romain arrive sur le decoupage seul, sans les prises de Simon', [banc.js('UI.nom'), banc.js('DB.prises.length'), banc.js('DB.plans.length')], ['Romain', 0, 56])
     essais.verifier('rien ne lui est demande : ce carnet est le sien', banc.js("$('dlg').hidden"), True)
-    essais.verifier('le dernier depot est celui de personne', banc.js('derniereDepose()'), '')
     essais.verifier('la liste des prises est rendue a vide', banc.js("document.querySelectorAll('.prise').length"), 0)
     banc.js("ajouterPrise(DB.plans[1].id, false, { clip:'B001C001', par:'Romain' }); ajouterPrise(DB.plans[1].id, false, { clip:'B001C002', par:'Romain' }); flush()")
     essais.verifier('Romain saisit deux prises, rangees sous son prenom', [banc.js('DB.prises.length'), banc.js("!!localStorage.getItem('fstdw.v1:romain')")], [2, True])
@@ -58,7 +56,7 @@ with Banc(8775, 9375, taille=(1200, 900)) as banc:
     # -- retour a Simon, depuis la fiche Journee cette fois
     banc.js("openProd()"); time.sleep(0.3)
     banc.js("[...document.querySelectorAll('#sbody .choix .btn')].find(b => b.textContent === 'Simon').click()"); time.sleep(0.4)
-    essais.verifier('Simon retrouve sa prise, et son dernier depot', [banc.js('UI.nom'), banc.js('DB.prises.map(t => t.clip)'), banc.js('derniereDepose()')], ['Simon', ['A001C001'], '2026-10-05T18:40:00+02:00'])
+    essais.verifier('Simon retrouve sa prise', [banc.js('UI.nom'), banc.js('DB.prises.map(t => t.clip)')], ['Simon', ['A001C001']])
     essais.verifier('la fiche Journee s est refermee', banc.js('openType'), None)
 
     # -- recharger garde la personne et ses saisies
@@ -131,12 +129,14 @@ with Banc(8775, 9375, taille=(1200, 900)) as banc:
     essais.exceptions(banc, quoi='aucune exception en console (c est le mien)')
 
 with Banc(8775, 9375, taille=(1200, 900)) as banc:
-    # -- avec le serveur du plateau, le projet est commun : changer de prenom ne change rien
+    # -- avec le serveur du plateau aussi, chacun ses saisies : changer de prenom change d'espace
     banc.ouvrir('/')
     banc.nommer()
-    banc.js("ajouterPrise(DB.plans[2].id, false, { clip:'C001C001' }); flush()"); time.sleep(0.5)
-    n = banc.js('DB.prises.length')
-    banc.js("choisirNom(2)"); time.sleep(0.5)
-    essais.verifier('sur le plateau, Tom voit les memes prises que tout le monde', [banc.js('UI.nom'), banc.js('DB.prises.length'), banc.js("$('dlg').hidden")], ['Tom', n, True])
+    banc.js("ajouterPrise(DB.plans[2].id, false, { clip:'C001C001' }); flush()"); time.sleep(0.8)
+    banc.js("choisirNom(2)"); time.sleep(1.0)
+    essais.verifier('sur le plateau, Tom arrive sur le decoupage seul, sans la prise de Simon', [banc.js('UI.nom'), banc.js('DB.prises.length'), banc.js("$('dlg').hidden")], ['Tom', 0, True])
+    essais.verifier('et son appareil est branche sur son espace a lui', banc.js("RESEAU.src && RESEAU.src.url.indexOf('espace=tom') > 0"), True)
+    banc.js("choisirNom(1)"); time.sleep(1.0)
+    essais.verifier('Simon retrouve sa prise, venue de son espace', [banc.js('UI.nom'), banc.js('DB.prises.map(t => t.clip)')], ['Simon', ['C001C001']])
     essais.exceptions(banc, quoi='aucune exception en console (plateau)')
 essais.bilan()

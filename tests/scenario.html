@@ -6,13 +6,16 @@ iframe{width:48%;height:360px;border:1px solid #444;background:#000}
 #out div.ok{color:#4ade80}#out div.ko{color:#f87171;font-weight:700}
 h1{font-size:15px}
 </style></head><body>
-<h1>Deux appareils (Alice et Bob) sur le même serveur</h1>
+<h1>Deux appareils de Simon sur le même serveur, et Bob dans son espace à lui</h1>
 <div id="out"></div>
-<iframe id="a" src="/?client=testA&nom=Alice"></iframe>
-<iframe id="b" src="/?client=testB&nom=Bob"></iframe>
+<iframe id="a" src="/?client=testA&nom=Simon"></iframe>
+<iframe id="b" src="/?client=testB&nom=Simon"></iframe>
+<iframe id="c" src="/?client=testC&nom=Bob"></iframe>
 <script>
-/* Pilote deux copies de la page comme deux telephones et verifie que chaque
-   action de l'un arrive chez l'autre. Ouvrir http://localhost:8765/tests/scenario.html
+/* Pilote deux copies de la page comme deux telephones de la meme personne
+   (Simon) et verifie que chaque action de l'un arrive chez l'autre ; un
+   troisieme telephone (Bob) est dans son espace a lui et ne voit rien de
+   tout cela. Ouvrir http://localhost:8765/tests/scenario.html
    ou lancer : py tests\lancer_scenario.py
    Les variables de la page (DB, RESEAU...) sont des let/const : on les lit
    par eval dans le contexte de chaque iframe. */
@@ -45,14 +48,15 @@ const frappe = (W, sel, val) => {
 
 (async () => {
   const Aw = document.getElementById('a').contentWindow, Bw = document.getElementById('b').contentWindow;
-  const A = app(Aw), B = app(Bw);
+  const Cw = document.getElementById('c').contentWindow;
+  const A = app(Aw), B = app(Bw), C = app(Cw);
   log(await attendre(() => A.RESEAU.etat === 'ok' && B.RESEAU.etat === 'ok', 12000), 'les deux appareils sont connectés');
   await attendre(() => A.DB.plans.length && B.DB.plans.length && A.RESEAU.presence.length >= 2 && B.RESEAU.presence.length >= 2, 6000);
   // les deux ont trouve le serveur vide et lui ont envoye leur decoupage : un seul doit rester
   log(await attendre(() => A.DB.plans[0].id === B.DB.plans[0].id && !A.RESEAU.attente.length && !B.RESEAU.attente.length, 6000), 'un seul découpage a été retenu par le serveur (mêmes identifiants des deux côtés)');
   log(A.DB.plans.length === B.DB.plans.length && A.DB.plans.length > 0, 'même découpage des deux côtés (' + A.DB.plans.length + ' plans)');
-  log(A.RESEAU.presence.some(x => x.nom === 'Bob') && B.RESEAU.presence.some(x => x.nom === 'Alice'), 'chacun voit l’autre dans la liste des connectés');
-  log(Aw.document.getElementById('pres').textContent.indexOf('en ligne') > 0, 'pastille "en ligne" affichée (' + Aw.document.getElementById('pres').textContent + ')');
+  log(A.RESEAU.presence.some(x => x.client === 'testB') && B.RESEAU.presence.some(x => x.client === 'testA'), 'chacun voit l’autre dans la liste des connectés');
+  log(Aw.document.getElementById('pres').textContent.indexOf('Simon') === 0 && Aw.document.getElementById('pres').textContent.indexOf('en ligne') > 0, 'la pastille porte le prénom, et le compte des connectés (' + Aw.document.getElementById('pres').textContent + ')');
   const p = A.DB.plans[0];
   // la page pose ses questions dans sa propre boite : on y repond comme au doigt
   const valider = async w => { await attendre(() => !w.document.getElementById('dlg').hidden); w.document.getElementById('dlg-oui').click(); };
@@ -60,7 +64,7 @@ const frappe = (W, sel, val) => {
   // 1. ajout d'une prise
   const t1 = A.ajouterPrise(p.id);
   log(await attendre(() => B.prise(t1.id)), 'prise ajoutée sur A visible sur B');
-  log(B.prise(t1.id) && B.prise(t1.id).par === 'Alice', 'la prise porte le nom de son auteur');
+  log(B.prise(t1.id) && B.prise(t1.id).par === 'Simon', 'la prise porte le nom de son auteur');
   log(await attendre(() => B.plan(p.id).etat === 'done'), 'le plan passe "tourné" chez B');
 
   // 2. marquage depuis la liste
@@ -117,8 +121,8 @@ const frappe = (W, sel, val) => {
 
   // 9. présence : qui regarde quoi
   A.openPlan(p.id);
-  log(await attendre(() => Bw.document.querySelector('.plan[data-id="' + p.id + '"] .qui')), 'B voit l’initiale d’Alice sur le plan ouvert');
-  log((Bw.document.querySelector('.plan[data-id="' + p.id + '"] .qui') || {}).textContent === 'A', 'initiale correcte');
+  log(await attendre(() => Bw.document.querySelector('.plan[data-id="' + p.id + '"] .qui')), 'B voit l’initiale de Simon sur le plan ouvert');
+  log((Bw.document.querySelector('.plan[data-id="' + p.id + '"] .qui') || {}).textContent === 'S', 'initiale correcte');
   A.closeSheet();
   log(await attendre(() => !Bw.document.querySelector('.qui')), 'marqueur retiré à la fermeture');
 
@@ -159,11 +163,21 @@ const frappe = (W, sel, val) => {
   log(Aw.document.documentElement.dataset.theme === 'light' && Bw.document.documentElement.dataset.theme === 'dark', 'le thème clair sur A ne change pas B');
   A.basculerTheme();
 
-  // 14. état serveur
-  const r = await (await fetch('/api/etat')).json();
+  // 14. état serveur : l'espace de Simon
+  const r = await (await fetch('/api/etat?espace=simon')).json();
   log(r.db.prises.length === A.DB.prises.length && r.db.prises.length === B.DB.prises.length, 'même nombre de prises serveur / A / B (' + r.db.prises.length + ')');
   const cle = l => JSON.stringify(l.map(t => [t.id, t.n, t.clip, t.notes, t.statut]).sort());
   log(cle(r.db.prises) === cle(A.DB.prises) && cle(r.db.prises) === cle(B.DB.prises), 'contenu des prises identique serveur / A / B');
+
+  // 15. Bob, dans son espace : rien de Simon, et Simon rien de lui
+  log(await attendre(() => C.RESEAU.etat === 'ok' && C.DB.plans.length > 0 && !C.RESEAU.attente.length, 8000), 'Bob est connecté, avec son découpage');
+  log(C.DB.prises.length === 0 && A.DB.prises.length > 0, 'Bob ne voit aucune des prises de Simon (' + A.DB.prises.length + ' chez Simon, ' + C.DB.prises.length + ' chez Bob)');
+  const tbob = C.ajouterPrise(C.DB.plans[0].id);
+  await dort(1500);
+  log(!A.prise(tbob.id) && !B.prise(tbob.id), 'la prise de Bob n’arrive ni sur A ni sur B');
+  log(Cw.document.getElementById('pres').textContent.indexOf('Bob') === 0, 'la pastille de Bob porte son prénom (' + Cw.document.getElementById('pres').textContent + ')');
+  const esp = (await (await fetch('/api/espaces')).json()).espaces.map(e => e.espace + ':' + e.prises).sort();
+  log(esp.join(' ') === ('bob:1 simon:' + A.DB.prises.length), 'le serveur liste les deux espaces avec leurs prises (' + esp.join(' ') + ')');
 
   log(echecs === 0, 'FIN — ' + echecs + ' échec(s)');
 })().catch(e => log(false, 'exception ' + e + ' ' + (e && e.stack) + ' FIN'));

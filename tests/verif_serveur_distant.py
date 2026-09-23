@@ -15,14 +15,15 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from banc import Banc, Essais, RACINE                             # noqa: E402
+from banc import Banc, Essais, RACINE, patienter                  # noqa: E402
 
 essais = Essais(largeur=56)
 with Banc(8782, 9367) as banc:
     banc.ouvrir()
     essais.verifier('serveur.py a signe la page', banc.js('window.WRANGLE_SERVEUR'), 1)
     essais.verifier('le mode partage est allume', banc.js('RESEAU.possible'), True)
-    essais.verifier('et la connexion est etablie', banc.js('RESEAU.etat'), 'ok')
+    banc.nommer()   # l'espace, c'est le prenom : la connexion attend qu'il soit choisi
+    essais.verifier('et la connexion est etablie', bool(patienter(lambda: banc.js('RESEAU.etat') == 'ok')), True)
 
     # l'adresse seule n'aurait pas suffi : c'est bien la signature qui decide
     essais.verifier('un nom de domaine ne passerait pas le test d adresse',

@@ -87,15 +87,13 @@ def construire(sortie, vide=False, php=False):
     shutil.copytree(PUBLIC, os.path.join(sortie, 'public'),
                     ignore=shutil.ignore_patterns('vignettes') if vide else None)
 
-    # le serveur de plateau en PHP (api/) et le depot des saisies (depot/) :
-    # utiles chez un hebergeur qui les execute (OVH) ; ailleurs, fichiers inertes
-    for dossier in ('api', 'depot'):
-        shutil.copytree(os.path.join(ICI, dossier), os.path.join(sortie, dossier),
-                        ignore=shutil.ignore_patterns('donnees', 'saisies', 'comptes'))
-    for dossier in ('api/donnees', 'depot/saisies'):
-        os.makedirs(os.path.join(sortie, dossier), exist_ok=True)
-        with open(os.path.join(sortie, dossier, '.htaccess'), 'w') as f:
-            f.write('Require all denied\n')
+    # le serveur en PHP (api/) : utile chez un hebergeur qui l'execute (OVH) ;
+    # ailleurs, fichiers inertes
+    shutil.copytree(os.path.join(ICI, 'api'), os.path.join(sortie, 'api'),
+                    ignore=shutil.ignore_patterns('donnees'))
+    os.makedirs(os.path.join(sortie, 'api', 'donnees'), exist_ok=True)
+    with open(os.path.join(sortie, 'api', 'donnees', '.htaccess'), 'w') as f:
+        f.write('Require all denied\n')
 
     # chez un hebergeur Apache : la page doit etre reverifiee a chaque ouverture,
     # sinon un telephone garde celle d'hier (GitHub Pages ignore ce fichier)

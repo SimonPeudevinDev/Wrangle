@@ -34,17 +34,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      # deux sites : celui d'OVH fait serveur (les scripts PHP d'api/ et depot/,
+      # deux sites : celui d'OVH fait serveur (les scripts PHP d'api/,
       # et la page le sait), celui de GitHub Pages est la page seule
       - name: Construire le site
         run: |
           python outils/construire_site.py site-ovh --php
           python outils/construire_site.py site
-          rm -rf site/api site/depot
+          rm -rf site/api
 
       # le site chez OVH : le contenu de site-ovh/ dans le www de l'hebergement,
       # seuls les fichiers qui ont change sont renvoyes ; les donnees que PHP
-      # y ecrit (api/donnees, depot/saisies) ne sont pas touchees
+      # y ecrit (api/donnees) ne sont pas touchees
       # un envoi rate n'empeche pas GitHub Pages de publier
       - name: Envoyer chez OVH
         id: ovh

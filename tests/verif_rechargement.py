@@ -23,7 +23,7 @@ with Banc(8776, 9361, taille=(1300, 800)) as banc:
     banc.nommer()
     banc.js("ajouterPrise(DB.plans[0].id, false); patch('plan', DB.plans[1].id, {mouv:'Handheld'}); flush()")
     time.sleep(0.5)
-    essais.verifier('copie locale ecrite', banc.js("!!localStorage.getItem('fstdw.v1')"), True)
+    essais.verifier('copie locale ecrite, sous le prenom', banc.js("!!localStorage.getItem('fstdw.v1:simon')"), True)
 
     erreurs = banc.ouvrir(vider=True)
     essais.verifier('second chargement, copie locale en place : la page demarre',
@@ -37,7 +37,7 @@ with Banc(8776, 9361, taille=(1300, 800)) as banc:
     essais.verifier('le reseau se connecte apres le second chargement', banc.js('RESEAU.etat'), 'ok')
     # une erreur rattrapee au chargement jette la copie locale et passe par console.error : on la voit ici
     essais.verifier('la copie locale est toujours la (rien n a ete rattrape en silence)',
-                    banc.js("!!localStorage.getItem('fstdw.v1')"), True)
+                    banc.js("!!localStorage.getItem('fstdw.v1:simon')"), True)
     consoles = banc.erreurs_console()
     essais.verifier('aucun message d erreur en console', len(consoles), 0)
     for e in consoles[:2]:

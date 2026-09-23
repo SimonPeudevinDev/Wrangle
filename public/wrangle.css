@@ -345,49 +345,66 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
   background:none;border:none;border-bottom:1px solid var(--line);
 }
 .plan.done .pnum{color:var(--ok)}
-.plan.done .pnum::after{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:4px;vertical-align:middle}
+.plan.done .pnum::after{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:4px;vertical-align:middle;order:1}
 .plan.drop{opacity:.45}
 .plan.drop .pnum{text-decoration:line-through}
 .plan.pick{padding:12px 0}
 #l-pick{padding-top:12px}
 
-.phead{display:flex;gap:14px;cursor:pointer;align-items:flex-start}
-/* la vignette : au format 2:1, la meme taille sur toutes les cartes */
+.phead{display:flex;gap:12px;cursor:pointer;align-items:flex-start}
+/* la vignette, seulement quand le plan en a une : a la hauteur de la ligne de
+   titre, a gauche du numero. Sans image, rien : le texte du plan part du bord
+   gauche, aligne sur les numeros de prises. */
 .vig{
-  width:96px;height:48px;flex:none;border-radius:4px;
+  width:84px;height:42px;flex:none;border-radius:4px;
   background:var(--surface2) center/cover no-repeat;
 }
 .pmain{flex:1;min-width:0}
 /* les etiquettes et la pastille « tourne » sont centrees sur le numero,
    pas posees sur sa ligne de base */
-.pnum{font:700 26px/1 var(--font-titre);letter-spacing:-.02em;display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px}
+/* La ligne de titre fait la hauteur des ronds d'une prise (42px) : le numero,
+   sa pastille « tourne », ses etiquettes juste apres, et le rond Moteur seul
+   contre le bord droit, dans la colonne des ronds OK / NG des prises. */
+.pnum{font:700 22px/1 var(--font-titre);letter-spacing:-.02em;display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;min-height:42px}
+.pnum .ptags{order:2}
+.pnum .viser{order:3;margin-left:auto}
 /* le plan vise : celui que le Moteur et + Prise vont tourner. Un anneau discret
    sur chaque carte ; en caramel, avec son mot, sur le plan choisi. */
-.viser{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px 0 10px;border-radius:var(--rp);
-  border:1px solid var(--line2);background:none;color:var(--dim);cursor:pointer;
-  font:700 11.5px var(--font);letter-spacing:.09em;text-transform:uppercase}
-.viser svg{width:17px;height:17px}
-.viser:hover{color:var(--txt);background:var(--surface2)}
-/* le plan vise se voit de loin : rouge, la couleur du Moteur */
+/* le viseur : un rond au trait a icone, le meme que les ronds OK / NG des
+   prises, pour que la colonne de droite soit une seule famille. Le mot
+   « Moteur » reste pour les lecteurs d'ecran. */
+.viser{position:relative;display:grid;place-items:center;width:42px;height:42px;padding:0;border-radius:50%;
+  border:1px solid var(--line2);background:none;color:var(--dim2);cursor:pointer}
+.viser span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.viser svg{width:20px;height:20px}
+.viser:hover{color:var(--txt);border-color:var(--txt)}
+/* le plan vise se voit de loin : rouge plein, la couleur du Moteur */
 .viser.on{background:var(--ng);color:var(--ng-txt);border-color:var(--ng)}
 .viser.on:hover{background:var(--ng-g1);border-color:var(--ng-g1);color:var(--ng-txt)}
 /* les etiquettes du decoupage (LIVE, VFX, TBC...) : des micro-capsules au
    trait, la langue des boutons. Elles ne se confondent plus avec la ligne
    des elements captes, en petites capitales juste dessous. */
-.ptags{position:relative;display:inline-flex;gap:6px;flex-wrap:wrap}
+.ptags{position:relative;display:inline-flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
 /* chaque etiquette a sa couleur : ce qu'elle est (LIVE, VFX, CG), ce qu'elle devient (TBC, VAL, KILLED) */
 .ptag.t-vert,.capsules .fc.on.t-vert{color:var(--tag-vert);border-color:var(--tag-vert)}
 .ptag.t-rouge,.capsules .fc.on.t-rouge{color:var(--tag-rouge);border-color:var(--tag-rouge)}
 .ptag.t-bleu,.capsules .fc.on.t-bleu{color:var(--tag-bleu);border-color:var(--tag-bleu)}
 .ptag.t-orange,.capsules .fc.on.t-orange{color:var(--tag-orange);border-color:var(--tag-orange)}
+/* l'etiquette est une pastille pleine, teintee de sa couleur, sans trait :
+   elle se lit d'un coup d'oeil et ne se confond plus avec les ronds a cote */
+.ptag.t-vert{background:color-mix(in srgb, var(--tag-vert) 18%, transparent);border-color:transparent}
+.ptag.t-rouge{background:color-mix(in srgb, var(--tag-rouge) 18%, transparent);border-color:transparent}
+.ptag.t-bleu{background:color-mix(in srgb, var(--tag-bleu) 18%, transparent);border-color:transparent}
+.ptag.t-orange{background:color-mix(in srgb, var(--tag-orange) 20%, transparent);border-color:transparent}
 /* chaque etiquette a sa couleur : ce qu'elle est (LIVE, VFX, CG), ce qu'elle devient (TBC, VAL, KILLED) */
 .ptag{
-  border:1px solid var(--line2);border-radius:var(--rp);padding:3px 9px 4px;
-  font:700 9.5px var(--font);letter-spacing:.1em;color:var(--dim);text-transform:uppercase;
+  display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:7px;
+  border:1px solid transparent;background:var(--surface2);
+  font:700 10px/1 var(--font);letter-spacing:.06em;color:var(--dim);text-transform:uppercase;
 }
-button.ptag{appearance:none;background:transparent;cursor:pointer;line-height:1.2;font-family:inherit}
-button.ptag:hover,button.ptag.on{background:var(--surface2)}
-.ptag.vide{border-style:dashed;color:var(--dim2);opacity:.55}
+button.ptag{appearance:none;cursor:pointer;font-family:inherit}
+button.ptag:hover,button.ptag.on{filter:brightness(1.25)}
+.ptag.vide{background:none;border:1px dashed var(--line2);color:var(--dim2);opacity:.7}
 /* le petit menu sous la puce : les etiquettes de sa famille */
 .menu.puce{position:fixed;left:auto;right:auto;top:auto;z-index:70;width:max-content;min-width:118px;padding:4px 0}
 .menu.puce button{height:36px;padding:0 14px;font:700 10.5px var(--font);letter-spacing:.1em;text-transform:uppercase;gap:12px}
@@ -395,14 +412,19 @@ button.ptag:hover,button.ptag.on{background:var(--surface2)}
 .menu.puce button.t-vert{color:var(--tag-vert)} .menu.puce button.t-rouge{color:var(--tag-rouge)}
 .menu.puce button.t-bleu{color:var(--tag-bleu)} .menu.puce button.t-orange{color:var(--tag-orange)}
 /* la description du plan : c'est ce qu'on lit en premier sur le plateau */
-.pdesc{font-size:15px;line-height:1.45;color:var(--txt);margin-top:6px;white-space:pre-line}
+/* la description : deux lignes au plus, en gris ; la fiche dit le reste */
+.pdesc{font-size:14px;line-height:1.4;color:var(--dim);margin-top:4px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 /* le contexte technique : lisible, pas relegue en gris minuscule */
-.pctx{margin-top:6px;font-size:13px;color:var(--dim);display:flex;flex-wrap:wrap;gap:3px 0}
+/* le contexte du plan parle la langue de la ligne de details d'une prise :
+   meme corps, meme gris, meme separateur, une seule ligne */
+.pctx{margin-top:4px;font-size:12px;color:var(--dim2);font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pctx span{white-space:nowrap}
 /* le point mediant est colle au mot precedent par une espace insecable :
    il ne peut donc jamais se retrouver seul en debut de ligne */
-.pctx span:not(:last-child)::after{content:" ·";margin-right:7px;color:var(--dim2)}
-.pctx b{color:var(--txt);font-weight:600}
+.pctx span:not(:last-child)::after{content:" ·";margin-right:5px;opacity:.6}
+.pctx b{color:var(--dim);font-weight:600}
 /* les elements captes pour la post */
 .pelem{margin-top:8px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
   font-weight:700;color:var(--dim2);display:flex;flex-wrap:wrap;gap:1px 0}
@@ -1194,7 +1216,6 @@ select option{background:var(--surface);color:var(--txt)}
     width:min(620px,100%);border-left:1px solid var(--line2)}
   .sheet.on + .voile-fiche{display:block}
   .kpis{grid-template-columns:repeat(4,1fr)}
-  .vig{width:240px;height:120px}
   .fabs{right:calc(var(--marge) + 20px)}
   /* a droite, dans la colonne de la fiche */
   .toast{left:auto;right:max(24px, var(--marge));width:340px;max-width:none;transform:translateY(-8px)}

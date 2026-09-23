@@ -1,33 +1,60 @@
 # Wrangle — journal de plateau
 
 Un carnet de DIT / data wrangler : jours, séquences, plans, prises, cartes et rapport de fin de journée.
-La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` : garder les deux ensemble. Le serveur `serveur.py` permet de saisir à plusieurs en même temps.
+La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` : garder les deux ensemble.
 
-## Lancer sur le plateau (plusieurs appareils)
+## Comment ça marche
 
-1. Sur un ordinateur du plateau (celui du DIT), double-cliquer sur **`Lancer.bat`**.
-   Une fenêtre noire s'ouvre et affiche les adresses ; la page s'ouvre dans le navigateur.
+- **Un site, que chacun ouvre sur son téléphone**, où qu'il soit : en 4G, chez lui, sur le plateau.
+  Pas de Wi-Fi commun, rien à installer. Sur iPhone / iPad : Safari > Partager > « Sur l'écran
+  d'accueil » donne une icône plein écran.
+- **On choisit son profil à l'entrée** (Romain, Simon, Tom…) ; la pastille en haut le rappelle. Le
+  profil décide de ce qu'on voit : ses prises à soi, rien d'autre, tant qu'on ne change pas de profil
+  (⚙ → Journée, ou l'écran d'entrée). Ses saisies sont rangées sur le serveur sous son prénom et le
+  suivent sur tous ses appareils. Hors réseau, on continue à saisir, tout repart au retour (la
+  pastille dit « hors ligne »).
+- **Le DIT réunit tout d'un bouton** : Rapport → « Toute l'équipe ». La page va chercher les saisies
+  de chacun sur le serveur et les réunit à celles d'ici : le bilan, le journal DIT (PDF), la fiche
+  pour la post (PDF), la feuille de montage, l'ALE et le JSON portent alors sur l'ensemble, et les
+  fichiers exportés s'appellent `…_equipe`. Le projet de cet appareil n'est pas modifié ;
+  « Actualiser » va revoir ; « Mes saisies » revient à son propre bilan. Il n'y a pas de rôle DIT :
+  c'est le bouton qui fait le DIT.
+- **Le découpage est propre à chacun** : chaque profil part des plans de la production intégrés au
+  site et garde sa copie (états, éléments captés, plans ajoutés). Quand deux personnes ont noté des
+  choses différentes sur le même plan ou la même prise, Rapport → « Rapprocher les saisies » les met
+  côte à côte, et « Garder la fusion comme projet » tranche.
+
+Le serveur, c'est le site lui-même chez l'hébergeur (OVH, en PHP) : voir « Le site chez
+l'hébergeur » plus bas. La liste des prénoms proposés à l'entrée est `EQUIPE`, en tête du script de
+la page.
+
+## Sur le plateau sans internet
+
+Le même carnet marche aussi en réseau fermé, avec `serveur.py` sur un ordinateur du plateau.
+
+1. Sur cet ordinateur, double-cliquer sur **`Lancer.bat`**. Une fenêtre noire s'ouvre et affiche les
+   adresses ; la page s'ouvre dans le navigateur.
 2. Sur chaque téléphone ou tablette, se connecter au **même Wi-Fi** et ouvrir dans le navigateur
-   l'adresse affichée dans la fenêtre noire, par exemple `http://192.168.1.20:8765`.
-   Cette adresse est aussi rappelée dans la page, bouton ⚙ en haut à droite, section « Équipe connectée ».
-3. Chaque appareil donne un prénom à la première ouverture. Il apparaît sur les prises ajoutées
-   et les autres voient sur quel plan chacun travaille (initiale à côté de la prise).
+   l'adresse affichée dans la fenêtre noire, par exemple `http://192.168.1.20:8765`. Cette adresse
+   est aussi rappelée dans la page, ⚙ → « Équipe connectée ».
 
-Chaque modification part au serveur champ par champ et arrive chez tous en moins d'une seconde.
-Deux personnes peuvent remplir la même prise : seul le champ modifié est envoyé.
-Si deux appareils ajoutent une prise au même plan au même moment, le serveur attribue les numéros.
+Même fonctionnement que sur le site : chacun son espace, le DIT réunit tout par « Toute l'équipe ».
+Entre les appareils d'une même personne, chaque modification arrive en moins d'une seconde ; si deux
+d'entre eux ajoutent une prise au même plan au même moment, le serveur attribue les numéros.
 
 Laisser la fenêtre noire ouverte pendant le tournage. `Ctrl+C` ou fermer la fenêtre arrête le serveur
-(le projet est enregistré avant l'arrêt).
-
-Sur iPhone / iPad : Safari > Partager > « Sur l'écran d'accueil » donne une icône plein écran.
+(les projets sont enregistrés avant l'arrêt).
 
 ## Où sont les données
 
-- `data/projet.json` : le projet partagé, réécrit à chaque modification.
-- `data/sauvegardes/` : une copie horodatée au démarrage puis toutes les 10 minutes dès qu'il y a
-  du nouveau (60 dernières conservées). Pour revenir en arrière : arrêter le serveur, copier la
-  sauvegarde voulue sur `data/projet.json`, relancer.
+- `data/espaces/<prénom>/projet.json` : le projet de chaque personne, réécrit à chaque modification
+  (`nom.txt` à côté garde le prénom tel qu'elle l'écrit).
+- `data/espaces/<prénom>/sauvegardes/` : une copie horodatée au démarrage puis toutes les 10 minutes
+  dès qu'il y a du nouveau (60 dernières conservées). Pour revenir en arrière : arrêter le serveur,
+  copier la sauvegarde voulue sur le `projet.json` de l'espace, relancer.
+- Le projet du temps où le serveur n'avait qu'un carnet pour tout le monde (`data/projet.json`)
+  déménage tout seul au premier démarrage dans l'espace `commun`, sauvegardes comprises : le DIT le
+  retrouve dans le rapprochement, rien n'est perdu.
 - Chaque appareil garde aussi une copie dans son navigateur : en cas de coupure Wi-Fi, on continue
   à saisir, et tout repart au retour du réseau (pastille « Hors ligne » en haut).
 - Export JSON / CSV / ALE : bouton ⚙, section « Données » et « Exports pour la post ».
@@ -40,34 +67,34 @@ l'ouverture au lieu d'être stocké en image. Seuls les plans de décor importé
 plus léger du JPEG et du WebP. Comptez 2 à 3 Mo pour un tournage entier, sauvegardes non
 comprises.
 
-Première mise en route : si le serveur n'a encore aucun projet, le premier appareil connecté envoie
-le sien (découpage compris, et les prises déjà saisies dans ce navigateur s'il y en a).
+Première mise en route : quand un espace est encore vide sur le serveur, le premier appareil de
+cette personne y envoie son projet (découpage compris, et les prises déjà saisies dans ce
+navigateur sous ce prénom s'il y en a).
 
 ## Travailler seul, sans serveur
 
 Ouvrir directement `wrangle.html` dans un navigateur : la page travaille seule, données dans le
 navigateur, comme avant. La pastille en haut indique « Local ».
 
-## Saisir à plusieurs hors du plateau
+## Le site chez l'hébergeur
 
-Le serveur n'a pas besoin d'être sur le Wi-Fi du plateau. Posé sur une machine joignable depuis
-internet, il laisse chacun saisir depuis son téléphone en 4G, sous son prénom, tout le monde
-voyant les saisies des autres en direct — exactement comme sur le plateau.
+C'est le serveur de tout le monde. Le site publié chez un hébergeur qui exécute PHP (OVH) fait
+serveur lui-même : **chacun a son espace**, nommé d'après son prénom, et le DIT réunit tout par
+Rapport → « Toute l'équipe ». Les scripts d'`api/` tiennent, par espace, le projet, le journal des
+opérations et les sauvegardes, avec les mêmes appels et les mêmes réponses que `serveur.py` ; la
+liste des connectés est commune. Les données vivent dans `api/donnees/espaces/<prénom>/`, interdit
+au web.
 
-**Chez l'hébergeur (OVH), sans rien d'autre : chacun sa session.** Le site publié chez un
-hébergeur qui exécute PHP fait serveur lui-même, mais autrement que sur le plateau : **chacun a
-son espace**, nommé d'après son prénom. Il n'y voit que ses saisies, sur tous ses appareils, à
-l'abri sur le serveur ; personne ne voit celles des autres. Le DIT réunit tout dans Rapport →
-« Rapprocher les saisies » → « Récupérer les saisies de l'équipe » : les projets de chacun
-arrivent côte à côte (écarts, compléments, prises chez un seul), « Garder la fusion comme
-projet » en fait son projet à lui, d'où sortent le journal DIT et les exports. Les scripts
-d'`api/` tiennent, par espace, le projet, le journal des opérations et les sauvegardes, avec
-les mêmes appels et les mêmes réponses que `serveur.py` ; la liste des connectés est commune.
+**Pour que ce soit bien ce site-là que l'équipe ouvre**, le nom de domaine doit mener chez OVH, pas
+chez GitHub Pages : la copie publiée sur GitHub Pages est la page seule, sans serveur, où chacun
+reste dans son navigateur et où « Toute l'équipe » ne trouve personne. La marche à suivre est dans
+« Publier le site », en bas. En attendant, l'adresse propre de l'hébergement OVH (celle de l'espace
+client) sert tout autant.
 La page sait qu'elle est chez l'hébergeur par une ligne en tête (`window.WRANGLE_SERVEUR='php'`,
 posée par `construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH)
 et l'interroge toutes les deux secondes au lieu d'écouter un flux. Rien à installer ni à laisser
-allumé. Les données vivent dans `api/donnees/espaces/<prénom>/`, interdit au web : le projet, le
-journal, une sauvegarde horodatée toutes les dix minutes (60 gardées). Le journal DIT par mail
+allumé. Dans chaque espace : le projet, le journal, une sauvegarde horodatée toutes les dix minutes
+(60 gardées). Le journal DIT par mail
 part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans `api/donnees/mail.json`
 (`{"expediteur": "journal@foresight-movie.com"}`). `py tests/verif_ovh.py` parle au site publié
 pour vérifier que tout répond, dans deux espaces d'essai vidés à la fin (il faut le réseau).
@@ -120,6 +147,11 @@ Ensuite `sudo wrangle-maj` met à jour et relance. Le journal par mail y marche 
 
 ## Rapprocher les saisies
 
+« Toute l'équipe » réunit les saisies sans rien demander : les prises de chacun s'ajoutent, et quand
+deux personnes ont rempli la même prise, celles d'ici font foi sur les écarts, les autres comblent
+les vides. Pour voir ces écarts en détail, ou pour en faire son projet : « Rapprocher les saisies »,
+juste en dessous dans le Rapport.
+
 Sans serveur, chacun saisit de son côté, dans son navigateur, et personne ne voit les autres. Pour
 tout réunir : chacun exporte sa sauvegarde (⚙ → Données → Sauvegarde JSON) et l'envoie au DIT, qui
 la dépose dans Rapport → « Rapprocher les saisies ». Le rapport met les prises côte à côte, plan par
@@ -130,17 +162,10 @@ ce navigateur font foi sur les écarts, les autres comblent les vides et apporte
 plus. « Écarts (PDF) » sort le même rapport en PDF. Chaque fichier est nommé d'après qui a saisi ses
 prises.
 
-**Sans échange de fichiers.** Quand le site est servi par un hébergeur qui exécute PHP (OVH), la
-boîte de dépôt `depot/` fait le tour : chacun clique ⚙ → Données → « Déposer mes saisies », et ses
-saisies partent chez l'hébergeur sous son prénom (un fichier par personne, le dernier dépôt
-remplace le précédent, hors de portée du web). Le DIT clique « Récupérer les dépôts » dans le
-rapprochement. Pas de clé ni de mot de passe : le site est privé, seule l'équipe en connaît
-l'adresse, et le prénom choisi à l'entrée suffit.
-
-**Chacun ses saisies.** Sur le site, la copie locale du projet est rangée sous le prénom choisi à
+**Chacun ses saisies.** Partout, la copie locale du projet est rangée sous le prénom choisi à
 l'entrée : passer de Simon à Romain sur le même téléphone (à l'entrée, ou ⚙ → Journée) change de
-saisies, revenir les retrouve. Avec le serveur du plateau, le projet est commun à tous et le
-prénom ne fait que signer les prises.
+saisies, revenir les retrouve. Avec un serveur, l'appareil change en même temps d'espace dessus :
+Romain retrouve ce qu'il a saisi sur ses autres appareils, et rien de ce que Simon a saisi.
 
 **Le carnet d'avant.** Jusqu'à cette version, le site ne demandait pas de prénom et ne gardait
 qu'un carnet par navigateur. Ce carnet appartient à qui l'a saisi, et chaque prise porte son
@@ -208,6 +233,9 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 ## Divers
 
 - ☼ / ☾ en haut : thème clair pour le plein soleil, sombre pour la nuit.
+- La pastille en haut porte le prénom de qui saisit sur cet appareil ; son point dit l'état du
+  réseau, et elle ajoute « hors ligne » ou « local » quand il n'y a pas de serveur au bout.
+- Rapport → « Toute l'équipe » / « Mes saisies » : sur quoi portent le bilan et tous les exports.
 - Le logo : `public/wrangle-logo.svg` (signe + mot), avec son original en image à côté.
   Le signe est aussi dans la page, en haut à gauche et en icône d'onglet. Il prend la couleur
   du thème : ses coutures sont des découpes, pas du blanc, donc il tient sur n'importe quel fond.
@@ -236,11 +264,12 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Seize scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Dix-sept scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
-py tests/lancer_scenario.py        deux appareils qui saisissent en même temps
+py tests/lancer_scenario.py        deux appareils d'une même personne qui saisissent en même temps, et un troisième dans son espace
+py tests/verif_espaces.py          chacun son espace sur le serveur, « Toute l'équipe » pour le DIT, et l'ancien projet commun repris
 py tests/verif_rechargement.py     la page redémarre avec une copie locale déjà en place
 py tests/verif_filtre_qui.py       le filtre « Saisie par »
 py tests/verif_serveur_distant.py  le mode partagé hors du Wi-Fi du plateau
