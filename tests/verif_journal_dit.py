@@ -67,7 +67,8 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('les accents passent en WinAnsi', 'S\xc9QUENCE 06' in pdf and '(Reste \xe0 tourner' not in pdf and 'RESTE \xc0 TOURNER' in pdf, True)
     essais.verifier('le montage vient avant le reste a tourner', 0 < pdf.find('(A001C002)') < pdf.find('RESTE \xc0 TOURNER'), True)
     essais.verifier('la sauvegarde ouvre le journal', 0 < pdf.find('SAUVEGARDER : 3 FICHIERS SUR 1 CARTE') < pdf.find('(A001C002)'), True)
-    essais.verifier('la prise retenue est en gras sur fond gris', '/CB 7.5 Tf' in pdf and ' re f' in pdf, True)
+    essais.verifier('la prise retenue est en gras sur fond creme', '/CB 8 Tf' in pdf and ' re f' in pdf, True)
+    essais.verifier('les deux timecodes tiennent dans une colonne', '(10:22:31:04 \x96)' in pdf and '(10:23:02:12)' in pdf, True)
     essais.verifier('qui a saisi, et quand, dans le PDF', '(Bob \xb7 09:15)' in pdf, True)
     essais.verifier('les notes a parentheses sont echappees', banc.js(
         "Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('').indexOf('(faux d\\xe9part)') > 0"), True)
