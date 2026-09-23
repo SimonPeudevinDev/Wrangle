@@ -141,7 +141,24 @@ with Banc(8781, 9381, taille=(1100, 900)) as banc:
     essais.verifier('la fiche Journee a ses reglages de mail', banc.js(
         "!!document.querySelector('#sbody textarea[data-k=\"mailA\"]') && !!document.querySelector('#sbody select[data-k=\"mailCadence\"]')"
         " && document.querySelectorAll('#plage-mail input[type=range]').length === 2"
-        " && !!document.querySelector('#sbody input[type=date][data-k=\"mailDu\"]') && !!document.querySelector('#sbody input[type=date][data-k=\"mailAu\"]')"), True)
+        " && !!document.querySelector('#sbody input[data-k=\"mailDu\"]') && !!document.querySelector('#sbody input[data-k=\"mailAu\"]')"), True)
+
+    # -- le calendrier de la page, a la place de celui du navigateur
+    essais.verifier('les dates s ecrivent a la francaise', banc.js("document.querySelector('#sbody input[data-k=\"mailDu\"]').value"), '20/09/2026')
+    banc.js("document.querySelector('#sbody input[data-k=\"mailDu\"]').click()"); time.sleep(0.3)
+    essais.verifier('toucher la date ouvre le calendrier, sur son mois', banc.js("document.querySelector('.calendrier .ctete b').textContent"), 'Septembre 2026')
+    essais.verifier('lundi en tete, six semaines', banc.js("[...document.querySelectorAll('.calendrier .cjours span')].map(s => s.textContent).join('') + document.querySelectorAll('.calendrier .j').length"), 'LMMJVSD42')
+    essais.verifier('la date choisie et la periode jusqu a l autre borne',
+                    banc.js("[document.querySelector('.calendrier .j.on').dataset.d, document.querySelector('.calendrier .j.borne').dataset.d, document.querySelectorAll('.calendrier .j.entre').length]"),
+                    ['2026-09-20', '2026-09-30', 9])
+    banc.js("bougerMois(1)")
+    essais.verifier('le mois suivant', banc.js("document.querySelector('.calendrier .ctete b').textContent"), 'Octobre 2026')
+    banc.js("document.querySelector('.calendrier .j[data-d=\"2026-10-05\"]').click()"); time.sleep(0.3)
+    essais.verifier('choisir un jour pose la date et referme', [banc.js('DB.prod.mailDu'), banc.js("!!document.querySelector('.calendrier')"),
+                    banc.js("document.querySelector('#sbody input[data-k=\"mailDu\"]').value")], ['2026-10-05', False, '05/10/2026'])
+    banc.js("document.querySelector('#sbody input[data-k=\"mailAu\"]').click()"); time.sleep(0.3)
+    banc.js("document.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }))"); time.sleep(0.2)
+    essais.verifier('Echap referme le calendrier', banc.js("!!document.querySelector('.calendrier')"), False)
     essais.verifier('le curseur ecrit la plage', banc.js("$('plage-txt').textContent"), '08:00 → 20:00')
     banc.js("""(() => { const r = document.querySelectorAll('#plage-mail input[type=range]'); r[1].value = 6; glisserPlage(r[1]); })()""")
     essais.verifier('la fin ne passe pas avant le debut : elle pousse', [banc.js('DB.prod.mailDebut'), banc.js('DB.prod.mailFin'), banc.js("$('plage-txt').textContent")],

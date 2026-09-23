@@ -3532,8 +3532,7 @@ function openProd(){
               .map(([v, l]) => `<option value="${v}"${(p.mailCadence || '') === v ? ' selected' : ''}>${l}</option>`).join('')}
           </select></div>
         ${p.mailCadence ? htmlPlageMail(p) : ''}
-        ${p.mailCadence ? `<div class="spec"><label>Du</label><input type="date" ${liaison(p, 'mailDu')} value="${esc(p.mailDu)}"></div>
-          <div class="spec"><label>Au</label><input type="date" ${liaison(p, 'mailAu')} value="${esc(p.mailAu)}"></div>` : ''}
+        ${p.mailCadence ? champDate(p, 'Du', 'mailDu', 'mailAu') + champDate(p, 'Au', 'mailAu', 'mailDu') : ''}
       </div>
       <div class="btns" style="margin-top:12px">
         <button class="btn p" onclick="envoyerJournalMail(false)">Envoyer maintenant</button>
@@ -4340,6 +4339,83 @@ function glisserPlage(input){
   txt.textContent = deuxCh(de) + ':00 → ' + deuxCh(a) + ':00';
   fill.style.left = (de / 23 * 100) + '%'; fill.style.width = ((a - de) / 23 * 100) + '%';
 }
+/* ---------------------------------------------------------- Calendrier */
+/* Un calendrier dans la charte, a la place de celui du navigateur : un mois
+   a la fois, lundi en tete, la date choisie en caramel, la periode jusqu'a
+   l'autre borne teintee. Il s'ouvre sous son champ, comme un menu. */
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const ICO_CAL = ICO('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', 16, 2);
+const isoDate = d => d.getFullYear() + '-' + deuxCh(d.getMonth() + 1) + '-' + deuxCh(d.getDate());
+const dateFr = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+/* un champ de date : la date en clair, le calendrier au doigt. `autre` est la cle de l'autre borne. */
+function champDate(o, label, k, autre){
+  return `<div class="spec"><label>${label}</label>
+    <input readonly value="${esc(dateFr(o[k]))}" placeholder="jj/mm/aaaa" data-o="${o.id || 'prod'}" data-k="${k}" data-autre="${autre || ''}"
+      onclick="ouvrirCalendrier(this)">
+    <button type="button" class="deroul" onclick="ouvrirCalendrier(this.previousElementSibling)" aria-label="Choisir une date">${ICO_CAL}</button></div>`;
+}
+let calendrier = null;   // { input, mois } : le champ servi et le premier jour du mois affiche
+function ouvrirCalendrier(input){
+  if (calendrier && calendrier.input === input){ fermerCalendrier(); return; }
+  fermerMenu(); fermerCalendrier();
+  const o = cible(input.dataset.o), v = (o && o[input.dataset.k]) || '';
+  const base = v ? new Date(+v.slice(0, 4), +v.slice(5, 7) - 1, 1) : new Date();
+  calendrier = { input, mois: new Date(base.getFullYear(), base.getMonth(), 1) };
+  const m = document.createElement('div');
+  m.className = 'menu calendrier';
+  input.closest('.spec').appendChild(m);
+  dessinerCalendrier();
+  const sb = m.closest('#sbody'), r = input.closest('.spec').getBoundingClientRect();
+  const cadre = sb ? sb.getBoundingClientRect() : { top:0, bottom:innerHeight };
+  if (r.bottom + m.offsetHeight > cadre.bottom && r.top - m.offsetHeight > cadre.top) m.classList.add('haut');
+  setTimeout(() => document.addEventListener('click', clicHorsCalendrier), 0);
+}
+function dessinerCalendrier(){
+  const c = calendrier; if (!c) return;
+  const m = c.input.closest('.spec').querySelector('.calendrier'), o = cible(c.input.dataset.o);
+  const choisi = o[c.input.dataset.k] || '', borne = c.input.dataset.autre ? o[c.input.dataset.autre] || '' : '';
+  const [d1, d2] = [choisi, borne].filter(Boolean).sort();
+  const y = c.mois.getFullYear(), mo = c.mois.getMonth(), auj = isoDate(new Date());
+  const decal = (new Date(y, mo, 1).getDay() + 6) % 7;      // lundi en tete
+  let jours = '';
+  for (let i = 0; i < 42; i++){
+    const d = new Date(y, mo, 1 - decal + i), iso = isoDate(d);
+    const cls = ['j', d.getMonth() !== mo && 'hors', iso === auj && 'auj', iso === choisi && 'on', iso === borne && 'borne',
+                 d1 && d2 && iso > d1 && iso < d2 && 'entre'].filter(Boolean).join(' ');
+    jours += `<button type="button" class="${cls}" data-d="${iso}" onclick="choisirDate('${iso}')">${d.getDate()}</button>`;
+  }
+  m.innerHTML = `<div class="ctete">
+      <button type="button" class="ico" onclick="bougerMois(-1)" aria-label="Mois précédent">${CHEVRON(-1)}</button>
+      <b>${MOIS[mo].charAt(0).toUpperCase() + MOIS[mo].slice(1)} ${y}</b>
+      <button type="button" class="ico" onclick="bougerMois(1)" aria-label="Mois suivant">${CHEVRON(1)}</button></div>
+    <div class="cjours">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(x => `<span>${x}</span>`).join('')}${jours}</div>
+    <div class="cpied"><button type="button" onclick="choisirDate('${auj}')">Aujourd’hui</button>
+      <button type="button" onclick="choisirDate('')">Effacer</button></div>`;
+}
+function bougerMois(n){
+  if (!calendrier) return;
+  calendrier.mois = new Date(calendrier.mois.getFullYear(), calendrier.mois.getMonth() + n, 1);
+  dessinerCalendrier();
+}
+function choisirDate(iso){
+  const c = calendrier; if (!c) return;
+  patch(kindDe(c.input.dataset.o), c.input.dataset.o, { [c.input.dataset.k]: iso });
+  c.input.value = dateFr(iso);
+  fermerCalendrier();
+}
+function fermerCalendrier(){
+  if (!calendrier) return false;
+  const sp = calendrier.input.closest('.spec'), m = sp && sp.querySelector('.calendrier');
+  if (m) m.remove();
+  calendrier = null;
+  document.removeEventListener('click', clicHorsCalendrier);
+  return true;
+}
+function clicHorsCalendrier(e){
+  if (!e.target.isConnected) return;
+  if (!e.target.closest('.calendrier') && !e.target.closest('.spec input[readonly]') && !e.target.closest('.deroul')) fermerCalendrier();
+}
+
 /* toutes les trente secondes : si un creneau est la, chaque appareil tente une fois ;
    le serveur ne laisse passer que le premier. Rien de neuf depuis le dernier envoi : rien ne part. */
 function verifierEnvoiAuto(d){
@@ -4608,6 +4684,7 @@ document.addEventListener('keydown', e => {
   }
   if (e.key !== 'Escape') return;
   if (dessin){ fermerCroquis(true); return; }
+  if (fermerCalendrier()) return;
   if (fermerMenu()) return;
   if (fermerFiltres()) return;
   const vp = $('voile-photo');

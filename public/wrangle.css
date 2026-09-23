@@ -873,6 +873,23 @@ select option{background:var(--surface);color:var(--txt)}
 .menu button.on{color:var(--acc);font-weight:700}
 .menu button.on::after{content:"";width:7px;height:12px;margin-right:4px;border-right:2px solid var(--acc);border-bottom:2px solid var(--acc);transform:rotate(45deg)}
 .menu .vide{padding:10px 16px;color:var(--dim2);font-size:13px}
+/* le calendrier : un mois a la fois, sous son champ, cale a droite */
+.menu.calendrier{left:auto;right:0;width:308px;max-height:none;overflow:visible;padding:10px 12px 8px}
+.calendrier .ctete{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.calendrier .ctete b{font:700 15px var(--font-titre);letter-spacing:-.01em}
+.calendrier .ctete .ico{width:38px;height:38px;flex:none}
+.calendrier .cjours{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0}
+.calendrier .cjours span{font:700 10px var(--font);letter-spacing:.08em;color:var(--dim2);text-align:center;padding:6px 0}
+.calendrier .cjours button.j{display:block;width:100%;height:38px;padding:0;border:none;background:none;border-radius:var(--rp);
+  font:600 13.5px var(--font);font-variant-numeric:tabular-nums;color:var(--txt);text-align:center;cursor:pointer}
+.calendrier .j.hors{color:var(--dim2);opacity:.5}
+.calendrier .j.auj{box-shadow:inset 0 0 0 1px var(--line2)}
+.calendrier .j.entre,.calendrier .j.borne{background:rgba(var(--acc-rgb),.14);border-radius:0}
+.calendrier .cjours button.j:hover{background:var(--surface2)}
+.calendrier .cjours button.j.on,.calendrier .cjours button.j.on:hover{background:var(--acc);color:var(--acc-txt);border-radius:var(--rp)}
+.calendrier .j.on::after{content:none}
+.calendrier .cpied{display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+.calendrier .cpied button{width:auto;height:36px;padding:0 6px;color:var(--acc);font:600 13px var(--font)}
 
 /* un choix court (focale, mouvement, int/ext…) : des capsules, la choisie en caramel */
 .capsules{display:flex;flex-wrap:wrap;gap:7px;padding:2px 0 4px}
