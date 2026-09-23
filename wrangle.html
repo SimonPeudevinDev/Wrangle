@@ -285,7 +285,7 @@ catch (e) {
 }
 let view = 'shoot';
 let openId = null, openType = null;
-let dernierPlan = null;
+let dernierPlan = UI.vise || null;   // le plan vise, retrouve d'un chargement a l'autre
 let fJour = UI.jour || '*';
 let fJourR = '*';
 let fEtat = '';                // l'etat du plan : un seul a la fois
@@ -1551,7 +1551,10 @@ function blocPlan(p, seulementRetenues, qui){
       ${vigPlan(p)}
       <div class="pmain">
         <div class="pnum">${p.plan ? esc(p.plan) : 'sans n°'}${
-          `<span class="ptags">${htmlPtags(p)}</span>`}</div>
+          `<span class="ptags">${htmlPtags(p)}</span>`}
+          <button type="button" class="viser${dernierPlan === p.id ? ' on' : ''}" data-vise="${p.id}"
+            onclick="event.stopPropagation();viser('${p.id}')"
+            title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
         ${p.desc ? `<div class="pdesc">${esc(p.desc)}</div>` : ''}
         ${ctx ? `<div class="pctx">${ctx}</div>` : ''}
         ${el ? `<div class="pelem">${el}</div>` : ''}
@@ -1688,12 +1691,27 @@ function majFab(){
   }
   f2.textContent = p ? '+ Prise ' + (prisesDe(p.id).length + 1) : '+ Prise';
   majMoteurFiche();
+  majVise();
 }
 
 /* --------------------------------------------------------------- Chrono */
 
 const fmtDuree = s => s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + deuxCh(s % 60) + 's';
 const fmtChrono = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return deuxCh(Math.floor(s / 60)) + ':' + deuxCh(s % 60); };
+
+/* Le plan vise : celui que le Moteur et + Prise vont tourner. On le choisit
+   d'un doigt sur sa carte ; il suit aussi la derniere prise ajoutee. */
+const ICO_VISER = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', 14, 2);
+function viser(id){
+  if (!plan(id)) return;
+  dernierPlan = id;
+  majFab();
+}
+/* les cartes montrent le plan vise, et l'appareil s'en souvient */
+function majVise(){
+  document.querySelectorAll('.viser').forEach(b => b.classList.toggle('on', b.dataset.vise === dernierPlan));
+  if ((UI.vise || null) !== (dernierPlan || null)){ UI.vise = dernierPlan || null; ecrireUI(); }
+}
 
 function fabAction(){ if (chrono) couper(); else moteur(); }
 function moteur(){

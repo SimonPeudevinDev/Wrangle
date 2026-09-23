@@ -139,7 +139,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Onze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Douze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -154,6 +154,7 @@ py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
 py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues, plans tournés, reste à tourner
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
+py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
