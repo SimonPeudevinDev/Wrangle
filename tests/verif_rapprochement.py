@@ -70,25 +70,29 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
     banc.js("retirerSource(0); $('rap-in')")
     essais.verifier('sans fichier, le bloc n a que ce navigateur', banc.js("document.querySelectorAll('#rapprocher .rsource').length"), 1)
 
-    # -- le depot chez l'hebergeur : on joue l'hebergeur, qui reconnait le jeton de Simon, en interceptant les appels
+    # -- le depot chez l'hebergeur : on joue l'hebergeur en interceptant les appels
     banc.js("""
       window.__depots = {}; window.__appels = [];
       RESEAU.possible = false;   // comme sur le site
       const vrai = window.fetch;
       window.fetch = (url, o) => {
         if (!/depot\\/(deposer|lister)\\.php$/.test(url)) return vrai(url, o);
-        const corps = JSON.parse(o.body); window.__appels.push([url.replace(/.*\\//, ''), corps.jeton || '']);
+        const corps = JSON.parse(o.body); window.__appels.push([url.replace(/.*\\//, ''), corps.nom || '']);
         const rep = (statut, obj) => Promise.resolve({ status: statut, json: () => Promise.resolve(obj) });
-        if (corps.jeton !== 'jeton-de-simon') return rep(401, { erreur: 'connexion requise' });
-        if (/deposer/.test(url)){ window.__depots['Simon'] = { nom: 'Simon', quand: '2026-10-05T18:40:00+02:00', projet: corps.projet }; return rep(200, { ok: true, nom: 'Simon', quand: '2026-10-05T18:40:00+02:00' }); }
+        if (/deposer/.test(url)){
+          if (!corps.nom) return rep(400, { erreur: 'nom et projet attendus' });
+          window.__depots[corps.nom] = { nom: corps.nom, quand: '2026-10-05T18:40:00+02:00', projet: corps.projet };
+          return rep(200, { ok: true, nom: corps.nom, quand: '2026-10-05T18:40:00+02:00' });
+        }
         return rep(200, { depots: Object.values(window.__depots) });
       };
-      UI.jeton = 'perime'; deposerSaisies();
+      UI.nom = ''; deposerSaisies();
     """)
     time.sleep(0.5)
-    essais.verifier('un jeton refuse est oublie, et l entree revient', [banc.js('UI.jeton'), banc.js("!$('voile-nom').hidden"), banc.js("$('dlg').hidden")], ['', True, True])
-    banc.js("$('voile-nom').hidden = true; UI.jeton = 'jeton-de-simon'; deposerSaisies()"); time.sleep(0.5)
-    essais.verifier('connecte, les saisies partent sous le prenom du compte', banc.js("Object.keys(window.__depots)"), ['Simon'])
+    essais.verifier('sans prenom, le depot demande d abord qui saisit', [banc.js("!$('voile-nom').hidden"), banc.js("Object.keys(window.__depots)")], [True, []])
+    banc.nommer()
+    banc.js("deposerSaisies()"); time.sleep(0.5)
+    essais.verifier('avec le prenom, les saisies partent sous ce prenom, sans cle', banc.js("Object.keys(window.__depots)"), ['Simon'])
     essais.verifier('et la page le dit', banc.js("$('toast-msg').textContent"), 'Saisies déposées à 18:40')
     banc.js("window.__depots['Alice'] = { nom:'Alice', quand:'2026-10-05T18:45:00+02:00', projet: window.__d2 }; recupererDepots()"); time.sleep(0.6)
     essais.verifier('le DIT recupere les depots des autres, pas le sien',

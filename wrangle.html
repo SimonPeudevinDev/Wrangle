@@ -106,24 +106,11 @@
   <div class="dconseil" id="dconseil"></div>
 </div>
 
-<!-- l'entree : prenom et mot de passe. Le compte se cree avec la cle du tournage. -->
 <div class="voile" id="voile-nom" hidden>
-  <div class="boite entree">
-    <h2 id="entree-titre">Qui saisit sur cet appareil ?</h2>
-    <p id="entree-texte">Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.</p>
-    <form class="specs" onsubmit="event.preventDefault();validerEntree()">
-      <div class="spec"><label>Prénom</label><input id="entree-nom" autocomplete="username" autocapitalize="words" placeholder="Marie"></div>
-      <div class="spec"><label>Mot de passe</label><input id="entree-mdp" type="password" autocomplete="current-password" placeholder="••••••"></div>
-      <div class="spec entree-creer" hidden><label>Rôle</label>
-        <label class="case"><input type="checkbox" id="entree-dit">Ce compte est le DIT</label></div>
-      <div class="entree-erreur" id="entree-erreur" hidden></div>
-      <div class="btns" style="margin-top:16px">
-        <button class="btn p" type="submit" id="entree-ok">Entrer</button>
-        <button class="btn" type="button" id="entree-bascule" onclick="basculerEntree()">Créer un compte</button>
-      </div>
-    </form>
-    <div class="note" style="margin-top:14px"><button type="button" class="lien" onclick="continuerSansCompte()">Continuer sans compte</button>
-      · hors ligne, ou pour un essai : le prénom seul, sans dépôt.</div>
+  <div class="boite">
+    <h2>Qui saisit sur cet appareil ?</h2>
+    <p>Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.</p>
+    <div class="choix" id="choix-nom"></div>
   </div>
 </div>
 <div class="voile" id="voile-photo" hidden onclick="this.hidden=true"><img alt=""></div>
@@ -264,6 +251,7 @@ const PLAN_NEUF = () => ({
 
 /* L'equipe du plateau : un bouton par prenom au premier lancement. Changer
    cette liste suffit a changer les choix proposes. */
+const EQUIPE = ['Romain', 'Simon', 'Tom', 'Victoire', 'Marie', 'Georges', 'Alex'];
 
 function lireUI(){
   let u = {};
@@ -699,88 +687,25 @@ function setNom(v){
   UI.nom = (v || '').trim(); ecrireUI();
   envoyerPresence();
 }
-/* ------------------------------------------------------------ Comptes */
-/* Un compte par personne, prenom et mot de passe : la page sait qui saisit,
-   et si c'est le DIT. Creer un compte est ouvert, le site est prive. Le
-   serveur du plateau (/api/…) et l'hebergeur du site (depot/….php) repondent
-   aux memes appels. La connexion tient 90 jours sur l'appareil. Sans reseau,
-   « Continuer sans compte » pose juste un prenom, comme avant. */
-const urlCompte = quoi => RESEAU.possible ? '/api/' + quoi : 'depot/' + quoi + '.php';
-const appelCompte = (quoi, corps) =>
-  poster(urlCompte(quoi), JSON.stringify(corps)).then(r => r.json().then(rep => ({ rep, statut: r.status })));
-const connecte = () => !!(UI.jeton && UI.nom);
-
-let entreeCreation = false;
+/* Un bouton par personne, celui en cours en or. Sert a l'arrivee comme dans
+   le panneau Journee, ou l'on change de personne en cours de tournage. */
+function boutonsEquipe(taille){
+  return EQUIPE.map((n, i) =>
+    `<button class="btn ${taille}${n === UI.nom ? ' p' : ''}" onclick="choisirNom(${i})">${esc(n)}</button>`
+  ).join('');
+}
 function demanderNom(){
+  $('choix-nom').innerHTML = boutonsEquipe('');
   $('voile-nom').hidden = false;
-  entreeCreation = false; dessinerEntree();
-  setTimeout(() => $('entree-nom').focus(), 50);
 }
-function dessinerEntree(){
-  const c = entreeCreation;
-  $('entree-titre').textContent = c ? 'Créer un compte' : connecte() ? 'Changer de compte' : 'Qui saisit sur cet appareil ?';
-  $('entree-texte').textContent = c ? 'Votre prénom, et un mot de passe à vous. Le DIT est celui qui récupère les saisies de tous.'
-    : 'Votre prénom est noté sur les prises que vous ajoutez, et les autres voient sur quel plan vous êtes.';
-  document.querySelectorAll('.entree-creer').forEach(e => { e.hidden = !c; });
-  $('entree-mdp').autocomplete = c ? 'new-password' : 'current-password';
-  $('entree-ok').textContent = c ? 'Créer et entrer' : 'Entrer';
-  $('entree-bascule').textContent = c ? 'J’ai déjà un compte' : 'Créer un compte';
-  $('entree-erreur').hidden = true;
-}
-function basculerEntree(){ entreeCreation = !entreeCreation; dessinerEntree(); $('entree-nom').focus(); }
-function erreurEntree(msg){ const e = $('entree-erreur'); e.textContent = msg; e.hidden = false; }
-/* connecte : le jeton et le prenom sont poses, le voile tombe */
-function entrer(rep){
-  UI.jeton = rep.jeton || ''; UI.dit = !!rep.dit;
-  setNom(rep.nom);
+function choisirNom(i){
+  const n = EQUIPE[i];
+  if (!n) return;
+  setNom(n);
   $('voile-nom').hidden = true;
   if (openType === 'prod') openProd();
-  toast('Bonjour ' + rep.nom);
+  toast('Bonjour ' + n);
 }
-function validerEntree(){
-  const nom = $('entree-nom').value.trim(), mdp = $('entree-mdp').value;
-  if (!nom || !mdp) return erreurEntree('Prénom et mot de passe, s’il vous plaît.');
-  const dejaLa = connecte();
-  const suite = entreeCreation
-    ? appelCompte('inscrire', { nom, mdp, dit: $('entree-dit').checked })
-        .then(({ rep, statut }) => {
-          if (!rep.ok) throw new Error(rep.erreur || ('réponse ' + statut));
-          // le DIT qui ouvre un compte a quelqu'un d'autre reste sur le sien ;
-          // s'il refait le sien, on se reconnecte pour que le role suive
-          if (dejaLa && rep.nom.toLowerCase() !== UI.nom.toLowerCase()){ toast('Compte créé pour ' + rep.nom); $('voile-nom').hidden = true; if (openType === 'prod') openProd(); return null; }
-          return appelCompte('connecter', { nom, mdp });
-        })
-    : appelCompte('connecter', { nom, mdp });
-  suite.then(r => {
-    if (!r) return;
-    if (r.rep.ok) entrer(r.rep); else erreurEntree(r.rep.erreur || ('réponse ' + r.statut));
-  }).catch(e => erreurEntree(e instanceof Error && e.message ? e.message : 'Serveur injoignable. Réessayez, ou continuez sans compte.'));
-}
-/* sans compte : le prenom seul, pour travailler hors ligne ou essayer */
-function sansCompte(nom){
-  UI.jeton = ''; UI.dit = false;
-  setNom(nom);
-  $('voile-nom').hidden = true;
-  if (openType === 'prod') openProd();
-}
-function continuerSansCompte(){
-  demanderTexte('Votre prénom', { valeur: $('entree-nom').value.trim(), ok:'Continuer' }).then(v => { if (v && v.trim()) sansCompte(v.trim()); });
-}
-function deconnecter(){
-  UI.jeton = ''; UI.dit = false; setNom('');
-  demanderNom();
-}
-/* pour le DIT : les comptes de l'equipe, et un bouton pour en ouvrir un */
-function voirComptes(){
-  const z = $('comptes-liste'); if (!z) return;
-  appelCompte('comptes', { jeton: UI.jeton }).then(({ rep, statut }) => {
-    if (!rep.comptes) return prevenir('Impossible de lire les comptes.', { detail: rep.erreur || ('réponse ' + statut) });
-    z.innerHTML = `<div class="cinq" style="margin-top:10px">${rep.comptes.map(c =>
-        `<div class="ligne"><span>${esc(c.nom)}</span><b>${c.dit ? 'DIT' : ''}</b></div>`).join('') || '<div class="note">Aucun compte.</div>'}</div>
-      <div class="btns" style="margin-top:10px"><button class="btn" onclick="ouvrirCreation()">+ Ouvrir un compte</button></div>`;
-  }).catch(() => prevenir('Impossible de lire les comptes.', { detail:'Serveur injoignable.' }));
-}
-function ouvrirCreation(){ $('voile-nom').hidden = false; entreeCreation = true; dessinerEntree(); $('entree-nom').value = ''; $('entree-mdp').value = ''; $('entree-nom').focus(); }
 
 /* ------------------------------------------------------------------ Theme */
 
@@ -3490,13 +3415,8 @@ function ouEst(x){
   return ` <small>— sur ${esc(txt)}</small>`;
 }
 function htmlEquipe(){
-  const moi = `<div class="specs"><div class="spec"><label>Compte</label>
-      <span class="val">${UI.nom ? esc(UI.nom) + (UI.dit ? ' · DIT' : '') + (UI.jeton ? '' : ' · sans compte') : '—'}</span></div></div>
-    <div class="btns" style="margin-top:12px">
-      <button class="btn" onclick="deconnecter()">Changer de compte</button>
-      ${UI.dit ? `<button class="btn" onclick="voirComptes()">Comptes de l’équipe</button>` : ''}
-    </div>
-    <div id="comptes-liste"></div>`;
+  const moi = `<div class="specs"><div class="spec col"><label>Votre nom</label>
+    <div class="choix">${boutonsEquipe('sm')}</div></div></div>`;
   if (!RESEAU.possible)
     return moi + `<div class="note">Cette page travaille seule : un seul appareil,
       données rangées dans ce navigateur.<br>
@@ -3601,7 +3521,7 @@ function openProd(){
       ${RESEAU.possible ? '' : `<div class="btns" style="margin-top:10px">
         <button class="btn p" onclick="deposerSaisies()">Déposer mes saisies</button>
       </div>
-      <div class="note">Vos saisies partent chez l’hébergeur du site, sous votre compte, pour que le DIT les
+      <div class="note">Vos saisies partent chez l’hébergeur du site, sous votre prénom, pour que le DIT les
         récupère. ${UI.depose ? 'Dernier dépôt : ' + esc(quandDepot(UI.depose)) + '.' : 'Aucun dépôt pour l’instant.'}</div>`}
       <div class="note">Recharger le découpage remet à jour les fiches depuis le DT d’origine${multi}.
         Les prises, éléments, notes, états et jours sont conservés.
@@ -4329,31 +4249,27 @@ function telechargerDIT(){
 
 /* ------------------------------------------------- Le depot des saisies */
 /* Sur le site, chacun depose ses saisies d'un bouton : elles partent chez
-   l'hebergeur (depot/deposer.php) sous son compte, un fichier par personne.
-   Le DIT les recupere toutes dans « Rapprocher les saisies ». Le serveur de
-   plateau n'en a pas besoin : il partage deja tout en direct. */
+   l'hebergeur (depot/deposer.php) sous son prenom, un fichier par personne.
+   Le DIT les recupere toutes dans « Rapprocher les saisies ». Pas de cle ni de
+   mot de passe : le site est prive, seule l'equipe en connait l'adresse. Le
+   serveur de plateau n'en a pas besoin : il partage deja tout en direct. */
 const PAS_DE_DEPOT = 'Pas de dépôt à cette adresse : il faut ouvrir le site chez l’hébergeur.';
-/* la reponse du depot : { rep, statut } ; une connexion refusee est oubliee, on la redemandera */
-function appelDepot(quoi, corps){
-  return appelCompte(quoi, Object.assign({ jeton: UI.jeton }, corps)).then(x => {
-    if (x.statut === 401){ UI.jeton = ''; ecrireUI(); demanderNom(); }
-    return x;
-  });
-}
+/* la reponse du depot : { rep, statut } */
+const appelDepot = (quoi, corps) =>
+  poster('depot/' + quoi + '.php', JSON.stringify(corps)).then(r => r.json().then(rep => ({ rep, statut: r.status })));
 function deposerSaisies(){
-  if (!connecte()) return demanderNom();
-  appelDepot('deposer', { projet: DB }).then(({ rep, statut }) => {
+  if (!UI.nom) return demanderNom();   // c'est le prenom qui nomme le depot
+  appelDepot('deposer', { nom: UI.nom, projet: DB }).then(({ rep, statut }) => {
     if (rep.ok){
       UI.depose = rep.quand; ecrireUI();
       toast('Saisies déposées à ' + hhmm(new Date(rep.quand)));
       if (openType === 'prod') openProd();
-    } else if (statut !== 401) prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });
+    } else prevenir('Le dépôt n’a pas pris.', { detail: rep.erreur || ('réponse ' + statut) });
   }).catch(() => prevenir('Le dépôt n’a pas pris.', { detail: PAS_DE_DEPOT }));
 }
 function recupererDepots(){
-  if (!connecte()) return demanderNom();
   appelDepot('lister', {}).then(({ rep, statut }) => {
-    if (!rep.depots){ if (statut !== 401) prevenir('Impossible de lire les dépôts.', { detail: rep.erreur || ('réponse ' + statut) }); return; }
+    if (!rep.depots) return prevenir('Impossible de lire les dépôts.', { detail: rep.erreur || ('réponse ' + statut) });
     let n = 0;
     rep.depots.forEach(d => {
       if (d.nom === UI.nom) return;   // ses propres saisies sont deja la, dans ce navigateur
@@ -5077,7 +4993,7 @@ renderAll();
 reprendrePlace();
 majPresence();
 if (RESEAU.possible) connecter();
-if (!UI.nom) demanderNom();
+if (!UI.nom) demanderNom();   // sur le site aussi : c'est le prenom qui signe les prises et nomme le depot
 </script>
 
 

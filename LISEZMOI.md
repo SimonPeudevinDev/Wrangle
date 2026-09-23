@@ -99,21 +99,10 @@ prises.
 
 **Sans échange de fichiers.** Quand le site est servi par un hébergeur qui exécute PHP (OVH), la
 boîte de dépôt `depot/` fait le tour : chacun clique ⚙ → Données → « Déposer mes saisies », et ses
-saisies partent chez l'hébergeur sous son compte (un fichier par personne, le dernier dépôt
+saisies partent chez l'hébergeur sous son prénom (un fichier par personne, le dernier dépôt
 remplace le précédent, hors de portée du web). Le DIT clique « Récupérer les dépôts » dans le
-rapprochement.
-
-## Les comptes
-
-À l'entrée, chacun donne son prénom et son mot de passe ; l'appareil reste connecté 90 jours. Les
-comptes se créent sur place, sans clé (« Créer un compte » sur l'écran d'entrée, ou ⚙ → Journée →
-« Comptes de l'équipe » pour le DIT) : le site est privé, seule l'équipe en connaît l'adresse.
-Refaire son compte change son mot de passe. La case « Ce compte est le DIT » donne le droit de
-récupérer les dépôts et de voir les comptes. Sans réseau, « Continuer sans compte » pose un
-prénom seul, sans dépôt possible.
-
-Chez l'hébergeur, les comptes vivent dans `depot/comptes/`, interdit au web ; sur le serveur du
-plateau, dans `data/comptes.json`. Mots de passe hachés dans les deux cas.
+rapprochement. Pas de clé ni de mot de passe : le site est privé, seule l'équipe en connaît
+l'adresse, et le prénom choisi à l'entrée suffit.
 
 ## Le journal DIT par mail
 
@@ -200,7 +189,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Quinze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Quatorze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -218,7 +207,6 @@ py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un pl
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
-py tests/verif_comptes.py          les comptes : entrer, se tromper, changer, ouvrir un compte à l'équipe
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
