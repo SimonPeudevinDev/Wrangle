@@ -1681,14 +1681,19 @@ function majFab(){
   [f, f2, f3].forEach(b => { b.hidden = view !== 'shoot'; });
   if (view !== 'shoot') return;
   const p = planVise();
+  // le bouton est redessine deux fois par seconde pendant une prise : on ne
+  // touche au DOM que si son texte change, sinon l'onde du bouton tressaute
+  let cls, html;
   if (chrono){
     const t = prise(chrono.priseId);
-    f.className = 'fab rec';
-    f.innerHTML = `&#9632; Coupez <em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em>`;
+    cls = 'fab rec';
+    html = `&#9632; Coupez <em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em>`;
   } else {
-    f.className = 'fab';
-    f.innerHTML = p ? `&#9679; Moteur <em>plan ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : `&#9679; Moteur`;
+    cls = 'fab';
+    html = p ? `&#9679; Moteur <em>plan ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : `&#9679; Moteur`;
   }
+  if (f.className !== cls) f.className = cls;
+  if (f.dataset.html !== html){ f.dataset.html = html; f.innerHTML = html; }
   f2.textContent = p ? '+ Prise ' + (prisesDe(p.id).length + 1) : '+ Prise';
   majMoteurFiche();
   majVise();
