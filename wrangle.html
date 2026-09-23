@@ -3800,13 +3800,26 @@ function modeleDIT(j){
       } else if (x.etat === 'drop') abandonnes.push({ ref, meta });
       else reste.push({ ref, meta });
     });
+    /* 3. Ce qu'il y a a sauvegarder : un fichier par prise, carte par carte,
+       du premier au dernier clip ; et ce qui manque pour les retrouver. */
+    const parCarte = new Map();
+    T.forEach(t => { const c = (t.carte || '').trim(); if (c) parCarte.set(c, (parCarte.get(c) || []).concat([t])); });
+    const sauvegarde = {
+      total: T.length,
+      cartes: [...parCarte].sort((a, b) => a[0].localeCompare(b[0], 'fr', { numeric: true })).map(([carte, l]) => {
+        const clips = l.map(t => (t.clip || '').trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+        return { carte, n: l.length, premier: clips[0] || '', dernier: clips[clips.length - 1] || '' };
+      }),
+      sansCarte: T.filter(t => !(t.carte || '').trim()).length,
+      sansClip: T.filter(t => !(t.clip || '').trim()).length
+    };
     const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
     return {
-      jour, titre: (p.titre || 'Projet sans titre') + ' — journal DIT',
+      jour, titre: (p.titre || 'Projet sans titre') + ' — journal DIT', sauvegarde,
       sous: [nomJour(jour), dec, p.date, p.unit, p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler]
               .filter(Boolean).join(' · '),
       chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
-                 [gardees.length, 'prises à monter'], [T.length, 'prises au total'],
+                 [T.length, 'fichier' + plur(T.length) + ' à sauvegarder'], [gardees.length, 'prises à monter'],
                  [T.filter(t => t.statut === 'OK').length, 'OK'], [T.filter(t => t.statut === 'NG').length, 'NG'],
                  [cartes.length, 'carte' + plur(cartes.length) + (cartes.length && cartes.length <= 6 ? ' · ' + cartes.join(', ') : '')]],
       montage, tournes, reste, abandonnes, pied
@@ -3977,6 +3990,17 @@ function pdfDIT(j){
       doc.texte(x, doc.y - 11, l, { taille: 8, gris: .35 }); x += largeurPdf(l, 8, 'H') + 12;
     });
     doc.y -= 17; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, .6);
+
+    // 0. ce qu'il y a a sauvegarder : le premier travail du DIT
+    const s = m.sauvegarde;
+    section('À sauvegarder : ' + s.total + ' fichier' + plur(s.total) + (s.cartes.length ? ' sur ' + s.cartes.length + ' carte' + plur(s.cartes.length) : ''));
+    if (s.cartes.length)
+      tableauPdf(doc, [['Carte', 70], ['Fichiers', 50], ['Du clip', 110, 'C'], ['Au clip', 110, 'C'], ['', L - 340]],
+                 s.cartes.map(c => ({ v: [c.carte, String(c.n), c.premier, c.dernier, ''] })), 8);
+    else { doc.texte(PDF_M, doc.y - 8, s.total ? 'Aucune carte renseignée sur les prises.' : 'Aucune prise enregistrée.', { taille: 8, gris: .45 }); doc.y -= 12; }
+    const manques = [s.sansCarte && s.cartes.length ? s.sansCarte + ' prise' + plur(s.sansCarte) + ' sans carte' : '',
+                     s.sansClip ? s.sansClip + ' prise' + plur(s.sansClip) + ' sans nom de clip' : ''].filter(Boolean);
+    if (manques.length){ doc.place(14); doc.texte(PDF_M, doc.y - 9, 'À compléter : ' + manques.join(' · ') + '.', { taille: 7.5, gris: .45 }); doc.y -= 13; }
 
     // 1. ce que le montage attend
     section('Pour le montage — prises retenues');

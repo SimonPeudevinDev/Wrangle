@@ -41,8 +41,12 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('le reste a tourner : les autres plans du jour, en liste', len(m['reste']), n_jour - 3)
     essais.verifier('une ligne du reste nomme sequence et plan', m['reste'][0]['ref'].startswith('Séquence 06 · Plan '), True)
     essais.verifier('le plan abandonne est a part', len(m['abandonnes']), 1)
-    essais.verifier('l en-tete compte', [c[0] for c in m['chiffres']][:4], [2, n_jour - 3, 1, 3])
+    essais.verifier('l en-tete compte', [c[0] for c in m['chiffres']][:4], [2, n_jour - 3, 3, 1])
     essais.verifier('et nomme la carte', m['chiffres'][6][1], 'carte · A001')
+    essais.verifier('a sauvegarder : un fichier par prise', m['sauvegarde']['total'], 3)
+    essais.verifier('carte par carte, du premier au dernier clip', m['sauvegarde']['cartes'],
+                    [{'carte': 'A001', 'n': 3, 'premier': 'A001C001', 'dernier': 'A001C003'}])
+    essais.verifier('rien ne manque pour les retrouver', [m['sauvegarde']['sansCarte'], m['sauvegarde']['sansClip']], [0, 0])
     essais.verifier('une journee seule : un seul journal', len(banc.js('modeleDIT(%s)' % json.dumps(j))), 1)
 
     # -- le PDF : un vrai fichier, lisible sans compression
@@ -57,6 +61,7 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('le clip retenu s y lit', '(A001C002)' in pdf, True)
     essais.verifier('les accents passent en WinAnsi', 'S\xc9QUENCE 06' in pdf and '(Reste \xe0 tourner' not in pdf and 'RESTE \xc0 TOURNER' in pdf, True)
     essais.verifier('le montage vient avant le reste a tourner', 0 < pdf.find('(A001C002)') < pdf.find('RESTE \xc0 TOURNER'), True)
+    essais.verifier('la sauvegarde ouvre le journal', 0 < pdf.find('SAUVEGARDER : 3 FICHIERS SUR 1 CARTE') < pdf.find('(A001C002)'), True)
     essais.verifier('la prise retenue est en gras sur fond gris', '/CB 7.5 Tf' in pdf and ' re f' in pdf, True)
     essais.verifier('qui a saisi, et quand, dans le PDF', '(Bob \xb7 09:15)' in pdf, True)
     essais.verifier('les notes a parentheses sont echappees', banc.js(
