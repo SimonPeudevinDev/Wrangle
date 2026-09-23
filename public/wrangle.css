@@ -32,6 +32,8 @@
   --g1:#f0c060;--g2:#e7b04a;--g3:#c48b2e;
   --ok:#84cc8e;--ok-rgb:132,204,142;--ok-g1:#9adba2;--ok-g2:#6fbf7a;--ok-txt:#08210e;
   --ng:#e8675e;--ng-rgb:232,103,94;--ng-g1:#f07a70;--ng-g2:#d14e45;--ng-txt:#fff;
+  /* les etiquettes du decoupage : une couleur par famille (LIVE, VFX, CG / VAL, TBC, KILLED) */
+  --tag-vert:var(--ok);--tag-rouge:var(--ng);--tag-bleu:#6fa8e6;--tag-orange:#f0953f;
   --r:8px;                          /* ce qui reste arrondi : vignettes, boites */
   --rp:999px;                       /* les capsules */
   --nav:62px;                       /* la barre du bas */
@@ -56,6 +58,7 @@
   --dim2:#8c7b6f;
   --gris:96,76,62;
   --acc:#9a6a14;
+  --tag-bleu:#2f6fbf;--tag-orange:#c9741c;
   --acc-rgb:154,106,20;
   --acc-txt:#fff;
   --ok:#2f8a4a;--ok-rgb:47,138,74;--ok-g1:#4aa866;--ok-g2:#2f8a4a;--ok-txt:#fff;
@@ -361,6 +364,11 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
    des elements captes, en petites capitales juste dessous. */
 .ptags{position:relative;display:inline-flex;gap:6px;flex-wrap:wrap}
 /* chaque etiquette a sa couleur : ce qu'elle est (LIVE, VFX, CG), ce qu'elle devient (TBC, VAL, KILLED) */
+.ptag.t-vert,.capsules .fc.on.t-vert{color:var(--tag-vert);border-color:var(--tag-vert)}
+.ptag.t-rouge,.capsules .fc.on.t-rouge{color:var(--tag-rouge);border-color:var(--tag-rouge)}
+.ptag.t-bleu,.capsules .fc.on.t-bleu{color:var(--tag-bleu);border-color:var(--tag-bleu)}
+.ptag.t-orange,.capsules .fc.on.t-orange{color:var(--tag-orange);border-color:var(--tag-orange)}
+/* chaque etiquette a sa couleur : ce qu'elle est (LIVE, VFX, CG), ce qu'elle devient (TBC, VAL, KILLED) */
 .ptag{
   border:1px solid var(--line2);border-radius:var(--rp);padding:3px 9px 4px;
   font:700 9.5px var(--font);letter-spacing:.1em;color:var(--dim);text-transform:uppercase;
@@ -372,6 +380,8 @@ button.ptag:hover,button.ptag.on{background:var(--surface2)}
 .menu.puce{position:fixed;left:auto;right:auto;top:auto;z-index:70;width:max-content;min-width:118px;padding:4px 0}
 .menu.puce button{height:36px;padding:0 14px;font:700 10.5px var(--font);letter-spacing:.1em;text-transform:uppercase;gap:12px}
 .menu.puce button.on::after{border-color:currentColor}
+.menu.puce button.t-vert{color:var(--tag-vert)} .menu.puce button.t-rouge{color:var(--tag-rouge)}
+.menu.puce button.t-bleu{color:var(--tag-bleu)} .menu.puce button.t-orange{color:var(--tag-orange)}
 /* la description du plan : c'est ce qu'on lit en premier sur le plateau */
 .pdesc{font-size:15px;line-height:1.45;color:var(--txt);margin-top:6px;white-space:pre-line}
 /* le contexte technique : lisible, pas relegue en gris minuscule */
@@ -537,7 +547,7 @@ nav button i{display:none}
 .pcote .ptags{margin:0}
 .pl{display:grid;gap:0 14px;align-items:end}
 .pl1{grid-template-columns:68px 62px minmax(0,1.4fr) 78px minmax(0,1fr)}
-.pl2{grid-template-columns:minmax(0,1fr) 140px 104px 60px 64px}
+.pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px 64px}   /* le cadrage peut en porter plusieurs */
 .pl3{grid-template-columns:minmax(0,1fr)}
 .pl3 .spec.col{padding:0}
 .pc{display:flex;flex-direction:column;gap:2px;min-width:0;position:relative}

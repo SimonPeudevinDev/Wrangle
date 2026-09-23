@@ -891,10 +891,12 @@ function ouvrirMenu(btn){
   const row = btn.closest('.spec, .pc'), input = row.querySelector('input');
   let liste = LISTES[btn.dataset.liste] || [];
   if (typeof liste === 'function') liste = liste();
-  const v = (input.value || '').trim().toLowerCase();
+  // un champ a plusieurs valeurs (« Large / Poitrine ») coche chacune d'elles
+  const multi = !!btn.dataset.multi;
+  const choisis = multi ? valeursDe(input.value) : [(input.value || '').trim()];
   const m = document.createElement('div');
-  m.className = 'menu';
-  m.innerHTML = liste.map(x => `<button type="button" class="${x.toLowerCase() === v ? 'on' : ''}" data-v="${esc(x)}"
+  m.className = 'menu' + (multi ? ' multi' : '');
+  m.innerHTML = liste.map(x => `<button type="button" class="${choisis.some(c => memeVal(c, x)) ? 'on' : ''}" data-v="${esc(x)}"
       onclick="choisirMenu(this)">${esc(x)}</button>`).join('') || '<div class="vide">Rien à proposer</div>';
   row.appendChild(m);
   btn.classList.add('on');
@@ -917,8 +919,20 @@ function clicHorsMenu(e){
   if (!e.target.isConnected) return;
   if (!e.target.closest('.menu') && !e.target.closest('.deroul') && !e.target.closest('.ptag')) fermerMenu();
 }
+/* Les valeurs d'un champ qui en porte plusieurs, separees par « / ». */
+const valeursDe = s => String(s || '').split('/').map(x => x.trim()).filter(Boolean);
 function choisirMenu(b){
   const input = b.closest('.spec, .pc').querySelector('input');
+  if (b.closest('.menu').classList.contains('multi')){
+    // on coche et decoche : le menu reste ouvert, le champ s'ecrit « Large / Poitrine »
+    const v = b.dataset.v, actuels = valeursDe(input.value);
+    const i = actuels.findIndex(x => memeVal(x, v));
+    if (i >= 0) actuels.splice(i, 1); else actuels.push(v);
+    input.value = actuels.join(' / ');
+    live(input);
+    b.classList.toggle('on', i < 0);
+    return;
+  }
   input.value = b.dataset.v;
   live(input);
   fermerMenu();
@@ -3123,7 +3137,7 @@ function champPrep(p, k, label, opt){
     ? `<textarea rows="1" ${at}${ph}>${esc(p[k])}</textarea>`
     : `<input ${at} value="${esc(p[k])}"${ph} autocomplete="off">`;
   return `<label class="pc ${opt.cls || ''}"><span>${label}</span>${champ}` +
-    (opt.dl ? `<button type="button" class="deroul" data-liste="${opt.dl}" onclick="ouvrirMenu(this)" aria-label="Choisir dans la liste">${CHEVRON_BAS}</button>` : '') +
+    (opt.dl ? `<button type="button" class="deroul" data-liste="${opt.dl}"${opt.multi ? ' data-multi="1"' : ''} onclick="ouvrirMenu(this)" aria-label="Choisir dans la liste">${CHEVRON_BAS}</button>` : '') +
     `</label>`;
 }
 // masquee (section repliee, vue cachee), la zone ne mesure rien : on la laisse a sa ligne
@@ -3160,7 +3174,7 @@ function rangPrep(p){
       </div>
       <div class="pl pl2">
         ${champPrep(p, 'desc', 'Description', {cls:'w-desc', area:1, ph:'Ce que l’on voit, ce qui se passe…'})}
-        ${champPrep(p, 'cadrage', 'Cadrage', {cls:'w-cadr', ph:'Large', dl:'dl-cadrage'})}
+        ${champPrep(p, 'cadrage', 'Cadrage', {cls:'w-cadr', ph:'Large', dl:'dl-cadrage', multi:1})}
         ${champPrep(p, 'focale', 'Focale', {cls:'w-foc', ph:'35 mm', dl:'dl-focale'})}
         ${champPrep(p, 'duree', 'Durée', {cls:'w-dur', ph:'3s'})}
         <label class="pc w-ord"><span>Ordre</span>
