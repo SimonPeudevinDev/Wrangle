@@ -285,7 +285,7 @@ catch (e) {
 }
 let view = 'shoot';
 let openId = null, openType = null;
-let dernierPlan = UI.vise || null;   // le plan vise, retrouve d'un chargement a l'autre
+let dernierPlan = null;   // le dernier plan touche : une prise ouverte ou ajoutee
 let fJour = UI.jour || '*';
 let fJourR = '*';
 let fEtat = '';                // l'etat du plan : un seul a la fois
@@ -1552,7 +1552,7 @@ function blocPlan(p, seulementRetenues, qui){
       <div class="pmain">
         <div class="pnum">${p.plan ? esc(p.plan) : 'sans n°'}${
           `<span class="ptags">${htmlPtags(p)}</span>`}
-          <button type="button" class="viser${dernierPlan === p.id ? ' on' : ''}" data-vise="${p.id}"
+          <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
         ${p.desc ? `<div class="pdesc">${esc(p.desc)}</div>` : ''}
@@ -1680,7 +1680,7 @@ function majFab(){
   const f = $('fab'), f2 = $('fab2'), f3 = $('fab3');
   [f, f2, f3].forEach(b => { b.hidden = view !== 'shoot'; });
   if (view !== 'shoot') return;
-  const p = dernierPlan && plan(dernierPlan);
+  const p = planVise();
   if (chrono){
     const t = prise(chrono.priseId);
     f.className = 'fab rec';
@@ -1699,23 +1699,28 @@ function majFab(){
 const fmtDuree = s => s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + deuxCh(s % 60) + 's';
 const fmtChrono = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return deuxCh(Math.floor(s / 60)) + ':' + deuxCh(s % 60); };
 
-/* Le plan vise : celui que le Moteur et + Prise vont tourner. On le choisit
-   d'un doigt sur sa carte ; il suit aussi la derniere prise ajoutee. */
+/* Le plan vise : celui que le Moteur et + Prise vont tourner. L'anneau d'une
+   carte le choisit, et ce choix passe avant tout : ouvrir ou ajouter une
+   prise ailleurs ne le deplace pas. Sans choix, on suit le dernier plan
+   touche. L'appareil se souvient du choix d'un chargement a l'autre. */
 const ICO_VISER = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', 14, 2);
+function planVise(){
+  return (UI.vise && plan(UI.vise)) || (dernierPlan && plan(dernierPlan)) || null;
+}
+/* toucher l'anneau du plan deja vise rend la main au suivi automatique */
 function viser(id){
   if (!plan(id)) return;
-  dernierPlan = id;
+  UI.vise = UI.vise === id ? null : id; ecrireUI();
   majFab();
 }
-/* les cartes montrent le plan vise, et l'appareil s'en souvient */
 function majVise(){
-  document.querySelectorAll('.viser').forEach(b => b.classList.toggle('on', b.dataset.vise === dernierPlan));
-  if ((UI.vise || null) !== (dernierPlan || null)){ UI.vise = dernierPlan || null; ecrireUI(); }
+  const v = planVise(), id = v ? v.id : null;
+  document.querySelectorAll('.viser').forEach(b => b.classList.toggle('on', b.dataset.vise === id));
 }
 
 function fabAction(){ if (chrono) couper(); else moteur(); }
 function moteur(){
-  const p = dernierPlan && plan(dernierPlan);
+  const p = planVise();
   if (!p){ choisirPlan(true); return; }
   moteurSur(p.id);
 }
@@ -1766,7 +1771,7 @@ function renderAll(){
 /* --------------------------------------------------------- Feuille prise */
 
 function nouvellePrise(){
-  const p = dernierPlan && plan(dernierPlan);
+  const p = planVise();
   if (p) ajouterPrise(p.id); else choisirPlan(false);
 }
 
