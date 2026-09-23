@@ -1,0 +1,8 @@
+{
+  "smtp": "ssl0.ovh.net",
+  "port": 465,
+  "securite": "ssl",
+  "utilisateur": "journal@foresight-movie.com",
+  "motdepasse": "le mot de passe de la boîte",
+  "expediteur": "Wrangle <journal@foresight-movie.com>"
+}

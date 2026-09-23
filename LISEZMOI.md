@@ -70,6 +70,22 @@ passe déconnecte tout le monde ; redémarrer le serveur, non.
 reverse proxy qui s'occupe du certificat (Caddy, nginx). Il envoie l'en-tête `X-Forwarded-Proto`,
 et le cookie d'accès cesse alors de voyager en clair.
 
+## Le journal DIT par mail
+
+Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)
+ou tout seul : toutes les heures ou toutes les deux heures, à l'heure pile, dans la plage réglée ;
+ou une fois par jour à l'heure dite. On coche les journées de tournage concernées (aucune cochée :
+toutes). Ces réglages sont dans la fiche Journée, partagés par tous les appareils. Rien ne part si
+rien n'a changé depuis le dernier envoi.
+
+La boîte d'envoi, elle, ne quitte pas l'ordinateur du serveur : copier `outils/mail.exemple.json`
+en `data/mail.json` et y mettre le serveur SMTP, le port, la sécurité (`ssl`, `starttls` ou
+`aucune`), l'identifiant, le mot de passe et l'expéditeur. Pour une boîte OVH : `ssl0.ovh.net`,
+port 465, `ssl`. Le fichier est relu à chaque envoi, pas besoin de relancer.
+
+À chaque créneau, chaque appareil ouvert tente l'envoi ; le serveur ne laisse passer que le premier.
+Les envois sont notés dans `data/mails.json`.
+
 ## Trouver un plan
 
 La barre des jours et des filtres suit la liste quand on descend : on change de jour sans remonter.
@@ -139,7 +155,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Douze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Treize scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -155,6 +171,7 @@ py tests/verif_dialogue.py         les boîtes de la page à la place de celles 
 py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues, plans tournés, reste à tourner
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
+py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un

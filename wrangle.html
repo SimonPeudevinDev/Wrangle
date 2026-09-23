@@ -3522,6 +3522,28 @@ function openProd(){
         ${RESEAU.possible ? '<br>Le serveur garde une sauvegarde horodatée toutes les 10 minutes dans <b style="display:inline;text-transform:none;letter-spacing:0;font-size:inherit">data/sauvegardes</b>.' : ''}</div>
     </div>
 
+    ${RESEAU.possible ? `<div class="sec">
+      <h3>Journal DIT par mail</h3>
+      <div class="specs">
+        ${F(p, 'Destinataires', 'mailA', {area:1, ph:'post@production.fr, prod@production.fr'})}
+        <div class="spec"><label>Envoi</label>
+          <select data-o="prod" data-k="mailCadence" onchange="live(this);openProd()">
+            ${[['', 'Jamais'], ['1h', 'Toutes les heures'], ['2h', 'Toutes les deux heures'], ['jour', 'Une fois par jour']]
+              .map(([v, l]) => `<option value="${v}"${(p.mailCadence || '') === v ? ' selected' : ''}>${l}</option>`).join('')}
+          </select></div>
+        ${p.mailCadence === 'jour' ? F(p, 'À', 'mailHeure', {ph:'20:00', im:'numeric'})
+          : p.mailCadence ? F(p, 'De', 'mailDebut', {ph:'08:00', im:'numeric'}) + F(p, 'Jusqu’à', 'mailFin', {ph:'20:00', im:'numeric'}) : ''}
+        ${p.mailCadence ? MULTI(Object.assign({ id:'prod' }, p), 'Journées', 'mailJours', joursConnus().filter(j => j !== 'CG')) : ''}
+      </div>
+      <div class="btns" style="margin-top:12px">
+        <button class="btn p" onclick="envoyerJournalMail(false)">Envoyer maintenant</button>
+      </div>
+      <div class="note">Le journal de la journée en cours, en PDF, aux adresses ci-dessus.
+        ${p.mailCadence ? 'À l’heure pile, seulement s’il y a du nouveau depuis le dernier envoi ; sans journée cochée, toutes. ' : ''}
+        ${p.mailDernier ? 'Dernier envoi : ' + esc(p.mailDernier) + '.' : 'Aucun envoi pour l’instant.'}
+        <span id="mail-etat"></span></div>
+    </div>` : ''}
+
     <div class="sec">
       <h3>Affichage</h3>
       <div class="btns">
@@ -3529,6 +3551,7 @@ function openProd(){
       </div>
     </div>`;
   montrerFiche(0);
+  majEtatMail();
 }
 
 function closeSheet(){
@@ -4171,6 +4194,108 @@ function pdfDIT(j){
 function telechargerDIT(){
   const j = fJourR;
   chargerLogo().then(() => download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf'));
+}
+
+/* ------------------------------------------------- Journal DIT par mail */
+/* Le serveur expedie ce que la page fabrique : le PDF de la journee en cours,
+   aux destinataires regles dans la fiche Journee. A la main, ou tout seul :
+   toutes les heures (ou les deux heures) a l'heure pile dans la plage reglee,
+   ou une fois par jour a l'heure dite, les journees cochees. Rien ne part si
+   rien n'a change depuis le dernier envoi ; et un creneau ne part qu'une fois,
+   meme si plusieurs appareils sont ouverts : le serveur ne garde que le premier. */
+const destinatairesMail = () => String(DB.prod.mailA || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => x.indexOf('@') > 0);
+/* la journee du journal : celle de la derniere prise, sinon celle du plan vise, sinon celle affichee */
+function jourDuJournal(){
+  const t = DB.prises[DB.prises.length - 1];
+  if (t && t.jour) return t.jour;
+  const p = planVise();
+  if (p && p.jour) return p.jour;
+  return fJour !== '*' ? fJour : '*';
+}
+/* une heure ecrite comme on veut (« 20h », « 20:00 », « 8:5 ») -> « 20:00 », ou '' */
+function heureLue(s){
+  const m = String(s || '').trim().match(/^(\d{1,2})\s*[:hH]?\s*(\d{0,2})$/);
+  return m ? deuxCh(Math.min(23, +m[1])) + ':' + deuxCh(Math.min(59, +(m[2] || 0))) : '';
+}
+/* ce qui a change : une empreinte des prises et des etats, pour ne pas renvoyer le meme journal */
+function empreinteMail(){
+  const s = JSON.stringify(DB.prises) + '|' + DB.plans.map(p => p.etat + (p.croquis ? 'c' : '')).join('');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return s.length + ':' + h;
+}
+/* le creneau d'envoi automatique du moment (« 2026-09-23 J1 14h »), ou '' s'il n'y en a pas */
+function creneauMail(d){
+  d = d || new Date();
+  const c = DB.prod.mailCadence || '';
+  if (!c) return '';
+  const jour = jourDuJournal(), jours = DB.prod.mailJours || [];
+  if (jours.length && jour !== '*' && !jours.some(j => memeVal(j, jour))) return '';
+  const date = d.getFullYear() + '-' + deuxCh(d.getMonth() + 1) + '-' + deuxCh(d.getDate());
+  if (c === 'jour'){ const h = heureLue(DB.prod.mailHeure); return h && hhmm(d) === h ? date + ' ' + jour : ''; }
+  if (d.getMinutes() !== 0) return '';
+  const h = d.getHours();
+  const de = +(heureLue(DB.prod.mailDebut) || '00:00').slice(0, 2), a = +(heureLue(DB.prod.mailFin) || '23:59').slice(0, 2);
+  if (h < de || h > a) return '';
+  if (c === '2h' && (h - de) % 2) return '';
+  return date + ' ' + jour + ' ' + deuxCh(h) + 'h';
+}
+const base64De = u8 => {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+function envoyerJournalMail(auto, creneau){
+  if (!RESEAU.possible) return Promise.resolve(null);
+  const a = destinatairesMail();
+  if (!a.length){
+    if (!auto) prevenir('Aucun destinataire.', { detail:'Indiquez les adresses dans la fiche Journée, séparées par des virgules.' });
+    return Promise.resolve(null);
+  }
+  const jour = jourDuJournal(), d = new Date(), titre = DB.prod.titre || 'Wrangle', empreinte = empreinteMail();
+  const dateFr = deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear();
+  const quoi = jour === '*' ? 'du tournage' : 'de ' + nomJour(jour).toLowerCase();
+  return chargerLogo().then(() => poster('/api/mail', JSON.stringify({
+      jour, auto: !!auto, creneau: creneau || '', destinataires: a, nomClient: UI.nom,
+      nom: fname('journal-DIT' + (jour === '*' ? '' : '-' + jour), 'pdf'),
+      sujet: titre + ' — journal DIT ' + quoi + ' · ' + dateFr + ' ' + hhmm(d),
+      texte: 'Journal DIT ' + quoi + ', édité le ' + dateFr + ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : '') + '.\n' +
+             'En pièce jointe : ce qu’il y a à sauvegarder, les prises retenues pour le montage, ' +
+             'les plans tournés et ce qui reste à tourner.\n\nEnvoyé par Wrangle.',
+      pdf: base64De(pdfDIT(jour)) })))
+    .then(r => r.json())
+    .then(rep => {
+      if (rep.ok){
+        toast('Journal envoyé à ' + a.join(', '));
+        patch('prod', 'prod', { mailEmpreinte: empreinte,
+                                mailDernier: rep.quand + (auto ? ' (automatique)' : '') + ' · ' + (jour === '*' ? 'tout le tournage' : nomJour(jour)) });
+        if (openType === 'prod') openProd();
+      } else if (!rep.deja && !auto) prevenir('Le journal n’est pas parti.', { detail: rep.erreur || '' });
+      return rep;
+    })
+    .catch(() => { if (!auto) prevenir('Le journal n’est pas parti.', { detail:'Serveur injoignable.' }); return null; });
+}
+/* toutes les trente secondes : si un creneau est la, chaque appareil tente une fois ;
+   le serveur ne laisse passer que le premier. Rien de neuf depuis le dernier envoi : rien ne part. */
+function verifierEnvoiAuto(d){
+  if (!RESEAU.possible || !DB.prod) return;
+  const cr = creneauMail(d);
+  if (!cr || verifierEnvoiAuto.fait === cr) return;
+  verifierEnvoiAuto.fait = cr;
+  if (empreinteMail() === DB.prod.mailEmpreinte) return;
+  return envoyerJournalMail(true, cr);
+}
+setInterval(() => verifierEnvoiAuto(), 30000);
+/* dans la fiche Journee : la boite du serveur et les derniers envois */
+function majEtatMail(){
+  const z = $('mail-etat'); if (!z) return;
+  fetch('/api/mail').then(r => r.json()).then(m => {
+    if (!$('mail-etat')) return;
+    const l = (m.envois || []).slice(-3).reverse().map(e => esc(e.quand) + (e.auto ? ' (automatique)' : '') + ' → ' + esc(e.a.join(', ')));
+    $('mail-etat').innerHTML = (m.possible ? 'Boîte d’envoi : ' + esc(m.expediteur) + '.'
+                                           : 'Aucune boîte d’envoi sur le serveur : remplir <b style="display:inline;text-transform:none;letter-spacing:0;font-size:inherit">data/mail.json</b> (voir LISEZMOI).') +
+                                (l.length ? '<br>Derniers envois : ' + l.join(' · ') : '');
+  }).catch(() => {});
 }
 
 /* La fiche pour la post est montee a la demande puis rendue au navigateur :

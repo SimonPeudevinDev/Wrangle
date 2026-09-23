@@ -822,6 +822,10 @@ nav button i{display:none}
 }
 /* des lignes a la suite d'autre chose (les capsules des elements) : pas de filet du haut */
 .specs.suite{margin-top:12px;border-top:none}
+/* une case a cocher sur une ligne de saisie : la case, puis ce qu'elle veut dire */
+.spec .case{flex:1;display:flex;align-items:center;gap:12px;min-height:48px;cursor:pointer;
+  font:500 14.5px var(--font);color:var(--txt);text-transform:none;letter-spacing:0}
+.spec .case input{width:20px;height:20px;margin:0;accent-color:var(--acc);flex:none}
 /* plusieurs choix courts sur une meme rangee, chacun sa colonne quand la place le permet */
 .spec.rang{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:0 28px;align-items:start;padding:0}
 .spec.rang > .spec{border-top:none;min-height:0}

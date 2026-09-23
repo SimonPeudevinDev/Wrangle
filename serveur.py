@@ -25,6 +25,7 @@ Tous les appareils doivent être sur le même réseau (Wi-Fi du plateau) et
 ouvrir l'adresse affichée au démarrage.
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -98,6 +99,70 @@ def ecrire_json(chemin, db):
     """Le projet dans ce fichier, au format compact."""
     with open(chemin, 'w', encoding='utf-8') as f:
         json.dump(db, f, ensure_ascii=False, separators=(',', ':'))
+
+
+# ------------------------------------------------------------------ Mail ---
+# Le journal DIT part par mail : la page fabrique le PDF, le serveur l'expédie
+# avec la boîte réglée dans data/mail.json (voir LISEZMOI). Les identifiants
+# ne quittent pas cet ordinateur.
+
+envois_en_cours = set()   # les envois automatiques en train de partir : un seul par journée
+
+
+def config_mail():
+    """La boîte d'envoi, relue à chaque envoi : on la corrige sans relancer."""
+    chemin = os.path.join(DATA, 'mail.json')
+    if not os.path.exists(chemin):
+        return None
+    try:
+        with open(chemin, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        return cfg if cfg.get('smtp') and cfg.get('expediteur') else None
+    except Exception as e:
+        print('data/mail.json illisible :', e)
+        return None
+
+
+def envois_mail():
+    """Le journal des envois, les deux cents derniers."""
+    try:
+        with open(os.path.join(DATA, 'mails.json'), 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def noter_envoi(entree):
+    ecrire_json(os.path.join(DATA, 'mails.json'), (envois_mail() + [entree])[-200:])
+
+
+def expedier(cfg, destinataires, sujet, texte, nom, pdf):
+    """Un mail avec le PDF en pièce jointe, par la boîte configurée."""
+    import smtplib
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg['From'] = cfg['expediteur']
+    msg['To'] = ', '.join(destinataires)
+    msg['Subject'] = sujet
+    msg.set_content(texte)
+    msg.add_attachment(pdf, maintype='application', subtype='pdf', filename=nom)
+    hote, port = cfg['smtp'], int(cfg.get('port') or 465)
+    securite = (cfg.get('securite') or 'ssl').lower()
+    if securite == 'ssl':
+        srv = smtplib.SMTP_SSL(hote, port, timeout=30)
+    else:
+        srv = smtplib.SMTP(hote, port, timeout=30)
+        if securite == 'starttls':
+            srv.starttls()
+    try:
+        if cfg.get('utilisateur'):
+            srv.login(cfg['utilisateur'], cfg.get('motdepasse') or '')
+        srv.send_message(msg)
+    finally:
+        try:
+            srv.quit()
+        except Exception:
+            pass
 
 
 def normaliser(db):
@@ -535,6 +600,10 @@ class Requete(BaseHTTPRequestHandler):
                                         'adresses': self.server.adresses})
         if u.path == '/api/flux':
             return self._flux(parse_qs(u.query))
+        if u.path == '/api/mail':
+            cfg = config_mail()
+            return self._json(200, {'possible': bool(cfg), 'expediteur': (cfg or {}).get('expediteur', ''),
+                                    'envois': envois_mail()[-10:]})
         for dossier in ('public', 'tests'):
             if u.path.startswith('/' + dossier + '/'):
                 return self._statique(dossier, u.path[len(dossier) + 2:])
@@ -646,7 +715,49 @@ class Requete(BaseHTTPRequestHandler):
             diffuser(message_presence())
             return self._json(200, {'ok': True})
 
+        if u.path == '/api/mail':
+            return self._mail(corps)
+
         self._json(404, {'erreur': 'introuvable'})
+
+    def _mail(self, corps):
+        """Expédie le journal DIT que la page a fabriqué. Un envoi automatique
+        ne part qu'une fois par créneau, quel que soit le nombre d'appareils
+        qui le tentent à la même minute."""
+        cfg = config_mail()
+        if not cfg:
+            return self._json(503, {'erreur': "aucune boîte d'envoi : data/mail.json manque ou est incomplet"})
+        a = [str(x).strip() for x in (corps.get('destinataires') or []) if str(x).strip()]
+        if not a:
+            return self._json(400, {'erreur': 'destinataires attendus'})
+        try:
+            pdf = base64.b64decode(corps.get('pdf') or '')
+        except Exception:
+            pdf = b''
+        if not pdf.startswith(b'%PDF'):
+            return self._json(400, {'erreur': 'PDF attendu'})
+        auto = bool(corps.get('auto'))
+        cle = str(corps.get('creneau') or '')[:60]    # « 2026-09-23 J1 14h » : un envoi par créneau
+        with verrou:
+            if auto and cle and (cle in envois_en_cours or any(e.get('auto') and e.get('cle') == cle for e in envois_mail())):
+                return self._json(200, {'ok': False, 'deja': True})
+            if auto and cle:
+                envois_en_cours.add(cle)
+        try:
+            expedier(cfg, a, str(corps.get('sujet') or 'Journal DIT'), str(corps.get('texte') or ''),
+                     str(corps.get('nom') or 'journal-DIT.pdf'), pdf)
+        except Exception as e:
+            with verrou:
+                envois_en_cours.discard(cle)
+            print('Envoi du journal refusé :', e)
+            return self._json(502, {'erreur': str(e)})
+        entree = {'quand': datetime.now().strftime('%Y-%m-%d %H:%M'), 'cle': cle, 'jour': corps.get('jour') or '',
+                  'a': a, 'auto': auto, 'par': str(corps.get('nomClient') or '')[:40], 'octets': len(pdf)}
+        with verrou:
+            noter_envoi(entree)
+            envois_en_cours.discard(cle)
+        print('Journal DIT envoyé à', ', '.join(a), '(%d Ko)' % (len(pdf) // 1024))
+        return self._json(200, {'ok': True, 'a': a, 'quand': entree['quand']})
 
 
 # ------------------------------------------------------------------ Main ---
