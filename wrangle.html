@@ -4082,12 +4082,12 @@ function chargerLogo(){
 // la boite du dessin dans son SVG (viewBox 1569 x 484) : le mot tient la
 const LOGO_BOITE = { x: 109.4, y: 132.4, l: 1346.3, h: 232.6 };
 
-/* Le journal est en paysage : une journee de dix plans a dix prises fait cent
-   lignes, et chacune doit se lire d'un coup d'oeil. Les tableaux ne montrent
-   que les colonnes remplies ce jour-la, un tableau qui continue sur la page
-   d'apres rappelle son plan, et chaque plan annonce son bilan. */
+/* Une journee de dix plans a dix prises fait cent lignes : chacune doit se
+   lire d'un coup d'oeil. Les tableaux ne montrent que les colonnes remplies
+   ce jour-la, un tableau qui continue sur la page d'apres rappelle son plan,
+   et chaque plan annonce son bilan. */
 function pdfDIT(j){
-  const jours = modeleDIT(j), doc = nouveauPdf(true), L = doc.largeur - 2 * PDF_M;
+  const jours = modeleDIT(j), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M;
   // un titre de section : petites capitales espacees, encre, sur un filet
   const section = s => {
     doc.place(48); doc.y -= 18;
@@ -4103,22 +4103,22 @@ function pdfDIT(j){
   /* les colonnes d'une journee : celles qui ont quelque chose a dire. Chaque
      colonne sait lire sa cellule dans une prise ; la note prend la place qui reste. */
   const COLONNES = {
-    n:      ['Pr.', 26, 'H', t => t.n],
-    clip:   ['Clip', 80, 'C', t => t.clip || '—'],
-    ou:     ['Plan · prise', 96, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n],
-    statut: ['Statut', 50, 'H', t => statut(t.statut)],
-    ret:    ['Montage', 62, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
-    tcIn:   ['TC in', 66, 'C', t => t.tcIn],
-    tcOut:  ['TC out', 66, 'C', t => t.tcOut],
-    duree:  ['Durée', 40, 'H', t => t.duree],
-    carte:  ['Carte', 48, 'H', t => t.carte],
+    n:      ['Pr.', 22, 'H', t => t.n],
+    clip:   ['Clip', 68, 'C', t => t.clip || '—'],
+    ou:     ['Plan · prise', 84, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n],
+    statut: ['Statut', 42, 'H', t => statut(t.statut)],
+    ret:    ['Montage', 54, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
+    // les deux timecodes dans une colonne, l'un sous l'autre quand il y en a deux
+    tc:     ['TC in / out', 72, 'C', t => t.tcIn && t.tcOut ? t.tcIn + ' – ' + t.tcOut : t.tcIn || t.tcOut],
+    duree:  ['Durée', 34, 'H', t => t.duree],
+    carte:  ['Carte', 40, 'H', t => t.carte],
     note:   ['Note', 0, 'H', t => t.note],
-    qui:    ['Saisi par', 96, 'H', saisi]
+    qui:    ['Saisi par', 78, 'H', saisi]
   };
   const colonnes = (fixes, prises) => {
     const avec = k => prises.some(t => t[k]);
     const ids = fixes.slice(0, -1)
-      .concat(avec('tcIn') || avec('tcOut') ? ['tcIn', 'tcOut'] : [], avec('duree') ? ['duree'] : [], avec('carte') ? ['carte'] : [],
+      .concat(avec('tcIn') || avec('tcOut') ? ['tc'] : [], avec('duree') ? ['duree'] : [], avec('carte') ? ['carte'] : [],
               avec('note') ? ['note'] : [], fixes.slice(-1));
     const cols = ids.map(id => COLONNES[id].slice());
     const reste = L - cols.reduce((a, c) => a + c[1], 0);
@@ -4201,13 +4201,13 @@ function pdfDIT(j){
       doc.y -= 8;
     });
 
-    // 3. ce qui reste, sur trois colonnes : le plan, puis ses reglages dessous
+    // 3. ce qui reste, sur deux colonnes : le plan, puis ses reglages dessous
     section('Reste à tourner : ' + m.reste.length + ' plan' + plur(m.reste.length));
     if (!m.reste.length) vide('Rien : la journée est tournée.');
-    const nc = 3, parCol = Math.ceil(m.reste.length / nc), lc = L / nc, hr = 24;
+    const nc = 2, parCol = Math.ceil(m.reste.length / nc), lc = L / nc, hr = 24;
     for (let k = 0; k < parCol; k++){
       doc.place(hr);
-      [0, 1, 2].map(c => m.reste[k + c * parCol]).forEach((r, c) => {
+      [0, 1].map(c => m.reste[k + c * parCol]).forEach((r, c) => {
         if (!r) return;
         const xc = PDF_M + c * lc;
         doc.texte(xc, doc.y - 8.5, r.ref, { taille: 8.5, police: 'HB', couleur: 'encre' });
