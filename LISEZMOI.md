@@ -73,10 +73,10 @@ et le cookie d'accès cesse alors de voyager en clair.
 ## Le journal DIT par mail
 
 Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)
-ou tout seul : toutes les heures ou toutes les deux heures, à l'heure pile, dans la plage réglée ;
-ou une fois par jour à l'heure dite. On coche les journées de tournage concernées (aucune cochée :
-toutes). Ces réglages sont dans la fiche Journée, partagés par tous les appareils. Rien ne part si
-rien n'a changé depuis le dernier envoi.
+ou tout seul : toutes les heures ou toutes les deux heures, à l'heure pile, dans la plage réglée
+au curseur ; ou une fois par jour à l'heure dite. Les envois automatiques ne courent qu'entre les
+deux dates réglées (début et fin du tournage). Ces réglages sont dans la fiche Journée, partagés
+par tous les appareils. Rien ne part si rien n'a changé depuis le dernier envoi.
 
 La boîte d'envoi, elle, ne quitte pas l'ordinateur du serveur : copier `outils/mail.exemple.json`
 en `data/mail.json` et y mettre le serveur SMTP, le port, la sécurité (`ssl`, `starttls` ou

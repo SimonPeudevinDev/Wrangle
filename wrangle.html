@@ -3531,15 +3531,15 @@ function openProd(){
             ${[['', 'Jamais'], ['1h', 'Toutes les heures'], ['2h', 'Toutes les deux heures'], ['jour', 'Une fois par jour']]
               .map(([v, l]) => `<option value="${v}"${(p.mailCadence || '') === v ? ' selected' : ''}>${l}</option>`).join('')}
           </select></div>
-        ${p.mailCadence === 'jour' ? F(p, 'À', 'mailHeure', {ph:'20:00', im:'numeric'})
-          : p.mailCadence ? F(p, 'De', 'mailDebut', {ph:'08:00', im:'numeric'}) + F(p, 'Jusqu’à', 'mailFin', {ph:'20:00', im:'numeric'}) : ''}
-        ${p.mailCadence ? MULTI(Object.assign({ id:'prod' }, p), 'Journées', 'mailJours', joursConnus().filter(j => j !== 'CG')) : ''}
+        ${p.mailCadence ? htmlPlageMail(p) : ''}
+        ${p.mailCadence ? `<div class="spec"><label>Du</label><input type="date" ${liaison(p, 'mailDu')} value="${esc(p.mailDu)}"></div>
+          <div class="spec"><label>Au</label><input type="date" ${liaison(p, 'mailAu')} value="${esc(p.mailAu)}"></div>` : ''}
       </div>
       <div class="btns" style="margin-top:12px">
         <button class="btn p" onclick="envoyerJournalMail(false)">Envoyer maintenant</button>
       </div>
       <div class="note">Le journal de la journée en cours, en PDF, aux adresses ci-dessus.
-        ${p.mailCadence ? 'À l’heure pile, seulement s’il y a du nouveau depuis le dernier envoi ; sans journée cochée, toutes. ' : ''}
+        ${p.mailCadence ? 'Entre les deux dates, à l’heure pile, seulement s’il y a du nouveau depuis le dernier envoi. ' : ''}
         ${p.mailDernier ? 'Dernier envoi : ' + esc(p.mailDernier) + '.' : 'Aucun envoi pour l’instant.'}
         <span id="mail-etat"></span></div>
     </div>` : ''}
@@ -3552,6 +3552,7 @@ function openProd(){
     </div>`;
   montrerFiche(0);
   majEtatMail();
+  if ($('plage-mail')) glisserPlage(null);
 }
 
 function closeSheet(){
@@ -4256,14 +4257,15 @@ function empreinteMail(){
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return s.length + ':' + h;
 }
-/* le creneau d'envoi automatique du moment (« 2026-09-23 J1 14h »), ou '' s'il n'y en a pas */
+/* le creneau d'envoi automatique du moment (« 2026-09-23 J1 14h »), ou '' s'il n'y en a pas :
+   entre les deux dates reglees, a l'heure pile dans la plage, ou a l'heure dite */
 function creneauMail(d){
   d = d || new Date();
   const c = DB.prod.mailCadence || '';
   if (!c) return '';
-  const jour = jourDuJournal(), jours = DB.prod.mailJours || [];
-  if (jours.length && jour !== '*' && !jours.some(j => memeVal(j, jour))) return '';
+  const jour = jourDuJournal();
   const date = d.getFullYear() + '-' + deuxCh(d.getMonth() + 1) + '-' + deuxCh(d.getDate());
+  if ((DB.prod.mailDu && date < DB.prod.mailDu) || (DB.prod.mailAu && date > DB.prod.mailAu)) return '';
   if (c === 'jour'){ const h = heureLue(DB.prod.mailHeure); return h && hhmm(d) === h ? date + ' ' + jour : ''; }
   if (d.getMinutes() !== 0) return '';
   const h = d.getHours();
@@ -4306,6 +4308,37 @@ function envoyerJournalMail(auto, creneau){
       return rep;
     })
     .catch(() => { if (!auto) prevenir('Le journal n’est pas parti.', { detail:'Serveur injoignable.' }); return null; });
+}
+/* La plage horaire se regle au curseur : deux poignees sur le meme rail, de
+   0 h a 23 h, ou une seule pour l'heure d'un envoi quotidien (par demi-heure). */
+function htmlPlageMail(p){
+  const quotidien = p.mailCadence === 'jour';
+  const de = +(heureLue(p.mailDebut) || '08:00').slice(0, 2), a = +(heureLue(p.mailFin) || '20:00').slice(0, 2);
+  const h = heureLue(p.mailHeure) || '20:00', demi = +h.slice(0, 2) * 2 + (+h.slice(3) >= 30 ? 1 : 0);
+  return `<div class="spec col"><label>${quotidien ? 'À' : 'Plage horaire'}</label>
+    <div class="plage${quotidien ? ' seule' : ''}" id="plage-mail">
+      <div class="rail"><i id="plage-fill"></i></div>
+      ${quotidien
+        ? `<input type="range" min="0" max="47" step="1" value="${demi}" data-k="mailHeure" oninput="glisserPlage(this)" aria-label="Heure d’envoi">`
+        : `<input type="range" min="0" max="23" step="1" value="${de}" data-k="mailDebut" oninput="glisserPlage(this)" aria-label="Début">
+           <input type="range" min="0" max="23" step="1" value="${a}" data-k="mailFin" oninput="glisserPlage(this)" aria-label="Fin">`}
+      <b id="plage-txt"></b>
+    </div></div>`;
+}
+function glisserPlage(input){
+  const z = $('plage-mail'), r = z.querySelectorAll('input[type=range]'), txt = $('plage-txt'), fill = $('plage-fill');
+  if (r.length === 1){
+    const v = +r[0].value, h = deuxCh(Math.floor(v / 2)) + ':' + (v % 2 ? '30' : '00');
+    if (input) patch('prod', 'prod', { mailHeure: h });
+    txt.textContent = h; fill.style.left = '0'; fill.style.width = (v / 47 * 100) + '%';
+    return;
+  }
+  let de = +r[0].value, a = +r[1].value;
+  // une poignee qui croise l'autre la pousse : le debut reste avant la fin
+  if (de > a){ if (input === r[0]) a = de; else de = a; r[0].value = de; r[1].value = a; }
+  if (input) patch('prod', 'prod', { mailDebut: deuxCh(de) + ':00', mailFin: deuxCh(a) + ':00' });
+  txt.textContent = deuxCh(de) + ':00 → ' + deuxCh(a) + ':00';
+  fill.style.left = (de / 23 * 100) + '%'; fill.style.width = ((a - de) / 23 * 100) + '%';
 }
 /* toutes les trente secondes : si un creneau est la, chaque appareil tente une fois ;
    le serveur ne laisse passer que le premier. Rien de neuf depuis le dernier envoi : rien ne part. */

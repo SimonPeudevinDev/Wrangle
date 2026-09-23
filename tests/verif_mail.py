@@ -111,12 +111,16 @@ with Banc(8781, 9381, taille=(1100, 900)) as banc:
     essais.verifier('une fois par jour, a l heure dite',
                     banc.js("patch('prod','prod',{mailCadence:'jour', mailHeure:'20h'}); [creneauMail(new Date(2026,8,23,20,0)), creneauMail(new Date(2026,8,23,19,0))]"),
                     ['2026-09-23 J1', ''])
-    essais.verifier('une journee non cochee ne part pas',
-                    banc.js("patch('prod','prod',{mailCadence:'1h', mailJours:['J2']}); creneauMail(new Date(2026,8,23,14,0))"), '')
+    essais.verifier('avant la date de debut, rien ne part',
+                    banc.js("patch('prod','prod',{mailCadence:'1h', mailDu:'2026-09-24', mailAu:'2026-09-30'}); creneauMail(new Date(2026,8,23,14,0))"), '')
+    essais.verifier('apres la date de fin non plus',
+                    banc.js("patch('prod','prod',{mailDu:'2026-09-01', mailAu:'2026-09-22'}); creneauMail(new Date(2026,8,23,14,0))"), '')
+    essais.verifier('entre les deux dates, oui',
+                    banc.js("patch('prod','prod',{mailDu:'2026-09-20', mailAu:'2026-09-30'}); creneauMail(new Date(2026,8,23,14,0))"), '2026-09-23 J1 14h')
     essais.verifier('l heure s ecrit comme on veut', banc.js("heureLue('8h5')"), '08:05')
 
     # -- l'envoi automatique : une fois par creneau, et seulement s'il y a du nouveau
-    banc.js("patch('prod','prod',{ mailJours:['J1'] }); ajouterPrise(DB.plans[1].id, false, { clip:'A001C002', statut:'NG', par:'Alice', heure:'13:40' })")
+    banc.js("ajouterPrise(DB.plans[1].id, false, { clip:'A001C002', statut:'NG', par:'Alice', heure:'13:40' })")
     attendre("verifierEnvoiAuto(new Date(2026, 8, 23, 14, 0))")
     essais.verifier('a l heure pile, le journal part tout seul', len(RECUS), 2)
     rep = attendre("verifierEnvoiAuto.fait = null; patch('prod','prod',{ mailEmpreinte:'' }); verifierEnvoiAuto(new Date(2026, 8, 23, 14, 0))")
@@ -136,7 +140,14 @@ with Banc(8781, 9381, taille=(1100, 900)) as banc:
     banc.js("openProd()"); time.sleep(0.8)
     essais.verifier('la fiche Journee a ses reglages de mail', banc.js(
         "!!document.querySelector('#sbody textarea[data-k=\"mailA\"]') && !!document.querySelector('#sbody select[data-k=\"mailCadence\"]')"
-        " && !!document.querySelector('#sbody input[data-k=\"mailDebut\"]') && !!document.querySelector('#sbody .capsules[data-k=\"mailJours\"] .fc.on')"), True)
+        " && document.querySelectorAll('#plage-mail input[type=range]').length === 2"
+        " && !!document.querySelector('#sbody input[type=date][data-k=\"mailDu\"]') && !!document.querySelector('#sbody input[type=date][data-k=\"mailAu\"]')"), True)
+    essais.verifier('le curseur ecrit la plage', banc.js("$('plage-txt').textContent"), '08:00 → 20:00')
+    banc.js("""(() => { const r = document.querySelectorAll('#plage-mail input[type=range]'); r[1].value = 6; glisserPlage(r[1]); })()""")
+    essais.verifier('la fin ne passe pas avant le debut : elle pousse', [banc.js('DB.prod.mailDebut'), banc.js('DB.prod.mailFin'), banc.js("$('plage-txt').textContent")],
+                    ['06:00', '06:00', '06:00 → 06:00'])
+    banc.js("""(() => { const r = document.querySelectorAll('#plage-mail input[type=range]'); r[1].value = 18; glisserPlage(r[1]); })()""")
+    essais.verifier('et se regle au curseur', [banc.js('DB.prod.mailDebut'), banc.js('DB.prod.mailFin')], ['06:00', '18:00'])
     essais.verifier('et dit quelle boite envoie', 'journal@test.fr' in banc.js("$('mail-etat').textContent"), True)
     essais.exceptions(banc)
 boite.shutdown()
