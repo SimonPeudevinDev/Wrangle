@@ -10,6 +10,7 @@ Un seul fichier, bibliothèque standard uniquement (Python 3.8+).
   py serveur.py --ouvrir   démarre et ouvre le navigateur
   py serveur.py --motdepasse xxx   demande ce mot de passe à l'entrée
   py serveur.py --data D:\autre\dossier   range projet.json et les sauvegardes ailleurs
+  py serveur.py --adresse 127.0.0.1       n'écoute qu'en local (derrière Caddy sur un VPS)
 
 Le serveur :
   - sert la page wrangle.html et le dossier public/ (feuille de style, logo) ;
@@ -769,6 +770,7 @@ def main():
         pass
     global MOT_DE_PASSE
     port = 8765
+    adresse = '0.0.0.0'
     ouvrir = False
     args = sys.argv[1:]
     while args:
@@ -779,6 +781,8 @@ def main():
             MOT_DE_PASSE = args.pop(0)
         elif a == '--data' and args:
             ranger_donnees(args.pop(0))
+        elif a == '--adresse' and args:
+            adresse = args.pop(0)
         elif a.isdigit():
             port = int(a)
 
@@ -787,7 +791,7 @@ def main():
     sauvegarde_horodatee(force=True)   # état au démarrage, avant toute modification
 
     try:
-        srv = ThreadingHTTPServer(('0.0.0.0', port), Requete)
+        srv = ThreadingHTTPServer((adresse, port), Requete)
     except OSError as e:
         print()
         print('Impossible d ouvrir le port %d : %s' % (port, e))

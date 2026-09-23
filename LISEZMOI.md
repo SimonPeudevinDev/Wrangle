@@ -70,6 +70,21 @@ passe déconnecte tout le monde ; redémarrer le serveur, non.
 reverse proxy qui s'occupe du certificat (Caddy, nginx). Il envoie l'en-tête `X-Forwarded-Proto`,
 et le cookie d'accès cesse alors de voyager en clair.
 
+**Sur un VPS.** Pour que tout le monde saisisse par internet, le serveur tourne sur une petite
+machine louée (un VPS Ubuntu ou Debian). `outils/installer_vps.sh` fait tout : le dépôt dans
+`/opt/wrangle`, `serveur.py` en service qui redémarre seul (données dans `/var/lib/wrangle`),
+Caddy devant avec le certificat HTTPS automatique, le mot de passe du tournage. Il faut d'abord une
+entrée DNS de type A qui mène le nom choisi (par exemple `plateau.foresight-movie.com`) à l'adresse
+IP du VPS, puis, connecté en SSH au VPS :
+
+```
+curl -fsSL https://raw.githubusercontent.com/SimonPeudevinDev/Wrangle/main/outils/installer_vps.sh \
+  | sudo bash -s -- plateau.foresight-movie.com "le-mot-de-passe-du-tournage"
+```
+
+Ensuite `sudo wrangle-maj` met à jour et relance. Le journal par mail y marche aussi : déposer
+`mail.json` dans `/var/lib/wrangle/`.
+
 ## Le journal DIT par mail
 
 Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)
