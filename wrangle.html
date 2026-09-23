@@ -81,6 +81,7 @@
 
 <div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-btn" hidden></button></div>
 <input type="file" id="imp" accept=".json" hidden onchange="importJSON(this)">
+<input type="file" id="rap-in" accept=".json" multiple hidden onchange="lireSources(this)">
 <input type="file" id="image-plan-in" accept="image/*" hidden onchange="imagePlanChoisie(this)">
 <input type="file" id="fond-in" accept="image/*" hidden onchange="fondChoisi(this)">
 
@@ -3650,6 +3651,14 @@ function renderReport(){
     ${parQui.length > 1 || (parQui.length && parQui[0][0] !== '—') ? `<div class="bloc"><h3>Prises saisies par</h3>
       <div class="cinq">${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div></div>` : ''}
 
+    <div class="bloc" id="rapprocher">
+      <h3>Rapprocher les saisies</h3>
+      <div class="note">Chacun saisit de son côté ; déposez ici les sauvegardes JSON des autres (⚙ → Données → Sauvegarde JSON).
+        Le rapport montre ce qui ne concorde pas, plan par plan. La fusion garde tout : vos saisies font foi
+        sur les écarts, les autres comblent les vides et apportent leurs prises en plus.</div>
+      ${htmlRapprochement()}
+    </div>
+
     <div class="btns noprint" style="margin-bottom:30px">
       <button class="btn p" onclick="telechargerDIT()">Journal DIT (PDF)</button>
       <button class="btn p" onclick="imprimerPost()">Fiche pour la post (PDF)</button>
@@ -4082,18 +4091,47 @@ function chargerLogo(){
 // la boite du dessin dans son SVG (viewBox 1569 x 484) : le mot tient la
 const LOGO_BOITE = { x: 109.4, y: 132.4, l: 1346.3, h: 232.6 };
 
+/* L'en-tete d'un document : le logo a gauche, le titre et le sous-titre a
+   droite sur un trait caramel, puis les chiffres en tuiles comme sur le site,
+   le nombre en grand et son libelle en petites capitales dessous. */
+function entetePdf(doc, titre, sous, chiffres){
+  const L = doc.largeur - 2 * PDF_M, hl = 26, kl = hl / LOGO_BOITE.h;
+  if (LOGO_PDF){
+    const ox = PDF_M - LOGO_BOITE.x * kl, oy = doc.y + LOGO_BOITE.y * kl;
+    doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
+    doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
+  }
+  const xd = PDF_M + L;
+  doc.texte(xd - largeurPdf(titre, 20, 'HB'), doc.y - 16, titre, { taille: 20, police: 'HB', couleur: 'encre' });
+  doc.texte(xd - largeurPdf(sous, 8.5, 'H'), doc.y - 29, sous, { taille: 8.5, couleur: 'tan' });
+  doc.y -= 40;
+  doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 'caramel');   // le seul trait caramel de la page
+  const lt = L / chiffres.length;
+  doc.y -= 6;
+  chiffres.forEach(([n, l], k) => {
+    const xt = PDF_M + k * lt;
+    if (k) doc.ligne(xt - 7, doc.y - 4, xt - 7, doc.y - 32, .4, 'filet');
+    doc.texte(xt, doc.y - 18, String(n), { taille: 17, police: 'HB', couleur: 'encre' });
+    lignesPdf(l.toUpperCase(), lt - 14, 5.8, 'HB').slice(0, 2).forEach((s, q) =>
+      doc.texte(xt, doc.y - 27.5 - q * 7.5, s, { taille: 5.8, police: 'HB', couleur: 'tan', esp: .45 }));
+  });
+  doc.y -= 44; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, 'filet2');
+}
+/* un titre de section : petites capitales espacees, encre, sur un filet */
+function sectionPdf(doc, s){
+  const L = doc.largeur - 2 * PDF_M;
+  doc.place(48); doc.y -= 18;
+  doc.texte(PDF_M, doc.y - 8, s.toUpperCase(), { taille: 7.4, police: 'HB', couleur: 'encre', esp: .9 });
+  doc.y -= 12; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .7, 'filet2'); doc.y -= 8;
+}
+
 /* Une journee de dix plans a dix prises fait cent lignes : chacune doit se
    lire d'un coup d'oeil. Les tableaux ne montrent que les colonnes remplies
    ce jour-la, un tableau qui continue sur la page d'apres rappelle son plan,
    et chaque plan annonce son bilan. */
 function pdfDIT(j){
   const jours = modeleDIT(j), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M;
-  // un titre de section : petites capitales espacees, encre, sur un filet
-  const section = s => {
-    doc.place(48); doc.y -= 18;
-    doc.texte(PDF_M, doc.y - 8, s.toUpperCase(), { taille: 7.4, police: 'HB', couleur: 'encre', esp: .9 });
-    doc.y -= 12; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .7, 'filet2'); doc.y -= 8;
-  };
+  const section = s => sectionPdf(doc, s);
   const vide = s => { doc.texte(PDF_M, doc.y - 8, s, { taille: 8.5, couleur: 'tan' }); doc.y -= 13; };
   // le statut d'une prise, dans sa couleur : OK en vert, NG en rouge, le reste en tan
   const statut = s => ({ t: s, couleur: s === 'OK' ? 'ok' : s === 'NG' ? 'ng' : 'tan', police: s === 'OK' || s === 'NG' ? 'HB' : 'H' });
@@ -4133,31 +4171,7 @@ function pdfDIT(j){
     const toutes = m.tournes.flatMap(b => b.prises);
     const colsM = colonnes(['clip', 'ou', 'statut', 'qui'], m.montage);
     const colsP = colonnes(['n', 'clip', 'statut', 'ret', 'qui'], toutes);
-    // l'en-tete : le logo a gauche, le projet et la journee a droite, sur un trait caramel
-    const hl = 26, kl = hl / LOGO_BOITE.h;
-    if (LOGO_PDF){
-      const ox = PDF_M - LOGO_BOITE.x * kl, oy = doc.y + LOGO_BOITE.y * kl;
-      doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
-      doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
-    }
-    const xd = PDF_M + L;
-    doc.texte(xd - largeurPdf(m.titre, 20, 'HB'), doc.y - 16, m.titre, { taille: 20, police: 'HB', couleur: 'encre' });
-    doc.texte(xd - largeurPdf(m.sous, 8.5, 'H'), doc.y - 29, m.sous, { taille: 8.5, couleur: 'tan' });
-    doc.y -= 40;
-    doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, 1, 'caramel');   // le seul trait caramel de la page
-
-    // les chiffres en tuiles, comme sur le site : le nombre en grand, son libelle
-    // en petites capitales dessous
-    const lt = L / m.chiffres.length;
-    doc.y -= 6;
-    m.chiffres.forEach(([n, l], k) => {
-      const xt = PDF_M + k * lt;
-      if (k) doc.ligne(xt - 7, doc.y - 4, xt - 7, doc.y - 32, .4, 'filet');
-      doc.texte(xt, doc.y - 18, String(n), { taille: 17, police: 'HB', couleur: 'encre' });
-      lignesPdf(l.toUpperCase(), lt - 14, 5.8, 'HB').slice(0, 2).forEach((s, q) =>
-        doc.texte(xt, doc.y - 27.5 - q * 7.5, s, { taille: 5.8, police: 'HB', couleur: 'tan', esp: .45 }));
-    });
-    doc.y -= 44; doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .6, 'filet2');
+    entetePdf(doc, m.titre, m.sous, m.chiffres);
 
     // 0. ce qu'il y a a sauvegarder : le premier travail du DIT
     const s = m.sauvegarde;
@@ -4226,6 +4240,200 @@ function pdfDIT(j){
 function telechargerDIT(){
   const j = fJourR;
   chargerLogo().then(() => download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf'));
+}
+
+/* ------------------------------------------------ Rapprocher les saisies */
+/* Chacun saisit de son cote, dans son navigateur ; le DIT depose ici les
+   sauvegardes des autres. On met les prises cote a cote, plan par plan :
+   ce qui ne concorde pas (un ecart), ce qu'un seul a rempli (un complement),
+   ce qu'un seul a saisi (une prise chez un seul). La fusion garde tout : la
+   premiere source, ce navigateur, fait foi sur les ecarts ; les autres
+   comblent les vides et apportent leurs prises en plus. */
+const RAP = { sources: [] };
+const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
+  ['tcIn', 'TC in'], ['tcOut', 'TC out'], ['duree', 'Durée'], ['heure', 'Heure'], ['notes', 'Note'], ['focale', 'Focale'],
+  ['focaleStop', 'Focale arrivée'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
+  ['codec', 'Codec'], ['reso', 'Résolution'], ['fps', 'Cadence'], ['shutter', 'Obturateur'], ['ei', 'EI'], ['wb', 'Balance'],
+  ['nd', 'ND'], ['lut', 'LUT'], ['objectif', 'Objectif'], ['filtre', 'Filtres'], ['sonRoll', 'Bande son'], ['sync', 'Synchro'],
+  ['sonFile', 'Fichier son']];
+const RAP_PLAN = [['etat', 'État'], ['elements', 'Éléments captés'], ['elementsAutre', 'Autre élément'], ['notesClient', 'Note'],
+  ['notesInternes', 'Note interne'], ['vfxDesc', 'Description VFX']];
+const valRap = v => v === true ? 'oui' : v === false || v == null ? '' : Array.isArray(v) ? v.join(', ') : String(v).trim();
+const clePlan = p => (p.seq || '') + '|' + (p.plan || '');
+const champPlan = (p, k) => k === 'etat' ? (ETATS[p.etat] || valRap(p.etat))
+  : k === 'elements' ? Object.keys(p.elements || {}).filter(x => p.elements[x]).sort().join(', ') : valRap(p[k]);
+/* les saisies a rapprocher : celles de ce navigateur d'abord, puis les fichiers deposes */
+const sourcesRap = () => [{ nom: UI.nom || 'Ce navigateur', db: DB, ici: true }].concat(RAP.sources);
+
+function rapprocher(sources){
+  const plans = new Map();   // cle -> { seq, plan, versions: Map(nom -> plan), prises: Map(n -> Map(nom -> prise)) }
+  sources.forEach(s => {
+    s.db.plans.forEach(p => {
+      const c = clePlan(p);
+      if (!plans.has(c)) plans.set(c, { seq: p.seq || '', plan: p.plan || '', versions: new Map(), prises: new Map() });
+      plans.get(c).versions.set(s.nom, p);
+    });
+    s.db.prises.forEach(t => {
+      const p = s.db.plans.find(x => x.id === t.planId); if (!p) return;
+      const e = plans.get(clePlan(p)), n = String(t.n || '');
+      if (!e.prises.has(n)) e.prises.set(n, new Map());
+      e.prises.get(n).set(s.nom, t);
+    });
+  });
+  /* un champ a la fois : des valeurs differentes, c'est un ecart ; une valeur
+     chez certains seulement, c'est un complement */
+  const comparer = (versions, champs, lire) => {
+    const ecarts = [], complements = [];
+    champs.forEach(([k, label]) => {
+      const vals = [];
+      versions.forEach((o, nom) => { const v = lire(o, k); if (v) vals.push([nom, v]); });
+      if (!vals.length) return;
+      if (new Set(vals.map(x => x[1].toLowerCase())).size > 1) ecarts.push({ champ: label, valeurs: vals });
+      else if (vals.length < versions.size) complements.push({ champ: label, valeur: vals[0][1], par: vals.map(x => x[0]) });
+    });
+    return { ecarts, complements };
+  };
+  const ordre = new Map(sources[0].db.plans.map((p, i) => [clePlan(p), i]));
+  const total = { ecarts: 0, complements: 0, seuls: 0 }, out = [];
+  [...plans.entries()].sort((a, b) => (ordre.has(a[0]) ? ordre.get(a[0]) : 9999) - (ordre.has(b[0]) ? ordre.get(b[0]) : 9999))
+    .forEach(([c, e]) => {
+      const bloc = { seq: e.seq, plan: e.plan, plan_: comparer(e.versions, RAP_PLAN, champPlan), prises: [],
+                     planSeul: e.versions.size < sources.length ? [...e.versions.keys()] : null };
+      [...e.prises.entries()].sort((a, b) => (+a[0] || 0) - (+b[0] || 0)).forEach(([n, versions]) => {
+        const r = comparer(versions, RAP_PRISE, (t, k) => valRap(t[k]));
+        const seuls = versions.size < sources.length ? [...versions.keys()] : null;
+        total.ecarts += r.ecarts.length; total.complements += r.complements.length; if (seuls) total.seuls++;
+        if (r.ecarts.length || r.complements.length || seuls) bloc.prises.push(Object.assign({ n, seuls }, r));
+      });
+      total.ecarts += bloc.plan_.ecarts.length; total.complements += bloc.plan_.complements.length;
+      if (bloc.prises.length || bloc.plan_.ecarts.length || bloc.plan_.complements.length) out.push(bloc);
+    });
+  return { plans: out, total, noms: sources.map(s => s.nom) };
+}
+
+/* La fusion : la premiere source pour base, les autres comblent ses vides,
+   ajoutent leurs plans et leurs prises absents ; les elements captes s'additionnent. */
+function fusionRap(sources){
+  const base = structuredClone(sources[0].db);
+  const parCle = new Map(base.plans.map(p => [clePlan(p), p]));
+  const combler = (b, o, sauf) => Object.keys(o).forEach(k => {
+    if (sauf.indexOf(k) >= 0 || (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]))) return;
+    if (!valRap(b[k]) && valRap(o[k])) b[k] = o[k];
+  });
+  sources.slice(1).forEach(s => {
+    s.db.plans.forEach(p => {
+      let b = parCle.get(clePlan(p));
+      if (!b){ b = structuredClone(p); base.plans.push(b); parCle.set(clePlan(p), b); }
+      else {
+        combler(b, p, ['id']);
+        b.elements = b.elements || {};
+        Object.keys(p.elements || {}).forEach(k => { if (p.elements[k]) b.elements[k] = true; });
+      }
+      const prisesB = base.prises.filter(t => t.planId === b.id);
+      s.db.prises.filter(t => t.planId === p.id).forEach(t => {
+        const tb = prisesB.find(x => String(x.n) === String(t.n));
+        if (!tb){ const c = structuredClone(t); c.planId = b.id; base.prises.push(c); prisesB.push(c); }
+        else combler(tb, t, ['id', 'planId']);
+      });
+    });
+  });
+  return base;
+}
+
+/* les fichiers deposes : chacun nomme d'apres qui a saisi ses prises */
+function lireSources(input){
+  const fichiers = [...input.files]; input.value = '';
+  let restant = fichiers.length;
+  if (!restant) return;
+  fichiers.forEach(f => {
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const d = JSON.parse(r.result); if (!d.plans) throw 0;
+        const db = normaliser(d);
+        RAP.sources.push({ nom: nomDeSource(db, f.name), db, fichier: f.name });
+      }catch(e){ toast('Fichier illisible : ' + f.name); }
+      if (!--restant) renderReport();
+    };
+    r.readAsText(f);
+  });
+}
+function nomDeSource(db, fichier){
+  const f = frequences(db.prises.map(t => t.par).filter(Boolean));
+  const nom = f.length ? f[0][0] : fichier.replace(/\.json$/i, '');
+  const memes = sourcesRap().filter(s => s.nom === nom || s.nom.indexOf(nom + ' (') === 0).length;
+  return memes ? nom + ' (' + (memes + 1) + ')' : nom;
+}
+function retirerSource(i){ RAP.sources.splice(i, 1); renderReport(); }
+
+const ligneRap = (qui, c) =>
+  c.ecarts.map(e => `<div class="alert o"><i>&#9888;</i><div>${qui ? esc(qui) + ' · ' : ''}${esc(e.champ)} : ${
+    e.valeurs.map(([nom, v]) => `<b>${esc(nom)}</b> ${esc(v)}`).join(' · ')}</div></div>`).join('') +
+  c.complements.map(e => `<div class="alert"><i></i><div>${qui ? esc(qui) + ' · ' : ''}${esc(e.champ)} « ${esc(e.valeur)} » seulement chez ${esc(e.par.join(', '))}</div></div>`).join('') +
+  (c.seuls ? `<div class="alert"><i></i><div>${esc(qui)} seulement chez ${esc(c.seuls.join(', '))}</div></div>` : '');
+function resumeRap(t){
+  return [t.ecarts + ' écart' + plur(t.ecarts), t.complements + ' complément' + plur(t.complements),
+          t.seuls + ' prise' + plur(t.seuls) + ' chez un seul'].join(' · ');
+}
+function htmlRapprochement(){
+  const s = sourcesRap();
+  const puces = s.map((x, i) => `<span class="rsource${x.ici ? ' ici' : ''}">${esc(x.nom)}${x.ici ? ' <em>ce navigateur</em>' : ''}${
+    x.ici ? '' : ` <button type="button" onclick="retirerSource(${i - 1})" aria-label="Retirer ${esc(x.nom)}">&times;</button>`}</span>`).join('');
+  let corps = '';
+  if (s.length > 1){
+    const r = rapprocher(s);
+    corps = `<div class="rresume">${resumeRap(r.total)}</div>` +
+      (r.plans.length ? r.plans.map(b => `<div class="rplan"><b>Séquence ${esc(b.seq || '—')} · Plan ${esc(b.plan || '—')}</b>${
+          b.planSeul ? ` <em>seulement chez ${esc(b.planSeul.join(', '))}</em>` : ''}
+          ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('')
+        : '<div class="alert g"><i>&#10003;</i><div>Rien ne se contredit : les saisies concordent.</div></div>') +
+      `<div class="btns" style="margin-top:14px">
+        <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>
+        <button class="btn" onclick="telechargerRapprochement()">Écarts (PDF)</button></div>`;
+  }
+  return `<div class="rsources">${puces}<button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
+}
+function garderFusion(){
+  const s = sourcesRap();
+  if (s.length < 2) return prevenir('Déposez d’abord une sauvegarde à rapprocher.');
+  confirmer('Garder la version fusionnée comme projet' + (RESEAU.possible ? ', pour tous les appareils' : '') + ' ?',
+            { detail:'Vos saisies font foi sur les écarts ; les autres comblent les vides et apportent leurs prises en plus.', ok:'Fusionner' })
+  .then(oui => {
+    if (!oui) return;
+    DB = normaliser(fusionRap(s));
+    dernierPlan = null; chrono = null; RAP.sources = [];
+    operer({ op:'remplacer', db: DB });
+    flush(); renderAll(); toast('Projet fusionné');
+  });
+}
+/* le journal des ecarts en PDF, pour le relire ou le faire circuler */
+function pdfRapprochement(){
+  const s = sourcesRap(), r = rapprocher(s), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M, p = DB.prod, d = new Date();
+  entetePdf(doc, p.titre || 'Projet sans titre', 'Rapprochement des saisies · ' + s.map(x => x.nom).join(', '),
+            [[r.total.ecarts, 'écart' + plur(r.total.ecarts)], [r.total.complements, 'complément' + plur(r.total.complements)],
+             [r.total.seuls, 'prise' + plur(r.total.seuls) + ' chez un seul'], [s.length, 'saisies rapprochées']]);
+  const ligne = (texte, couleur, gras) => {
+    lignesPdf(texte, L - 12, 8.5, gras ? 'HB' : 'H').forEach(l => {
+      doc.place(13); doc.texte(PDF_M + 12, doc.y - 9, l, { taille: 8.5, police: gras ? 'HB' : 'H', couleur }); doc.y -= 12.5;
+    });
+  };
+  const bloc = (qui, c) => {
+    c.ecarts.forEach(e => ligne((qui ? qui + ' · ' : '') + e.champ + ' : ' + e.valeurs.map(([n, v]) => n + ' ' + v).join(' · '), 'encre', true));
+    c.complements.forEach(e => ligne((qui ? qui + ' · ' : '') + e.champ + ' « ' + e.valeur + ' » seulement chez ' + e.par.join(', '), 'tan'));
+    if (c.seuls) ligne(qui + ' seulement chez ' + c.seuls.join(', '), 'tan');
+  };
+  if (!r.plans.length){ sectionPdf(doc, 'Rien ne se contredit'); ligne('Les saisies concordent.', 'tan'); }
+  r.plans.forEach(b => {
+    sectionPdf(doc, 'Séquence ' + (b.seq || '—') + ' · Plan ' + (b.plan || '—') + (b.planSeul ? ' · seulement chez ' + b.planSeul.join(', ') : ''));
+    bloc('', b.plan_);
+    b.prises.forEach(t => bloc('Prise ' + t.n, t));
+    doc.y -= 4;
+  });
+  return doc.fichier([p.titre || '', 'rapprochement édité le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+                      ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · '));
+}
+function telechargerRapprochement(){
+  chargerLogo().then(() => download(fname('rapprochement', 'pdf'), pdfRapprochement(), 'application/pdf'));
 }
 
 /* ------------------------------------------------- Journal DIT par mail */

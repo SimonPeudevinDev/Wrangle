@@ -85,6 +85,18 @@ curl -fsSL https://raw.githubusercontent.com/SimonPeudevinDev/Wrangle/main/outil
 Ensuite `sudo wrangle-maj` met à jour et relance. Le journal par mail y marche aussi : déposer
 `mail.json` dans `/var/lib/wrangle/`.
 
+## Rapprocher les saisies
+
+Sans serveur, chacun saisit de son côté, dans son navigateur, et personne ne voit les autres. Pour
+tout réunir : chacun exporte sa sauvegarde (⚙ → Données → Sauvegarde JSON) et l'envoie au DIT, qui
+la dépose dans Rapport → « Rapprocher les saisies ». Le rapport met les prises côte à côte, plan par
+plan : un **écart** quand deux personnes ont écrit des valeurs différentes (statut, clip, carte,
+timecodes, notes, réglages…), un **complément** quand une seule a rempli un champ, une **prise chez
+un seul** quand une seule l'a saisie. « Garder la fusion comme projet » garde tout : les saisies de
+ce navigateur font foi sur les écarts, les autres comblent les vides et apportent leurs prises en
+plus. « Écarts (PDF) » sort le même rapport en PDF. Chaque fichier est nommé d'après qui a saisi ses
+prises.
+
 ## Le journal DIT par mail
 
 Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)
@@ -170,7 +182,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Treize scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Quatorze scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -187,6 +199,7 @@ py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises rete
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
+py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
