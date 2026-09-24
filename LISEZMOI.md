@@ -19,10 +19,11 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
   fichiers exportés s'appellent `…_equipe`. Le projet de cet appareil n'est pas modifié ;
   « Actualiser » va revoir ; « Mes saisies » revient à son propre bilan. Il n'y a pas de rôle DIT :
   c'est le bouton qui fait le DIT.
-- **Le découpage est propre à chacun** : chaque profil part des plans de la production intégrés au
-  site et garde sa copie (états, éléments captés, plans ajoutés). Quand deux personnes ont noté des
-  choses différentes sur le même plan ou la même prise, Rapport → « Rapprocher les saisies » les met
-  côte à côte, et « Garder la fusion comme projet » tranche.
+- **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
+  (par une personne, jour par jour) et le serveur la reporte chez tout le monde ; chacun garde sa
+  copie de ce qu'il note dessus (états, éléments captés). Quand deux personnes ont noté des choses
+  différentes sur le même plan ou la même prise, Rapport → « Rapprocher les saisies » les met côte
+  à côte.
 
 Le serveur, c'est le site lui-même chez l'hébergeur (OVH, en PHP) : voir « Le site chez
 l'hébergeur » plus bas. La liste des prénoms proposés à l'entrée est `EQUIPE`, en tête du script de
