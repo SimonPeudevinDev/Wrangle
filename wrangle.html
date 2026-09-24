@@ -2247,7 +2247,7 @@ function openPrise(id, y){
           ${sug && sug !== t.clip ? `<button class="mini" onclick="appliquerClip('${t.id}')" title="Reprendre le nom suivant">&#65291;1 <b>${esc(sug)}</b></button>` : ''}
         </div>
         <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1"
-          value="${esc(t.clip)}" placeholder="${esc(sug || 'A001_C003_0914XY')}" autocapitalize="characters" autocomplete="off">
+          value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C007')}" autocapitalize="characters" autocomplete="off">
       </div>
     </div>
 
@@ -2265,7 +2265,7 @@ function openPrise(id, y){
     ${sectionFiche('fichier', 'Fichier & caméra', t, `
       <div class="specs">
         ${F(t, 'Caméra', 'cam', {ph:'CAM-A', refresh:1, cap:'characters', dl:'dl-camname'})}
-        ${F(t, 'Carte', 'carte', {ph:'A001', refresh:1, cap:'characters'})}
+        ${F(t, 'Carte', 'carte', {ph:'A_0001 ou 1F6K', refresh:1, cap:'characters'})}
         ${F(t, 'Modèle', 'camModel', {dl:'dl-cam', ph:'ARRI Alexa 35'})}
         ${F(t, 'TC début', 'tcIn', {ph:'10:00:00:00', refresh:1})}
         ${F(t, 'TC fin', 'tcOut', {ph:'10:00:15:00'})}
