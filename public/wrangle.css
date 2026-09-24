@@ -600,13 +600,13 @@ nav button i{display:none}
 .pjour input:focus{border-color:var(--acc)}
 .pjour input::-webkit-inner-spin-button{opacity:1}
 .prow{
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 20px;align-items:start;
+  display:grid;grid-template-columns:minmax(0,1fr);gap:0 20px;align-items:start;
   margin:0 0 14px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
 }
 .pchamps{min-width:0;display:flex;flex-direction:column;gap:12px}
 .pl{display:grid;gap:0 14px;align-items:end}
-.pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) minmax(0,1.4fr)}
-.pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px}   /* le cadrage peut en porter plusieurs */
+.pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) minmax(0,1.4fr) auto}
+.pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px 236px}   /* le cadrage peut en porter plusieurs ; la distribution ferme la ligne */
 /* la distribution : un champ qui se lit, son menu a cocher s'ouvre au clic ;
    elle loge a droite, sous les etiquettes et Fiche, la ou la carte avait du vide */
 .w-dist input{cursor:pointer;text-overflow:ellipsis}
@@ -628,13 +628,12 @@ nav button i{display:none}
 .pc:has(.deroul) input{padding-right:32px}
 .pc .menu{right:auto;min-width:200px}
 .w-num input,.w-seq input,.w-jour input{font:700 17px/1.2 var(--font-titre);padding:4px 0 5px}
-.w-ord input{font:700 17px/1.2 var(--font-titre);font-variant-numeric:tabular-nums;padding:4px 0 5px}
+.w-ord input{font:700 17px/1.2 var(--font-titre);color:var(--acc);font-variant-numeric:tabular-nums;padding:4px 0 5px}
 /* les actions : Fiche et suppression, en haut a droite, a hauteur de la premiere ligne */
-/* a droite : les etiquettes du plan (LIVE / TBC…) puis Fiche et la croix, sur
-   la ligne du numero ; en dessous, la distribution */
-.pactions{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:250px;padding-top:0}
-.pactions .haut{display:flex;align-items:center;justify-content:flex-end;gap:14px}
-.pactions .ptags{margin:0;flex-wrap:nowrap}
+/* a droite de la premiere ligne : les etiquettes du plan (LIVE / TBC…) puis
+   Fiche et la croix, en haut de carte ; la distribution ferme la seconde ligne */
+.haut{display:flex;align-items:center;justify-content:flex-end;gap:14px;align-self:start;margin-left:6px}
+.haut .ptags{margin:0;flex-wrap:nowrap}
 .pbtns{display:flex;gap:8px;align-items:center}
 .pdel,.pfiche{
   flex:none;border:1px solid var(--line2);background:none;color:var(--dim);cursor:pointer;
@@ -659,9 +658,9 @@ nav button i{display:none}
 .pmove:hover{color:var(--txt);border-color:var(--txt)}
 #l-prep .jour{margin-bottom:16px}
 @media(max-width:1200px){
-  .pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr)}
+  .pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) auto}
   .pl1 .w-flex{grid-column:1 / -1}
-  .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px}
+  .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px 200px}
 }
 @media(max-width:560px){
   .prow{grid-template-columns:1fr;gap:12px;padding:14px;margin-bottom:12px}
@@ -669,9 +668,8 @@ nav button i{display:none}
   .pl1{grid-template-columns:52px 74px 64px 1fr}
   .pl1 .w-flex,.pl1 .w-lieu{grid-column:1 / -1}
   .pl2{grid-template-columns:1fr 1fr 56px}
-  .pl2 .w-desc{grid-column:1 / -1}
-  .pactions{width:auto;padding-top:0}
-  .pactions .haut{order:-1;justify-content:space-between}
+  .pl2 .w-desc,.pl2 .w-dist{grid-column:1 / -1}
+  .haut{grid-column:1 / -1;justify-content:space-between;margin:0 0 4px;order:-1}
 }
 
 /* ------------------------------- Croquis ------------------------------- */

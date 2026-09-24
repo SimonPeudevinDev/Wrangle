@@ -3511,26 +3511,24 @@ function rangPrep(p){
         ${champPrep(p, 'jour', 'Jour', {cls:'w-jour', ph:'J1', dl:'dl-jour', cap:'characters'})}
         ${champPrep(p, 'lieu', 'Décor', {cls:'w-lieu', ph:'Royal Academy', dl:'dl-lieu'})}
         ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
+        <div class="haut">
+          <span class="ptags">${htmlPtags(p)}</span>
+          ${modeOrdre ? `<div class="pbtns">
+            <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', -1)" title="Monter" aria-label="Monter">${CHEVRON_HAUT}</button>
+            <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', 1)" title="Descendre" aria-label="Descendre">${CHEVRON_BAS}</button>
+          </div>` : `<div class="pbtns">
+            <button type="button" class="pfiche" onclick="openPlan('${p.id}')">Fiche ${CHEVRON(1)}</button>
+            <button type="button" class="pdel" onclick="supprimerPlanPrep('${p.id}')" title="Supprimer ce plan" aria-label="Supprimer ce plan">${ICONES.croix}</button>
+          </div>`}
+        </div>
       </div>
       <div class="pl pl2">
         ${champPrep(p, 'desc', 'Description', {cls:'w-desc', area:1, ph:'Ce que l’on voit, ce qui se passe…'})}
         ${champPrep(p, 'cadrage', 'Cadrage', {cls:'w-cadr', ph:'Large', dl:'dl-cadrage', multi:1})}
         ${champPrep(p, 'focale', 'Focale', {cls:'w-foc', ph:'35 mm', dl:'dl-focale'})}
         ${champPrep(p, 'duree', 'Durée', {cls:'w-dur', ph:'3s'})}
+        ${champDistribution(p)}
       </div>
-    </div>
-    <div class="pactions">
-      <div class="haut">
-        <span class="ptags">${htmlPtags(p)}</span>
-        ${modeOrdre ? `<div class="pbtns">
-          <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', -1)" title="Monter" aria-label="Monter">${CHEVRON_HAUT}</button>
-          <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', 1)" title="Descendre" aria-label="Descendre">${CHEVRON_BAS}</button>
-        </div>` : `<div class="pbtns">
-          <button type="button" class="pfiche" onclick="openPlan('${p.id}')">Fiche ${CHEVRON(1)}</button>
-          <button type="button" class="pdel" onclick="supprimerPlanPrep('${p.id}')" title="Supprimer ce plan" aria-label="Supprimer ce plan">${ICONES.croix}</button>
-        </div>`}
-      </div>
-      ${champDistribution(p)}
     </div>
   </div>`;
 }
