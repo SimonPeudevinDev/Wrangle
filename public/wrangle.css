@@ -590,18 +590,27 @@ nav button i{display:none}
 .ptitre b{display:block;font:700 23px var(--font-titre);letter-spacing:-.01em;color:var(--acc)}
 .ptitre span{font-size:13.5px;color:var(--dim)}
 .pnote{margin:0 0 4px;font-size:13.5px;color:var(--dim);line-height:1.5;max-width:78ch}
+/* dans l'en-tete d'un jour : son nombre de plans, a regler avant le detail, et sa suppression */
+.jour .jctrl{margin-left:auto;display:inline-flex;align-items:center;gap:12px;align-self:center}
+.pjour{display:inline-flex;align-items:center;gap:8px;font:600 12.5px var(--font);color:var(--dim)}
+.pjour input{
+  width:52px;height:34px;padding:0 8px;text-align:center;border-radius:var(--rp);border:1px solid var(--line2);
+  background:var(--surface2);color:var(--txt);font:700 16px var(--font-titre);outline:none;
+}
+.pjour input:focus{border-color:var(--acc)}
+.pjour input::-webkit-inner-spin-button{opacity:1}
 .prow{
-  display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:0 20px;align-items:start;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 20px;align-items:start;
   margin:0 0 14px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
 }
 .pchamps{min-width:0;display:flex;flex-direction:column;gap:12px}
-.pcote{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding-top:16px}
-.pcote .ptags{margin:0}
 .pl{display:grid;gap:0 14px;align-items:end}
-.pl1{grid-template-columns:68px 62px minmax(0,1.4fr) 78px minmax(0,1fr)}
+.pl1{grid-template-columns:78px 68px minmax(0,1.4fr) 78px minmax(0,1fr)}
 .pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px 64px}   /* le cadrage peut en porter plusieurs */
 .pl3{grid-template-columns:minmax(0,1fr)}
-.pl3 .spec.col{padding:0}
+/* la distribution : un champ qui se lit, son menu a cocher s'ouvre au clic */
+.w-dist input{cursor:pointer;text-overflow:ellipsis}
+.w-dist .menu button.autre{color:var(--acc)}
 .pc{display:flex;flex-direction:column;gap:2px;min-width:0;position:relative}
 .pc span{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);font-weight:700;white-space:nowrap}
 .pc input,.pc textarea{
@@ -615,10 +624,13 @@ nav button i{display:none}
 .pc .deroul svg{width:13px;height:13px}
 .pc:has(.deroul) input{padding-right:32px}
 .pc .menu{right:auto;min-width:200px}
-.w-num input{font:700 22px/1.1 var(--font-titre);padding:2px 0 5px}
+.w-num input,.w-seq input{font:700 22px/1.1 var(--font-titre);padding:2px 0 5px}
 .w-ord input{font:700 17px/1.2 var(--font-titre);color:var(--acc);font-variant-numeric:tabular-nums;padding:4px 0 5px}
 /* les actions : Fiche et suppression, en haut a droite, a hauteur de la premiere ligne */
-.pactions{display:flex;flex-direction:column;align-items:flex-end;gap:12px;min-width:112px;padding-top:14px}
+/* a droite : les etiquettes du plan (LIVE / TBC…) puis Fiche et la croix, sur
+   la ligne du numero ; en dessous, rien qui gene les champs */
+.pactions{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:14px;min-width:112px;padding-top:14px}
+.pactions .ptags{margin:0;flex-wrap:nowrap}
 .pbtns{display:flex;gap:8px;align-items:center}
 .pdel,.pfiche{
   flex:none;border:1px solid var(--line2);background:none;color:var(--dim);cursor:pointer;
@@ -634,7 +646,7 @@ nav button i{display:none}
 .ptitre .pbtns{gap:10px}
 /* le mode Ordonner : la carte entiere se saisit ; un trait caramel marque ou elle va tomber */
 .prow.ordo{cursor:grab;border-style:dashed;border-color:var(--line2)}
-.prow.ordo .pchamps,.prow.ordo .pcote{pointer-events:none;opacity:.75}
+.prow.ordo .pchamps{pointer-events:none;opacity:.75}
 .prow.ordo:active{cursor:grabbing}
 .prow.tire{opacity:.35}
 .prow.av{box-shadow:0 -3px 0 0 var(--acc)}
@@ -643,19 +655,20 @@ nav button i{display:none}
 .pmove:hover{color:var(--txt);border-color:var(--txt)}
 #l-prep .jour{margin-bottom:16px}
 @media(max-width:1200px){
-  .pl1{grid-template-columns:68px 62px minmax(0,1fr) 78px}
+  .pl1{grid-template-columns:78px 68px minmax(0,1fr) 78px}
   .pl1 .w-lieu{grid-column:1 / -1}
   .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px 60px}
 }
 @media(max-width:560px){
   .prow{grid-template-columns:1fr;gap:12px;padding:14px;margin-bottom:12px}
-  .pcote{width:100%}
   .pl{gap:0 10px}
-  .pl1{grid-template-columns:64px 60px 1fr}
+  .pl1{grid-template-columns:74px 64px 1fr}
   .pl1 .w-flex,.pl1 .w-lieu{grid-column:1 / -1}
   .pl2{grid-template-columns:1fr 1fr 56px 60px}
   .pl2 .w-desc{grid-column:1 / -1}
-  .pactions{flex-direction:row;justify-content:flex-end;align-items:center;min-width:0;padding-top:0}
+  .pactions{order:-1;justify-content:space-between;min-width:0;padding-top:0}
+  .pl3 .spec.col{flex-direction:column;gap:4px}
+  .pl3 .spec.col>label{padding:0}
 }
 
 /* ------------------------------- Croquis ------------------------------- */

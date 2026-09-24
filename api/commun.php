@@ -376,6 +376,33 @@ function plan_par_cle($db, $cle) {
     return null;
 }
 
+function plan_par_id($db, $id) {
+    foreach ($db->plans as $p) {
+        if ($id !== '' && $id !== null && ($p->id ?? null) === $id) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+// une cle qui porte un numero de plan : des plans encore sans numero (une
+// journee preparee en nombre, avant le detail) ne se confondent pas
+function numerote($cle) {
+    $parts = explode('|', $cle, 2);
+    return count($parts) === 2 && $parts[1] !== '';
+}
+
+// le plan d'un autre espace : le meme identifiant (le decoupage se propage
+// avec ses identifiants), sinon la meme sequence et le meme numero
+function retrouver($db, $id, $avant) {
+    $p = plan_par_id($db, $id);
+    if ($p) {
+        return $p;
+    }
+    $cle = $avant[$id ?? ''] ?? '';
+    return numerote($cle) ? plan_par_cle($db, $cle) : null;
+}
+
 // id -> cle, pour retrouver un plan chez les autres apres qu'il a change
 function cles_avant($db) {
     $m = [];
@@ -397,6 +424,16 @@ function a_des_prises($db, $id) {
 }
 
 // l'operation, pour un autre espace ; null si elle ne le concerne pas
+// ou poser un plan chez l'autre quand celui d'apres lequel il vient lui
+// manque : a la fin, sauf s'il devait aller en tete
+function apres_defaut($db, $apres) {
+    if (!$apres || !$db->plans) {
+        return '';
+    }
+    $dernier = $db->plans[count($db->plans) - 1];
+    return $dernier->id ?? '';
+}
+
 function traduire($op, $avant, $db) {
     $t = $op->op ?? null;
     $kind = $op->kind ?? null;
@@ -407,12 +444,12 @@ function traduire($op, $avant, $db) {
         return null;                        // les prises restent a chacun
     }
     if ($t === 'patch') {
-        $p = plan_par_cle($db, $avant[$op->id ?? ''] ?? '');
+        $p = retrouver($db, $op->id ?? '', $avant);
         return $p ? (object) ['op' => 'patch', 'kind' => 'plan', 'id' => $p->id, 'data' => $op->data] : null;
     }
     if ($t === 'add') {
         $d = $op->data;
-        $ex = plan_par_cle($db, cle_plan($d));
+        $ex = plan_par_id($db, $d->id ?? null) ?: (numerote(cle_plan($d)) ? plan_par_cle($db, cle_plan($d)) : null);
         if ($ex) {                          // deja la chez lui : on aligne les champs
             $data = clone $d;
             unset($data->id);
@@ -427,25 +464,25 @@ function traduire($op, $avant, $db) {
         }
         $res = (object) ['op' => 'add', 'kind' => 'plan', 'data' => $n];
         if (property_exists($op, 'apres')) {
-            $ap = $op->apres ? plan_par_cle($db, $avant[$op->apres] ?? '') : null;
-            $res->apres = $ap ? $ap->id : '';
+            $ap = $op->apres ? retrouver($db, $op->apres, $avant) : null;
+            $res->apres = $ap ? $ap->id : apres_defaut($db, $op->apres);
         }
         return $res;
     }
     if ($t === 'del') {
-        $p = plan_par_cle($db, $avant[$op->id ?? ''] ?? '');
+        $p = retrouver($db, $op->id ?? '', $avant);
         if (!$p || a_des_prises($db, $p->id)) {
             return null;                    // ses prises restent : le plan aussi
         }
         return (object) ['op' => 'del', 'kind' => 'plan', 'id' => $p->id];
     }
     if ($t === 'move') {
-        $p = plan_par_cle($db, $avant[$op->id ?? ''] ?? '');
+        $p = retrouver($db, $op->id ?? '', $avant);
         if (!$p) {
             return null;
         }
-        $ap = !empty($op->apres) ? plan_par_cle($db, $avant[$op->apres] ?? '') : null;
-        return (object) ['op' => 'move', 'kind' => 'plan', 'id' => $p->id, 'apres' => $ap ? $ap->id : ''];
+        $ap = !empty($op->apres) ? retrouver($db, $op->apres, $avant) : null;
+        return (object) ['op' => 'move', 'kind' => 'plan', 'id' => $p->id, 'apres' => $ap ? $ap->id : apres_defaut($db, $op->apres)];
     }
     if ($t === 'remplacer') {
         // le decoupage de la source, avec ses identifiants, desormais les memes
@@ -455,10 +492,12 @@ function traduire($op, $avant, $db) {
         $neuf = clone $src;
         $neuf->plans = [];
         $parCle = [];
+        $parId = [];
         foreach ($src->plans as $p) {
             $c = clone $p;
             $neuf->plans[] = $c;
             $parCle[cle_plan($c)] = $c;
+            $parId[$c->id ?? ''] = $c;
         }
         $anciens = [];
         foreach ($db->plans as $p) {
@@ -467,7 +506,13 @@ function traduire($op, $avant, $db) {
         $prises = [];
         foreach ($db->prises as $x) {
             $a = $anciens[$x->planId ?? ''] ?? null;
-            $cible = $a ? ($parCle[cle_plan($a)] ?? null) : null;
+            $cible = null;
+            if ($a !== null) {
+                $cible = $parId[$a->id ?? ''] ?? null;
+                if ($cible === null && numerote(cle_plan($a))) {
+                    $cible = $parCle[cle_plan($a)] ?? null;
+                }
+            }
             if ($cible === null && $a !== null) {
                 $cible = clone $a;
                 $neuf->plans[] = $cible;
@@ -513,21 +558,20 @@ function propager($source, $faites, $avant, $client) {
         verrouiller();
         $db = lire_projet();
         if ($db) {
-            $ops = [];
+            // une a une : la suivante se traduit sur le projet deja change par la
+            // precedente (un plan ajoute apres un plan qu'on vient d'ajouter)
+            $res = [];
             foreach ($faites as $op) {
                 $o = traduire($op, $avant, $db);
                 if ($o) {
-                    $ops[] = $o;
+                    $res = array_merge($res, appliquer($db, [$o]));
                 }
             }
-            if ($ops) {
-                $res = appliquer($db, $ops);
-                if ($res) {
-                    $rev = lire_rev() + 1;
-                    ecrire_projet($db);
-                    ecrire_rev($rev);
-                    journal_ajouter($rev, $client, $res);
-                }
+            if ($res) {
+                $rev = lire_rev() + 1;
+                ecrire_projet($db);
+                ecrire_rev($rev);
+                journal_ajouter($rev, $client, $res);
             }
         }
         deverrouiller();

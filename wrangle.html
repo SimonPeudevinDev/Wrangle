@@ -32,6 +32,7 @@
 <!-- =============== TOURNAGE : la page de saisie =============== -->
 <!-- =============== PREPARATION =============== -->
 <section class="view" id="v-prep" hidden>
+  <div class="fbar" id="fbar-prep"></div>
   <div class="list" id="l-prep"></div>
 </section>
 
@@ -1465,15 +1466,18 @@ function lisElements(p){
 /* ------------------------------ Page Tournage ------------------------------ */
 
 function setJour(j){ fJour = j; UI.jour = j; ecrireUI(); renderShoot(); window.scrollTo(0, 0); }
+/* En Preparation aussi, la liste se parcourt jour par jour ; « Tout » les montre a la suite. */
+let fJourP = '*';
+function setJourP(j){ fJourP = j; oublierPrep(); renderPrep(); window.scrollTo(0, 0); }
 
 /* Les fleches : le jour precedent ou suivant, dans l'ordre des onglets
    (Tout, puis les jours connus). Au bout, on ne bouge plus. */
-function ordreJours(){ return ['*'].concat(joursConnus()); }
+function ordreJours(page){ return ['*'].concat(page === 'prep' ? joursPrep() : joursConnus()); }
 function jourVoisin(sens, page){
-  const ids = ordreJours(), actuel = page === 'report' ? fJourR : fJour;
+  const ids = ordreJours(page), actuel = page === 'report' ? fJourR : page === 'prep' ? fJourP : fJour;
   const i = Math.max(0, ids.indexOf(actuel)), n = Math.max(0, Math.min(ids.length - 1, i + sens));
   if (n === i) return;
-  page === 'report' ? setJourR(ids[n]) : setJour(ids[n]);
+  page === 'report' ? setJourR(ids[n]) : page === 'prep' ? setJourP(ids[n]) : setJour(ids[n]);
 }
 
 /* L'etat repond a « ou en est ce plan ? » : il n'y en a qu'un. Les marqueurs
@@ -1549,7 +1553,7 @@ let cadreFait = null;
 function cadrerJour(id, actif){
   const row = $(id);
   if (!row) return;
-  const ids = ordreJours(), i = ids.indexOf(actif);
+  const ids = ordreJours(id === 'c-jourp' ? 'prep' : ''), i = ids.indexOf(actif);
   if (row.previousElementSibling) row.previousElementSibling.disabled = i <= 0;
   if (row.nextElementSibling) row.nextElementSibling.disabled = i >= ids.length - 1;
   if (!row.clientWidth) return;               // vue masquee : on recadrera a l'ouverture
@@ -1579,7 +1583,7 @@ window.addEventListener('resize', () => document.querySelectorAll('.chips').forE
 /* Une pastille par jour : son libelle, son compte, un point d'or si c'est le
    jour du tournage et un trait d'avancement en pied. `info` decrit ce que
    compte la page qui appelle (plans ici, prises dans le rapport). */
-function chipsJours(actif, fn, info){
+function chipsJours(actif, fn, info, jours){
   const auj = jourDuTournage();
   const un = (j, label) => {
     const d = info(j) || {};
@@ -1590,7 +1594,7 @@ function chipsJours(actif, fn, info){
   };
   // le nom du jour seul : les comptes et l'avancement sont dans la ligne de
   // filtres et dans l'en-tete de chaque journee
-  return un('*', 'Tout') + joursConnus().map(j => un(j, nomJour(j))).join('');
+  return un('*', 'Tout') + (jours || joursConnus()).map(j => un(j, nomJour(j))).join('');
 }
 
 function renderShoot(){
@@ -3328,6 +3332,52 @@ function champPrep(p, k, label, opt){
     (opt.dl ? `<button type="button" class="deroul" data-liste="${opt.dl}"${opt.multi ? ' data-multi="1"' : ''} onclick="ouvrirMenu(this)" aria-label="Choisir dans la liste">${CHEVRON_BAS}</button>` : '') +
     `</label>`;
 }
+/* La distribution d'un plan, en Preparation : un champ qui dit qui est dans
+   le plan, et un menu deroulant ou l'on coche les roles, la figuration, ou
+   l'on ajoute un nom. Le champ ne se tape pas : tout passe par le menu. */
+const texteDistribution = p => (p.acteurs || []).concat(p.figu ? ['Figuration'] : []).join(', ');
+function champDistribution(p){
+  return `<label class="pc w-dist"><span>Distribution</span>
+    <input readonly value="${esc(texteDistribution(p))}" placeholder="Qui est dans le plan ?" data-dist="${p.id}" onclick="ouvrirDistribution(this.nextElementSibling)" onkeydown="touchePrep(event, '${p.id}')">
+    <button type="button" class="deroul" onclick="ouvrirDistribution(this)" aria-label="Choisir la distribution">${CHEVRON_BAS}</button></label>`;
+}
+function ouvrirDistribution(btn){
+  const deja = btn.classList.contains('on');
+  fermerMenu();
+  if (deja) return;
+  const row = btn.closest('.pc'), id = row.querySelector('input').dataset.dist, p = plan(id);
+  if (!p) return;
+  const coche = x => (p.acteurs || []).some(y => memeVal(y, x));
+  const m = document.createElement('div');
+  m.className = 'menu multi';
+  m.innerHTML = acteursConnus().map(x => `<button type="button" class="${coche(x) ? 'on' : ''}" data-v="${esc(x)}"
+      onclick="cocherDistribution('${id}', 'acteurs', this)">${esc(x)}</button>`).join('') +
+    `<button type="button" class="${p.figu ? 'on' : ''}" data-v="figu" onclick="cocherDistribution('${id}', 'figu', this)">Figuration</button>` +
+    `<button type="button" class="autre" onclick="autreDistribution('${id}', this)">+ Autre nom…</button>`;
+  row.appendChild(m);
+  btn.classList.add('on');
+  setTimeout(() => document.addEventListener('click', clicHorsMenu), 0);
+}
+function cocherDistribution(id, k, b){
+  const p = plan(id); if (!p) return;
+  if (k === 'figu') patch('plan', id, { figu: !p.figu });
+  else patch('plan', id, { acteurs: avecOuSans(p.acteurs, b.dataset.v) });
+  b.classList.toggle('on');
+  const i = document.querySelector(`#l-prep input[data-dist="${id}"]`);
+  if (i) i.value = texteDistribution(plan(id));
+  majResumes(); renderList();
+}
+function autreDistribution(id, b){
+  demanderTexte('Nom du rôle').then(nom => {
+    nom = (nom || '').trim(); if (!nom) return;
+    const p = plan(id); if (!p || (p.acteurs || []).some(x => memeVal(x, nom))) return;
+    patch('plan', id, { acteurs: (p.acteurs || []).concat([nom]) });
+    const i = document.querySelector(`#l-prep input[data-dist="${id}"]`);
+    if (i) i.value = texteDistribution(plan(id));
+    b.insertAdjacentHTML('beforebegin', `<button type="button" class="on" data-v="${esc(nom)}" onclick="cocherDistribution('${id}', 'acteurs', this)">${esc(nom)}</button>`);
+    majResumes(); renderList();
+  });
+}
 // masquee (section repliee, vue cachee), la zone ne mesure rien : on la laisse a sa ligne
 function autoHauteur(ta){ ta.style.height = 'auto'; if (ta.scrollHeight) ta.style.height = ta.scrollHeight + 'px'; }
 
@@ -3343,13 +3393,10 @@ function horodater(btn){
 
 function rangPrep(p){
   return `<div class="prow${modeOrdre ? ' ordo' : ''}" data-id="${p.id}"${modeOrdre ? ' draggable="true"' : ''}>
-    <div class="pcote">
-      <span class="ptags">${htmlPtags(p)}</span>
-    </div>
     <div class="pchamps">
       <div class="pl pl1">
-        ${champPrep(p, 'plan', 'N°', {cls:'w-num', ph:'05', cap:'characters'})}
         ${champPrep(p, 'seq', 'Séq', {cls:'w-seq', ph:'01', dl:'dl-seq'})}
+        ${champPrep(p, 'plan', 'Shot', {cls:'w-num', ph:'05', cap:'characters'})}
         ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
         ${champPrep(p, 'jour', 'Jour', {cls:'w-jour', ph:'J1', dl:'dl-jour', cap:'characters'})}
         ${champPrep(p, 'lieu', 'Décor', {cls:'w-lieu', ph:'Royal Academy', dl:'dl-lieu'})}
@@ -3364,10 +3411,11 @@ function rangPrep(p){
             onfocus="this.select()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onchange="placerPlan('${p.id}', this.value)"></label>
       </div>
       <div class="pl pl3">
-        ${MULTI(p, 'Distribution', 'acteurs', acteursConnus(), {plus:1, cases:[['figu', 'Figuration']]})}
+        ${champDistribution(p)}
       </div>
     </div>
     <div class="pactions">
+      <span class="ptags">${htmlPtags(p)}</span>
       ${modeOrdre ? `<div class="pbtns">
         <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', -1)" title="Monter" aria-label="Monter">${CHEVRON_HAUT}</button>
         <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', 1)" title="Descendre" aria-label="Descendre">${CHEVRON_BAS}</button>
@@ -3381,9 +3429,9 @@ function rangPrep(p){
 
 function renderPrep(){
   const l = $('l-prep'); if (!l) return;
-  const ids = DB.plans.map(p => p.id).join(',');
-  // quelqu'un tape ici : on ne redessine pas, les autres champs se mettent a niveau
-  if (l.dataset.ids === ids && l.contains(document.activeElement)){
+  const ids = fJourP + '|' + DB.plans.map(p => p.id).join(',');
+  // quelqu'un tape ici, ou coche dans un menu : on ne redessine pas, les autres champs se mettent a niveau
+  if (l.dataset.ids === ids && (l.contains(document.activeElement) || l.querySelector('.menu'))){
     l.querySelectorAll('[data-o][data-k]').forEach(el => {
       if (el === document.activeElement) return;
       const o = plan(el.dataset.o); if (!o) return;
@@ -3397,18 +3445,27 @@ function renderPrep(){
     majChoix('#l-prep');
     return;
   }
-  const jours = joursConnus(), nj = jours.filter(j => j && j !== 'CG').length;
-  let html = `<div class="ptitre"><div><b>Découpage</b><span>${DB.plans.length} plan${plur(DB.plans.length)} · ${nj} jour${plur(nj)} de tournage</span></div>
+  const tous = joursPrep(), nj = tous.filter(j => j && j !== 'CG').length;
+  if (fJourP !== '*' && tous.indexOf(fJourP) < 0) fJourP = '*';
+  $('c-jourp').innerHTML = chipsJours(fJourP, 'setJourP', j => {
+    const n = j === '*' ? DB.plans.length : plansDuJour(j).length;
+    return { titre: (j === '*' ? 'Tout le tournage' : nomJour(j)) + ' · ' + n + ' plan' + plur(n) };
+  }, tous);
+  cadrerJour('c-jourp', fJourP);
+  const unJour = fJourP !== '*', nP = unJour ? plansDuJour(fJourP).length : DB.plans.length;
+  let html = `<div class="ptitre"><div><b>Découpage</b><span>${unJour ? esc(nomJour(fJourP)) + ' · ' : ''}${
+      nP} plan${plur(nP)}${unJour ? '' : ' · ' + nj + ' jour' + plur(nj) + ' de tournage'}</span></div>
       <div class="pbtns">
         <button type="button" class="btn ${modeOrdre ? 'p' : ''}" onclick="basculerOrdre()">${modeOrdre ? 'Terminer' : 'Ordonner'}</button>
-        <button type="button" class="btn p" onclick="ajouterPlanPrep('')" ${modeOrdre ? 'hidden' : ''}>+ Ajouter un plan</button>
+        <button type="button" class="btn" onclick="ajouterJourPrep()" ${modeOrdre ? 'hidden' : ''}>+ Jour</button>
+        <button type="button" class="btn p" onclick="ajouterPlanPrep('${unJour ? esc(fJourP) : ''}')" ${modeOrdre ? 'hidden' : ''}>+ Ajouter un plan</button>
       </div></div>
-    <p class="pnote">Numéros, séquences, descriptions, décors et jours : ce qui se prépare avant le plateau.
+    <p class="pnote">Séquences, numéros, descriptions, décors et jours : ce qui se prépare avant le plateau.
       Cadrage, mouvement, éléments à capter et détail VFX se règlent dans la fiche de chaque plan.
       L’ordre des cartes est l’ordre de tournage : « Ordonner » permet de les glisser.</p>`;
-  jours.forEach(j => {
+  (unJour ? [fJourP] : tous).forEach(j => {
     const ps = trierPlans(plansDuJour(j), false);
-    html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span></div>` +
+    html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span>${enteteJour(j, ps.length)}</div>` +
             ps.map(rangPrep).join('') +
             `<button type="button" class="addplan" onclick="ajouterPlanPrep('${esc(j)}')">+ Plan${j ? ' ' + esc(nomJour(j).toLowerCase()) : ''}</button>`;
   });
@@ -3498,6 +3555,75 @@ function ajouterPlanPrep(j){
   renderAll();
   const i = document.querySelector(`#l-prep .prow[data-id="${p.id}"] input[data-k="plan"]`);
   if (i){ i.scrollIntoView({ block:'center' }); i.focus(); }
+}
+
+/* Combien de plans par jour, avant le detail : on pose d'abord la journee en
+   nombre (« Jour 1 : 14 plans »), les cartes vides se remplissent ensuite.
+   Monter le nombre ajoute des cartes vides a la fin du jour ; le baisser ne
+   retire que des cartes encore vides (sans numero, sans description, sans
+   prise), les autres restent et la page le dit. Un jour ajoute sans plan
+   n'existe que sur cet ecran, le temps de lui donner un nombre. */
+let joursVides = [];
+const planVide = p => !(p.plan || '').trim() && !(p.desc || '').trim() && !prisesDe(p.id).length;
+/* Les jours de la Preparation : ceux qui ont des plans, et ceux qu'on vient d'ouvrir. */
+function joursPrep(){
+  const jours = joursConnus();
+  return jours.concat(joursVides.filter(j => jours.indexOf(j) < 0)).sort((a, b) => rangJour(a) - rangJour(b));
+}
+/* Dans l'en-tete d'un jour : son nombre de plans a regler, et de quoi le supprimer. */
+function enteteJour(j, n){
+  if (!j || j === 'CG' || modeOrdre) return '';
+  return `<span class="jctrl"><label class="pjour"><span>Plans</span>
+      <input type="number" min="0" max="99" inputmode="numeric" value="${n}" data-jour="${esc(j)}"
+        onchange="fixerNombreJour('${esc(j)}', this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></label>
+    <button type="button" class="btn sm d" onclick="supprimerJourPrep('${esc(j)}')">Supprimer le jour</button></span>`;
+}
+function ajouterJourPrep(){
+  // un jour deja ouvert et encore vide attend son nombre : on y retourne, on n'en empile pas un autre
+  let j = joursVides.filter(x => !plansDuJour(x).length).sort((a, b) => rangJour(a) - rangJour(b))[0];
+  if (!j){
+    const nums = joursPrep().map(x => parseInt(numJour(x), 10) || 0);
+    j = 'J' + (Math.max(0, ...nums) + 1);
+    joursVides.push(j);
+  }
+  setJourP(j);
+  const i = document.querySelector(`#l-prep .jour input[data-jour="${j}"]`);
+  if (i){ i.focus(); i.select(); }
+}
+/* Supprimer un jour : ses plans avec, apres confirmation s'il en a. */
+function supprimerJourPrep(j){
+  const ps = plansDuJour(j), pr = ps.reduce((n, p) => n + prisesDe(p.id).length, 0);
+  const faire = () => {
+    ps.forEach(supprimerPlan); corbeille = null;
+    joursVides = joursVides.filter(x => x !== j);
+    if (fJourP === j) fJourP = '*';
+    oublierPrep(); renderAll(); toast(nomJour(j) + ' supprimé');
+  };
+  if (!ps.length) return faire();
+  confirmer('Supprimer le ' + nomJour(j).toLowerCase() + ' et ses ' + ps.length + ' plan' + plur(ps.length) +
+            (pr ? ' (' + pr + ' prise' + plur(pr) + ')' : '') + ' ?', { ok:'Supprimer', danger:true }).then(oui => { if (oui) faire(); });
+}
+function fixerNombreJour(j, input){
+  const n = Math.max(0, Math.min(99, parseInt(input.value, 10) || 0));
+  const ps = plansDuJour(j);
+  if (n > ps.length){
+    for (let k = ps.length; k < n; k++) creerPlan(j, false);
+    joursVides = joursVides.filter(x => x !== j);
+    oublierPrep(); renderAll();
+    toast((n - ps.length) + ' plan' + plur(n - ps.length) + ' ajouté' + plur(n - ps.length) + ' au ' + nomJour(j).toLowerCase());
+    return;
+  }
+  if (n < ps.length){
+    const trop = ps.slice(n).reverse(), gardes = trop.filter(p => !planVide(p));
+    trop.filter(planVide).forEach(supprimerPlan);
+    corbeille = null;
+    oublierPrep(); renderAll();
+    const retires = trop.length - gardes.length;
+    toast((retires ? retires + ' plan' + plur(retires) + ' vide' + plur(retires) + ' retiré' + plur(retires) : 'Rien à retirer') +
+          (gardes.length ? ' · ' + gardes.length + ' plan' + plur(gardes.length) + ' déjà rempli' + plur(gardes.length) + ' gardé' + plur(gardes.length) : ''));
+    return;
+  }
+  input.value = ps.length;
 }
 function supprimerPlanPrep(id){
   const p = plan(id);
@@ -5222,6 +5348,7 @@ function htmlJours(page, id, avecFiltres){
 function barresJours(){
   $('fbar-shoot').insertAdjacentHTML('afterbegin', htmlJours('shoot', 'c-jour', true));
   $('fbar-report').innerHTML = htmlJours('report', 'c-jourr', false);
+  $('fbar-prep').innerHTML = htmlJours('prep', 'c-jourp', false);
 }
 
 /* La rangee des jours colle sous la barre haute : sa hauteur depend de

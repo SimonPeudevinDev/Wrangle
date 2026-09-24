@@ -574,9 +574,38 @@ def plan_par_cle(db, cle):
     return None
 
 
+def plan_par_id(db, i):
+    for p in db['plans']:
+        if i and p.get('id') == i:
+            return p
+    return None
+
+
+def numerote(cle):
+    """Une clé qui porte un numéro de plan : des plans encore sans numéro
+    (une journée préparée en nombre, avant le détail) ne se confondent pas."""
+    return bool(cle.split('|', 1)[1]) if '|' in cle else False
+
+
+def retrouver(db, i, avant):
+    """Le plan d'un autre espace : le même identifiant (le découpage se
+    propage avec ses identifiants), sinon la même séquence et le même numéro."""
+    p = plan_par_id(db, i)
+    if p:
+        return p
+    cle = avant.get(i, '')
+    return plan_par_cle(db, cle) if numerote(cle) else None
+
+
 def cles_avant(db):
     """id -> clé, pour retrouver un plan chez les autres après qu'il a changé."""
     return {p.get('id'): cle_plan(p) for p in (db['plans'] if db else [])}
+
+
+def apres_defaut(db, apres):
+    """Où poser un plan chez l'autre quand celui d'après lequel il vient lui
+    manque : à la fin, sauf s'il devait aller en tête."""
+    return db['plans'][-1].get('id', '') if apres and db['plans'] else ''
 
 
 def traduire(op, avant, db):
@@ -587,11 +616,11 @@ def traduire(op, avant, db):
     if kind != 'plan' and t != 'remplacer':
         return None                         # les prises restent à chacun
     if t == 'patch':
-        p = plan_par_cle(db, avant.get(op.get('id'), ''))
+        p = retrouver(db, op.get('id'), avant)
         return {'op': 'patch', 'kind': 'plan', 'id': p['id'], 'data': op['data']} if p else None
     if t == 'add':
         d = op['data']
-        ex = plan_par_cle(db, cle_plan(d))
+        ex = plan_par_id(db, d.get('id')) or (plan_par_cle(db, cle_plan(d)) if numerote(cle_plan(d)) else None)
         if ex:                              # déjà là chez lui : on aligne les champs
             data = {k: v for k, v in d.items() if k != 'id'}
             return {'op': 'patch', 'kind': 'plan', 'id': ex['id'], 'data': data}
@@ -600,20 +629,20 @@ def traduire(op, avant, db):
             n['id'] = n['id'] + '-' + os.urandom(3).hex()
         res = {'op': 'add', 'kind': 'plan', 'data': n}
         if 'apres' in op:
-            ap = plan_par_cle(db, avant.get(op['apres'], '')) if op['apres'] else None
-            res['apres'] = ap['id'] if ap else ''
+            ap = retrouver(db, op['apres'], avant) if op['apres'] else None
+            res['apres'] = ap['id'] if ap else apres_defaut(db, op['apres'])
         return res
     if t == 'del':
-        p = plan_par_cle(db, avant.get(op.get('id'), ''))
+        p = retrouver(db, op.get('id'), avant)
         if not p or any(x.get('planId') == p['id'] for x in db['prises']):
             return None                     # ses prises restent : le plan aussi
         return {'op': 'del', 'kind': 'plan', 'id': p['id']}
     if t == 'move':
-        p = plan_par_cle(db, avant.get(op.get('id'), ''))
+        p = retrouver(db, op.get('id'), avant)
         if not p:
             return None
-        ap = plan_par_cle(db, avant.get(op.get('apres'), '')) if op.get('apres') else None
-        return {'op': 'move', 'kind': 'plan', 'id': p['id'], 'apres': ap['id'] if ap else ''}
+        ap = retrouver(db, op.get('apres'), avant) if op.get('apres') else None
+        return {'op': 'move', 'kind': 'plan', 'id': p['id'], 'apres': ap['id'] if ap else apres_defaut(db, op.get('apres'))}
     if t == 'remplacer':
         # le découpage de la source, avec ses identifiants, désormais les mêmes
         # partout ; ses prises à lui restent, rattachées par la clé du plan, et
@@ -622,11 +651,16 @@ def traduire(op, avant, db):
         neuf = dict(src)
         neuf['plans'] = [dict(p) for p in src['plans']]
         par_cle = {cle_plan(p): p for p in neuf['plans']}
+        par_id = {p.get('id'): p for p in neuf['plans']}
         anciens = {p.get('id'): p for p in db['plans']}
         prises = []
         for x in db['prises']:
             a = anciens.get(x.get('planId'))
-            cible = par_cle.get(cle_plan(a)) if a else None
+            cible = None
+            if a is not None:
+                cible = par_id.get(a.get('id'))
+                if cible is None and numerote(cle_plan(a)):
+                    cible = par_cle.get(cle_plan(a))
             if cible is None and a is not None:
                 cible = dict(a)
                 neuf['plans'].append(cible)
@@ -664,10 +698,13 @@ def propager(source, faites, avant, client):
         autres = [e for e in espaces.values() if e is not source and e['db'] and e['slug'] != 'commun']
     for e in autres:
         with verrou:
-            ops = [o for o in (traduire(op, avant, e['db']) for op in faites) if o]
-            if not ops:
-                continue
-            resultat = appliquer(ops, client, e)
+            # une à une : la suivante se traduit sur le projet déjà changé par la
+            # précédente (un plan ajouté après un plan qu'on vient d'ajouter)
+            resultat = []
+            for op in faites:
+                o = traduire(op, avant, e['db'])
+                if o:
+                    resultat += appliquer([o], client, e)
             rev = e['rev']
         if resultat:
             diffuser({'type': 'ops', 'client': client, 'rev': rev, 'ops': resultat}, espace=e['slug'], sauf=client)

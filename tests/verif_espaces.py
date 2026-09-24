@@ -126,6 +126,19 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     essais.verifier('mais un plan ou Romain a des prises reste chez lui, avec elles',
                     [romain_avec_prises in cles('romain'), [t['clip'] for t in etat('romain')['db']['prises']]], [True, ['B001C001', 'B001C002']])
     essais.verifier('les prises de Simon n ont pas bouge non plus', [t['clip'] for t in etat('simon')['db']['prises']], ['A001C001'])
+    # -- des plans encore sans numero (une journee preparee en nombre) : chacun
+    #    se retrouve chez Romain par son identifiant, pas par une cle vide commune
+    banc.js("""
+      ['vide-a', 'vide-b'].forEach(id => {
+        const n = Object.assign({ id }, PLAN_NEUF(), { seq: '', plan: '', jour: 'J9' });
+        DB.plans.push(n); operer({ op: 'add', kind: 'plan', data: n, apres: DB.plans[DB.plans.length - 2].id });
+      });
+      patch('plan', 'vide-b', { desc: 'Le second' });
+    """)
+    essais.verifier('deux plans sans numero arrivent chez Romain, memes identifiants',
+                    attendre(lambda: [p['id'] for p in etat('romain')['db']['plans'][-2:]] == ['vide-a', 'vide-b']), True)
+    essais.verifier('et la description va au bon, pas au premier sans numero',
+                    [(p.get('desc') or '') for p in etat('romain')['db']['plans'][-2:]], ['', 'Le second'])
     # -- un nouveau venu, avec son propre decoupage seme a part, recoit celui de l'equipe
     tom = banc.js("(() => { const d = normaliser(null); seed(d); d.prises = [Object.assign({}, NEUVE(), { id:'t1', planId: d.plans[5].id, seq: d.plans[5].seq, plan: d.plans[5].plan, jour: d.plans[5].jour, n: 1, clip: 'T001', par: 'Tom' })]; return d; })()")
     api('ops', {'client': 'tel-tom', 'nom': 'Tom', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': tom, 'siVide': True}]})

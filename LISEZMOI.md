@@ -185,13 +185,22 @@ chez son auteur, ici et sur le serveur, et les siennes restent.
 
 **Les prises sont à chacun, le découpage est à tous.** Un plan ajouté, modifié, déplacé ou
 supprimé dans Préparation vaut pour toute l'équipe : le serveur reporte l'opération dans chaque
-espace (un plan s'y reconnaît à sa séquence et son numéro). Un plan sur lequel quelqu'un a déjà
+espace (un plan s'y reconnaît à son identifiant, le même partout, sinon à sa séquence et son
+numéro). Un plan sur lequel quelqu'un a déjà
 des prises ne lui est jamais retiré. La production et les optiques suivent la même règle. Un
 nouveau venu reçoit le découpage de l'équipe, mêmes plans et mêmes identifiants, et garde ses
 prises. « Recharger le découpage » (⚙ → Données) remet les plans dans l'ordre du DT, garde ce
 qui a été saisi dessus, replie les doublons et laisse les plans ajoutés sur le plateau à la
 suite ; comme c'est une opération sur le découpage, elle vaut pour tout le monde. Depuis la
 fiche d'un plan ouverte en Tournage, on ne supprime pas de plan : c'est dans Préparation.
+
+**Préparer en nombre, détailler ensuite.** Préparation se parcourt jour par jour, avec la même
+barre qu'en Tournage (« Tout » les montre à la suite). Dans l'en-tête de chaque jour, « Plans »
+donne son nombre de plans : le monter pose autant de cartes vides à la fin du jour, à remplir
+après ; le baisser ne retire que des cartes encore vides (sans numéro, sans description, sans
+prise), les autres restent et la page le dit. « + Jour » ouvre le jour suivant (et y revient tant
+qu'il est vide), « Supprimer le jour » retire le jour et ses plans après confirmation. Sur la
+carte : séquence puis shot, la distribution se coche dans un menu déroulant.
 
 ## Le journal DIT par mail
 
@@ -281,7 +290,7 @@ Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
 
 ## Vérifier que rien n'est cassé
 
-Dix-sept scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Dix-huit scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -297,6 +306,7 @@ py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
 py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues, plans tournés, reste à tourner
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
+py tests/verif_plans_par_jour.py   préparer jour par jour : nombre de plans, jour de plus ou de moins, distribution cochée
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
 py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
