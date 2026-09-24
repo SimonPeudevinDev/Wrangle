@@ -156,8 +156,9 @@ Ensuite `sudo wrangle-maj` met à jour et relance. Le journal par mail y marche 
 deux personnes ont rempli la même prise (même plan, même numéro), elle ne fait qu'une ligne, aux
 deux noms : celles d'ici font foi, les autres comblent les vides, les notes s'ajoutent. Ce qui
 compte et diffère — statut, à monter, focale, clip, carte, réglages… — est noté comme **écart** sur
-la prise, et le journal DIT (PDF) le signale en rouge sous le plan, avec un compte en tête de
-journée. L'heure, les timecodes et la durée ne comptent pas : un chrono oublié ou quelques secondes
+la prise, et le journal DIT (PDF) le signale en rouge juste sous la prise, avec un compte en tête de
+journée. Le journal tient en deux parties, une journée par page : les prises retenues pour le
+montage, puis chaque plan tourné avec ses prises. L'heure, les timecodes et la durée ne comptent pas : un chrono oublié ou quelques secondes
 d'écart ne sont pas un désaccord. Pour voir ces écarts en détail, ou pour en faire son projet :
 « Rapprocher les saisies », juste en dessous dans le Rapport.
 
@@ -316,7 +317,7 @@ py tests/verif_barre_jours.py      la rangée des jours, calée sur trois sur t�
 py tests/verif_enchainement.py     les lignes de la fiche s'ouvrent l'une après l'autre
 py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
-py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues, plans tournés, reste à tourner
+py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues pour le montage, puis plans tournés avec leurs prises et leurs écarts
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_plans_par_jour.py   préparer jour par jour : nombre de plans, jour de plus ou de moins, distribution cochée
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner

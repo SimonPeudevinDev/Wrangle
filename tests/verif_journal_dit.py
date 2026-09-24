@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Le journal DIT : une journee par page, qui s'ouvre sur les prises retenues
-pour le montage, donne les plans tournes avec leurs prises et qui a saisi quoi
-a quelle heure, puis ce qui reste a tourner en liste. Il se telecharge en PDF,
-ecrit par la page elle-meme."""
+pour le montage, puis donne chaque plan tourne avec ses prises, qui a saisi quoi
+a quelle heure, et les ecarts entre saisies sous la prise. Rien d'autre. Il se
+telecharge en PDF, ecrit par la page elle-meme."""
 import json
 import os
 import re
@@ -64,13 +64,14 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('les objets sont numerotes d un trait',
                     [int(x) for x in re.findall(r'(?m)^(\d+) 0 obj', pdf)] == list(range(1, pdf.count(' 0 obj') + 1)), True)
     essais.verifier('le clip retenu s y lit', '(A001C002)' in pdf, True)
-    essais.verifier('les accents passent en WinAnsi', 'S\xc9QUENCE 06' in pdf and '(Reste \xe0 tourner' not in pdf and 'RESTE \xc0 TOURNER' in pdf, True)
-    essais.verifier('le montage vient avant le reste a tourner', 0 < pdf.find('(A001C002)') < pdf.find('RESTE \xc0 TOURNER'), True)
-    essais.verifier('la sauvegarde ouvre le journal', 0 < pdf.find('SAUVEGARDER : 3 FICHIERS SUR 1 CARTE') < pdf.find('(A001C002)'), True)
+    essais.verifier('les accents passent en WinAnsi', '(S\xe9quence 06 \xb7 Plan' in pdf and '2. PLANS TOURN\xc9S' in pdf, True)
+    essais.verifier('plus de sauvegarde ni de reste a tourner : le montage, puis les plans tournes',
+                    ['SAUVEGARDER :' not in pdf, 'RESTE \xc0 TOURNER' not in pdf, 0 < pdf.find('1. POUR LE MONTAGE') < pdf.find('2. PLANS TOURN')], [True, True, True])
+    essais.verifier('le montage vient avant les plans tournes', 0 < pdf.find('(A001C002)') < pdf.find('2. PLANS TOURN'), True)
     essais.verifier('la prise retenue est en gras sur fond creme', '/CB 8 Tf' in pdf and ' re f' in pdf, True)
     essais.verifier('la page est droite', '/MediaBox [0 0 595.28 841.89]' in pdf, True)
     essais.verifier('les timecodes ont leur colonne, puisqu il y en a', '(10:22:31:04 \x96)' in pdf and '(TC IN / OUT)' in pdf, True)
-    essais.verifier('la journee 2, sans prise, n a pas de tableau', '(TC IN / OUT)' in pdf.split('(RESTE ')[1], False)
+    essais.verifier('la journee 2, sans prise, le dit', 'Aucun plan tourn\xe9 pour l' in pdf, True)
     essais.verifier('le plan annonce son bilan', '(2 prises \xb7 1 OK \xb7 1 NG \xb7 1 retenue)' in pdf, True)
     essais.verifier('qui a saisi, et quand, dans le PDF', bool(re.search(r'/HB 8 Tf[^\n]*\(Bob\) Tj', pdf)) and '(09:15)' in pdf, True)
     essais.verifier('les notes a parentheses sont echappees', banc.js(

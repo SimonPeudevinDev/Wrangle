@@ -203,7 +203,7 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     texte = banc.cdp.appel('Runtime.evaluate', expression="avecEquipeAJour(() => surLePerimetre(() => Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('')))",
                            awaitPromise=True, returnByValue=True)['result']['value']
     essais.verifier('le PDF DIT les signale sous le plan, et compte les ecarts en tete',
-                    ['cart prise 1 \x97 Focale : Simon 35 mm \xb7 Romain 50 mm' in texte, 'Statut : Simon OK \xb7 Romain NG' in texte, '2 \xe9carts entre les saisies' in texte, '10:02' in texte or '10:03' in texte],
+                    ['CART prise 1 \x97 Focale : Simon 35 mm \xb7 Romain 50 mm' in texte, 'Statut : Simon OK \xb7 Romain NG' in texte, '2 \xc9CARTS ENTRE LES SAISIES' in texte, '10:02' in texte or '10:03' in texte],
                     [True, True, True, True])
 
     # -- recharger la page garde la personne, son espace, et le choix « Toute l'equipe »
