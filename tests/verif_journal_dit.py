@@ -70,7 +70,7 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('le montage vient avant les plans tournes', 0 < pdf.find('(A001C002)') < pdf.find('2. PLANS TOURN'), True)
     essais.verifier('la prise retenue est en gras sur fond creme', '/CB 8 Tf' in pdf and ' re f' in pdf, True)
     essais.verifier('la page est droite', '/MediaBox [0 0 595.28 841.89]' in pdf, True)
-    essais.verifier('les timecodes ont leur colonne, puisqu il y en a', '(10:22:31:04 \x96)' in pdf and '(TC IN / OUT)' in pdf, True)
+    essais.verifier('les timecodes ont leur colonne, puisqu il y en a', '(10:22:31:04)' in pdf and '(TC IN)' in pdf, True)
     essais.verifier('la journee 2, sans prise, le dit', 'Aucun plan tourn\xe9 pour l' in pdf, True)
     essais.verifier('le plan annonce son bilan', '(2 prises \xb7 1 OK \xb7 1 NG \xb7 1 retenue)' in pdf, True)
     essais.verifier('qui a saisi, et quand, dans le PDF', bool(re.search(r'/HB 8 Tf[^\n]*\(Bob\) Tj', pdf)) and '(09:15)' in pdf, True)

@@ -4622,8 +4622,8 @@ function pdfDIT(j){
     ou:     ['Plan · prise', 84, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n],
     statut: ['Statut', 42, 'H', t => statut(t.statut)],
     ret:    ['Montage', 54, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
-    // les deux timecodes dans une colonne, l'un sous l'autre quand il y en a deux
-    tc:     ['TC in / out', 72, 'C', t => t.tcIn && t.tcOut ? t.tcIn + ' – ' + t.tcOut : t.tcIn || t.tcOut],
+    // le timecode d'entree seul : avec la duree, il suffit au montage, et la ligne reste sur une ligne
+    tc:     ['TC in', 68, 'C', t => t.tcIn || t.tcOut],
     duree:  ['Durée', 34, 'H', t => t.duree],
     carte:  ['Carte', 52, 'H', t => t.carte ? { t: t.carte, police: 'HB', couleur: 'encre' } : { t: '—', couleur: 'tan' }],
     note:   ['Note', 0, 'H', t => t.note],
