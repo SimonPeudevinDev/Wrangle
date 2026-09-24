@@ -18,3 +18,15 @@
 # chacun (api/donnees), ni les depots (depot/saisies). Leurs dossiers portent
 # deja un .htaccess ; celui-ci est la ceinture.
 RedirectMatch 404 ^/(api/donnees|depot/saisies|depot/comptes)(/|$)
+
+# Le site se sert en https : une adresse tapee en http y est renvoyee. Seulement
+# pour le domaine, qui a son certificat ; l'adresse technique de l'hebergeur
+# n'en a pas et reste en http. Chez l'hebergeur, le https est termine devant le
+# serveur, qui le sait par X-Forwarded-Proto.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP_HOST} ^(www\.)?foresight-movie\.com$ [NC]
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
