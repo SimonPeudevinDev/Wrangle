@@ -58,6 +58,10 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
     banc.nommer()                                    # Simon
     essais.verifier('la page est en mode php : partage, sans flux, dans l espace de Simon', [banc.js('RESEAU.possible'), banc.js('RESEAU.src'), banc.js('monEspace()')], [True, None, 'simon'])
     essais.verifier('ses appels vont a api/….php', banc.js("API('ops')"), 'api/ops.php')
+    # publiee ailleurs (GitHub Pages), la page porte l'adresse du serveur a appeler
+    essais.verifier('avec une adresse de serveur en tete, les appels y vont',
+                    banc.js("(() => { window.WRANGLE_API = 'http://exemple.test/api'; const u = API('depuis'); delete window.WRANGLE_API; return u; })()"),
+                    'http://exemple.test/api/depuis.php')
     essais.verifier('l espace etait vide : la page lui envoie son projet',
                     attendre(lambda: banc.js("RESEAU.etat === 'ok' && RESEAU.rev >= 1 && !RESEAU.attente.length")), True)
     e = etat('simon')

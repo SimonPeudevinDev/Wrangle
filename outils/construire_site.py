@@ -7,6 +7,10 @@ WRANGLE — construit le site publie a partir de la page du plateau.
   py outils/construire_site.py [dossier] --vide   carnet vide, sans le decoupage
   py outils/construire_site.py [dossier] --php    pour un hebergeur qui execute PHP :
                                                   le site fait serveur, la page le sait
+  py outils/construire_site.py [dossier] --api http://…/api
+                                                  la page, publiee ailleurs, appelle ce
+                                                  serveur-la (GitHub Pages, en attendant
+                                                  que le domaine soit chez l'hebergeur)
 
 Le site publie, c'est la page : wrangle.html devient index.html a cote de
 public/. Par defaut la page part telle quelle, le decoupage du tournage
@@ -66,12 +70,16 @@ def version():
     return datetime.fromtimestamp(os.path.getmtime(PAGE)).strftime('%Y%m%d-%H%M%S')
 
 
-def construire(sortie, vide=False, php=False):
+def construire(sortie, vide=False, php=False, api=''):
     gardees = lignes_page(vide)
     v = version()
     # en tete de la page : son numero de version, et pour OVH le fait que les
-    # scripts d'api/ repondent a cote d'elle (la meme ligne que serveur.py ajoute)
-    marque = "<head><script>window.WRANGLE_VERSION='%s'%s</script>" % (v, ";window.WRANGLE_SERVEUR='php'" if php else '')
+    # scripts d'api/ repondent a cote d'elle (la meme ligne que serveur.py ajoute) ;
+    # avec --api, la page publiee ailleurs appelle ce serveur-la, a son adresse
+    serveur = ";window.WRANGLE_SERVEUR='php'" if (php or api) else ''
+    if api:
+        serveur += ";window.WRANGLE_API='%s'" % api.rstrip('/').replace("'", '')
+    marque = "<head><script>window.WRANGLE_VERSION='%s'%s</script>" % (v, serveur)
     i = next(i for i, l in enumerate(gardees) if '<head>' in l)
     gardees[i] = gardees[i].replace('<head>', marque, 1)
 
@@ -127,7 +135,13 @@ def verifier(index):
 
 
 if __name__ == '__main__':
-    options = [a for a in sys.argv[1:] if a.startswith('--')]
-    reste = [a for a in sys.argv[1:] if not a.startswith('--')]
+    args = sys.argv[1:]
+    api = ''
+    if '--api' in args:                       # --api http://…/api  : le serveur a appeler
+        i = args.index('--api')
+        api = args[i + 1] if i + 1 < len(args) else ''
+        del args[i:i + 2]
+    options = [a for a in args if a.startswith('--')]
+    reste = [a for a in args if not a.startswith('--')]
     construire(os.path.join(ICI, reste[0] if reste else 'site'),
-               vide='--vide' in options, php='--php' in options)
+               vide='--vide' in options, php='--php' in options, api=api)

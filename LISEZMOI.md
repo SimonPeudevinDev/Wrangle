@@ -85,11 +85,14 @@ opérations et les sauvegardes, avec les mêmes appels et les mêmes réponses q
 liste des connectés est commune. Les données vivent dans `api/donnees/espaces/<prénom>/`, interdit
 au web.
 
-**Pour que ce soit bien ce site-là que l'équipe ouvre**, le nom de domaine doit mener chez OVH, pas
-chez GitHub Pages : la copie publiée sur GitHub Pages est la page seule, sans serveur, où chacun
-reste dans son navigateur et où « Toute l'équipe » ne trouve personne. La marche à suivre est dans
-« Publier le site », en bas. En attendant, l'adresse propre de l'hébergement OVH (celle de l'espace
-client) sert tout autant.
+**Le domaine et le serveur.** Tant que foresight-movie.com mène chez GitHub Pages, la page qu'on y
+publie n'a pas de serveur à côté d'elle : elle appelle donc celui d'OVH à son adresse technique,
+posée en tête de page à la publication (`construire_site.py --api http://…/api`, variable
+`API_DISTANTE` du workflow ; les scripts PHP répondent à cette autre origine). Chacun, sur son
+téléphone et sa propre connexion, dépose ainsi ses saisies dans son espace, et le DIT les
+retrouve toutes par « Toute l'équipe », d'où qu'il ouvre le site. Le jour où le domaine est
+rattaché à l'hébergement OVH (voir « Publier le site », en bas), la page et le serveur sont au
+même endroit : retirer alors `--api` du workflow.
 La page sait qu'elle est chez l'hébergeur par une ligne en tête (`window.WRANGLE_SERVEUR='php'`,
 posée par `construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH)
 et l'interroge toutes les deux secondes au lieu d'écouter un flux. Rien à installer ni à laisser

@@ -533,7 +533,10 @@ const RESEAU = {
   tTampon: null, tEnvoi: null, tPresence: null, tInterroge: null
 };
 /* l'adresse d'un appel : /api/etat chez serveur.py, api/etat.php chez l'hebergeur */
-const API = nom => RESEAU.php ? 'api/' + nom + '.php' : '/api/' + nom;
+/* Chez l'hebergeur, les scripts sont a cote de la page (api/…). Publiee
+   ailleurs — GitHub Pages, tant que le domaine n'y est pas rattache — la page
+   porte en tete l'adresse du serveur a appeler (window.WRANGLE_API). */
+const API = nom => RESEAU.php ? (window.WRANGLE_API ? String(window.WRANGLE_API).replace(/\/*$/, '/') : 'api/') + nom + '.php' : '/api/' + nom;
 /* l'espace de cet appareil sur le serveur : celui de son prenom */
 const monEspace = () => RESEAU.possible ? espaceDe(UI.nom) : '';
 /* Ce qui n'est pas encore parti est garde par onglet ET par espace : sinon,
@@ -5198,7 +5201,9 @@ function envoyerBalise(){
   viderTampon();
   if (!RESEAU.possible || !RESEAU.attente.length || !navigator.sendBeacon) return;
   try{
-    navigator.sendBeacon(API('ops'), new Blob([corpsOps(RESEAU.attente)], { type:'application/json' }));
+    // en texte brut : une balise ne sait pas poser la question prealable qu'un
+    // JSON exigerait vers un serveur d'une autre origine ; les serveurs lisent le corps tel quel
+    navigator.sendBeacon(API('ops'), new Blob([corpsOps(RESEAU.attente)], { type:'text/plain' }));
   }catch(e){}
 }
 window.addEventListener('pagehide', () => { flush(); envoyerBalise(); });

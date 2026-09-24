@@ -20,6 +20,16 @@
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+// La page publiee ailleurs (GitHub Pages, tant que le domaine n'est pas chez
+// l'hebergeur) parle a ce serveur depuis une autre origine : on l'y autorise.
+// L'API est ouverte a qui connait l'adresse, ceci n'y change rien.
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {   // la question prealable du navigateur
+    http_response_code(204);
+    exit;
+}
 
 define('DONNEES', __DIR__ . '/donnees');
 define('JOURNAL_GARDE', 400);        // operations gardees pour les appareils en retard
