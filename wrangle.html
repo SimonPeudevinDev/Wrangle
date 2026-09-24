@@ -82,7 +82,6 @@
 <div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-btn" hidden></button></div>
 <input type="file" id="imp" accept=".json" hidden onchange="importJSON(this)">
 <input type="file" id="rap-in" accept=".json" multiple hidden onchange="lireSources(this)">
-<input type="file" id="image-plan-in" accept="image/*" hidden onchange="imagePlanChoisie(this)">
 <input type="file" id="fond-in" accept="image/*" hidden onchange="fondChoisi(this)">
 
 <!-- Le croquis du set : un editeur plein ecran, par-dessus tout. -->
@@ -113,7 +112,6 @@
     <div class="choix" id="choix-nom"></div>
   </div>
 </div>
-<div class="voile" id="voile-photo" hidden onclick="this.hidden=true"><img alt=""></div>
 <!-- la boite de dialogue : confirmer, demander un texte ou prevenir, a la place des fenetres du navigateur -->
 <div class="voile dlg" id="dlg" hidden>
   <div class="boite" role="dialog" aria-modal="true" aria-labelledby="dlg-titre" aria-describedby="dlg-msg">
@@ -1756,7 +1754,6 @@ function calerPrises(racine){
 }
 
 function blocPlan(p, seulementRetenues, qui){
-  const th = imagePlan(p);
   let pr = prisesDe(p.id);
   const total = pr.length;
   if (seulementRetenues) pr = pr.filter(t => t.retenue);
@@ -1779,7 +1776,6 @@ function blocPlan(p, seulementRetenues, qui){
 
   return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}" data-id="${p.id}">
     <div class="phead" onclick="openPlan('${p.id}')">
-      ${th ? vigPlan(p) : ''}
       <div class="pmain">
         <div class="pnum">${p.plan ? esc(p.plan) : 'sans n°'}<span class="ptags">${htmlPtags(p)}</span>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
@@ -2176,7 +2172,7 @@ function openPrise(id, y){
   openId = id; openType = 'prise';
   dernierPlan = t.planId;
   const p = plan(t.planId);
-  const th = imagePlan(p), el = lisElements(p);
+  const el = lisElements(p);
   const sug = clipSuivant(t);
 
   $('stitle').textContent = 'Plan ' + (t.plan || '?') + ' · prise ' + t.n;
@@ -2186,7 +2182,6 @@ function openPrise(id, y){
 
   $('sbody').innerHTML = `
     ${p ? `<a class="fplan" href="#" onclick="event.preventDefault();openPlan('${p.id}')">
-      ${th ? `<img src="${th}" alt="">` : '<span class="fvide"></span>'}
       <span class="ftxt">
         <span class="fdesc">${esc(p.desc || 'Plan ' + (p.plan || ''))}</span>
         <span class="fctx">${[p.lieu, p.cadrage, p.mouv, p.focale && p.focale + ' prévu'].filter(Boolean).map(esc).join(' · ')}</span>
@@ -2472,38 +2467,6 @@ function majMoteurFiche(){
     b.onclick = chrono ? null : () => moteurSur(p.id);
   }
 }
-function voirImage(src){
-  const v = $('voile-photo');
-  v.querySelector('img').src = src; v.hidden = false;
-}
-
-/* L'image d'un plan : celle qu'on lui a donnee sur le plateau, s'il y en a une.
-   Le decoupage n'en fournit plus : ses vignettes ont quitte la page. */
-const imagePlan = p => (p && p.image) || '';
-/* la vignette d'une carte : la photo ajoutee sur le plateau, s'il y en a une */
-const vigPlan = (p, style) => {
-  const img = imagePlan(p);
-  const css = (style || '') + (img ? `background-image:url(${img})` : '');
-  return `<div class="vig"${css ? ` style="${css}"` : ''}></div>`;
-};
-function choisirImagePlan(id){ demanderImage('image-plan-in', id); }
-function imagePlanChoisie(input){
-  const f = input.files && input.files[0], id = input.dataset.id;
-  input.value = '';
-  if (!f || !id) return;
-  // petite et legere : elle voyage avec le projet sur tous les appareils
-  reduirePhoto(f, 480, .6).then(url => {
-    if (!plan(id)) return;
-    patch('plan', id, { image: url });
-    renderAll(); redessinerFichePlan(plan(id));
-    toast('Image ajoutée');
-  }).catch(() => toast('Image illisible'));
-}
-function retirerImagePlan(id){
-  patch('plan', id, { image: '' });
-  renderAll();
-}
-
 /* Les etiquettes du plan : deux familles exclusives, ce qu'il est (LIVE, VFX,
    CG) et ce qu'il devient (TBC, VAL, KILLED). Un clic sur la puce, sur la
    carte comme dans la fiche, ouvre un petit menu de sa famille. */
@@ -3210,7 +3173,6 @@ function openPlan(id, y){
   videEntete();
   dernierPlan = id;
   p.elements = p.elements || {};
-  const th = imagePlan(p);
 
   $('stitle').textContent = 'Plan ' + (p.plan || 'sans n°');
   $('ssub').textContent =
@@ -3219,7 +3181,6 @@ function openPlan(id, y){
 
   $('sbody').innerHTML = `
     <div class="bandeau">
-      ${th ? `<img src="${th}" alt="" onclick="voirImage(this.src)" title="Voir en grand">` : ''}
       <div class="btxt">
         <div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div>
         <div class="lead">${esc(p.desc || '—')}</div>
@@ -3274,9 +3235,7 @@ function openPlan(id, y){
         `<button data-et="${v}" class="${classeSeg(v, p.etat, c)}" onclick="setEtatPlan('${v}')">${ETATS[v]}</button>`).join('')}</div>
     </div>
 
-    <div class="sec btns">
-      <button class="btn d" onclick="delPlan()">Supprimer ce plan</button>
-    </div>`;
+    <div class="note">Pour retirer ce plan du découpage, ou en ajouter un : Préparation. Depuis le tournage, on ne supprime pas un plan.</div>`;
 
   const f = $('sfoot');
   f.innerHTML = `<button type="button" class="btn" id="moteur-fiche">&#9679; Moteur</button>
@@ -3341,10 +3300,6 @@ function supprimerPlanConfirme(p){
     return true;
   });
 }
-function delPlan(){
-  const p = plan(openId);
-  if (p) supprimerPlanConfirme(p).then(fait => { if (fait) closeSheet(); });
-}
 
 /* Un plan tourne en plus du decoupage : insert, plan de coupe, raccord ajoute
    sur le plateau. Il se range dans la journee filtree, ou dans celle du dernier
@@ -3387,14 +3342,8 @@ function horodater(btn){
 }
 
 function rangPrep(p){
-  const img = imagePlan(p);
   return `<div class="prow${modeOrdre ? ' ordo' : ''}" data-id="${p.id}"${modeOrdre ? ' draggable="true"' : ''}>
     <div class="pcote">
-      <div class="pimg">
-        ${img ? `<img src="${img}" alt="" onclick="choisirImagePlan('${p.id}')" title="Changer l’image">`
-              : `<button type="button" class="pvide" onclick="choisirImagePlan('${p.id}')">${ICONES.image}<span>Image</span></button>`}
-        ${p.image ? `<button type="button" class="pimg-x" onclick="retirerImagePlan('${p.id}')" title="Retirer l’image" aria-label="Retirer l’image">${ICONES.croix}</button>` : ''}
-      </div>
       <span class="ptags">${htmlPtags(p)}</span>
     </div>
     <div class="pchamps">
@@ -3616,10 +3565,8 @@ function renderPicker(){
     .slice(0, 60);
   $('l-pick').innerHTML =
     (rows.map(p => {
-      const th = imagePlan(p);
       const n = prisesDe(p.id).length;
       return `<div class="plan pick"><div class="phead" onclick="choisiPicker('${p.id}')">
-        ${vigPlan(p, 'width:84px;height:47px;')}
         <div class="pmain">
           <div class="pnum" style="font-size:17px">${p.plan ? esc(p.plan) : 'sans n°'}
             ${n ? `<span style="font-size:12px;color:var(--dim2);font-weight:600;margin-left:8px">${n} pr.</span>` : ''}</div>
@@ -4016,10 +3963,8 @@ function htmlPost(j){
     const el = elementsCoches(x).map(e => `<span${e[3] === 'v' ? ' class="v"' : ''}>${esc(e[2])}</span>`).join('') +
       (x.elementsAutre ? `<span>${esc(x.elementsAutre.toUpperCase())}</span>` : '');
     const rel = ref ? relevesDe(ref) : [];
-    const th = imagePlan(x);
     return `<article class="pplan">
       <div class="ptete">
-        ${th ? `<img class="pvig" src="${th}" alt="">` : ''}
         <div>
           <div class="pno">Plan ${esc(x.plan || '—')}${
             (x.tags || []).map(t => `<span>${esc(t)}</span>`).join('')}</div>
@@ -5103,19 +5048,39 @@ function resync(){
   confirmer('Recharger le découpage technique' + (RESEAU.possible ? ' pour tous les appareils' : '') + ' ?',
             { detail:'Les prises, éléments, notes, états et jours sont conservés.', ok:'Recharger' }).then(oui => {
     if (!oui) return;
-    let maj = 0, add = 0;
+    /* Un plan du decoupage se reconnait a sa sequence et son numero (clePlan) :
+       le decoupage integre n'a pas de refs. S'il est la plusieurs fois — un
+       ancien rechargement l'ajoutait en double — on garde le premier et on lui
+       rend les prises des doubles. Ce qui a ete saisi sur le plateau (etat,
+       elements, notes, jour, croquis…) est conserve ; le reste vient du DT. Puis
+       les plans reprennent l'ordre du decoupage, les plans ajoutes sur le plateau
+       a la suite : le meme ordre sur tous les appareils. */
+    let maj = 0, add = 0, plies = 0;
+    const parCle = new Map();
+    DB.plans.forEach(p => {
+      const k = clePlan(p), premier = parCle.get(k);
+      if (!premier){ parCle.set(k, p); return; }
+      DB.prises.forEach(t => { if (t.planId === p.id) t.planId = premier.id; });
+      plies++;
+    });
+    const gardes = new Set([...parCle.values()].map(p => p.id));
+    DB.plans = DB.plans.filter(p => gardes.has(p.id));
+    const ordre = [];
     for (const s of SEED.plans){
-      // un plan ajoute sur le plateau n'a pas de ref : il ne doit jamais etre ecrase
-      const ex = DB.plans.find(p => p.ref && p.ref === s.ref);
+      const ex = parCle.get(clePlan(s));
       if (ex){
         const garde = { id: ex.id, jour: ex.jour || s.jour, etat: ex.etat, elements: ex.elements,
-                        elementsAutre: ex.elementsAutre, vfxDesc: ex.vfxDesc, intExt: ex.intExt, image: ex.image, croquis: ex.croquis,
+                        elementsAutre: ex.elementsAutre, vfxDesc: ex.vfxDesc, intExt: ex.intExt, croquis: ex.croquis,
                         momentJour: ex.momentJour, meteo: ex.meteo, acteurs: ex.acteurs, figu: ex.figu, notesClient: ex.notesClient, notesInternes: ex.notesInternes };
-        Object.assign(ex, s, garde); propagerLocal(ex); maj++;
-      } else { DB.plans.push(Object.assign({ id: uid() }, PLAN_NEUF(), s)); add++; }
+        Object.assign(ex, s, garde); propagerLocal(ex); ordre.push(ex); maj++;
+      } else { const n = Object.assign({ id: uid() }, PLAN_NEUF(), s); parCle.set(clePlan(s), n); ordre.push(n); add++; }
     }
+    const dedans = new Set(ordre.map(p => p.id));
+    DB.plans = ordre.concat(DB.plans.filter(p => !dedans.has(p.id)));   // les plans hors decoupage suivent
+    if (DB.prises.some(t => t.planId === dernierPlan) === false) dernierPlan = null;
     operer({ op:'remplacer', db: DB });
-    flush(); renderAll(); toast(maj + ' plans mis à jour, ' + add + ' ajoutés');
+    flush(); renderAll();
+    toast(maj + ' plans mis à jour, ' + add + ' ajouté' + plur(add) + (plies ? ', ' + plies + ' doublon' + plur(plies) + ' replié' + plur(plies) : ''));
   });
 }
 
@@ -5224,8 +5189,6 @@ document.addEventListener('keydown', e => {
   if (fermerCalendrier()) return;
   if (fermerMenu()) return;
   if (fermerFiltres()) return;
-  const vp = $('voile-photo');
-  if (!vp.hidden){ vp.hidden = true; return; }
   if (openType) closeSheet();
 });
 

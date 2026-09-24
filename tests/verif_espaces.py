@@ -106,6 +106,38 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     essais.verifier('Simon retrouve sa prise, et rien d autre',
                     attendre(lambda: banc.js('DB.prises.map(t => t.clip)') == ['A001C001']), True)
 
+    # -- le decoupage est a tout le monde : un plan ajoute, modifie, deplace ou
+    #    supprime par Simon vaut chez Romain ; ses prises, elles, restent a lui
+    cles = lambda esp: [(p.get('seq'), p.get('plan')) for p in etat(esp)['db']['plans']]
+    banc.js("""
+      const n = Object.assign({ id: 'plan-simon' }, PLAN_NEUF(), { seq: '42', plan: '01', jour: 'J1', desc: 'Ajouté par Simon' });
+      DB.plans.splice(0, 0, n); operer({ op: 'add', kind: 'plan', data: n, apres: '' });
+    """)
+    essais.verifier('un plan ajoute par Simon arrive en tete chez Romain',
+                    attendre(lambda: cles('romain')[0] == ('42', '01')), True)
+    banc.js("patch('plan', 'plan-simon', { desc: 'Corrigé par Simon' })")
+    essais.verifier('sa fiche modifiee suit chez Romain',
+                    attendre(lambda: etat('romain')['db']['plans'][0].get('desc') == 'Corrigé par Simon'), True)
+    banc.js("operer({ op: 'del', kind: 'plan', id: DB.plans[3].id }); DB.plans.splice(3, 1)")
+    essais.verifier('un plan sans prise supprime par Simon disparait chez Romain',
+                    attendre(lambda: len(cles('romain')) == len(cles('simon'))), True)
+    romain_avec_prises = cles('romain')[2]      # plans[1] d'origine : Romain y a deux prises
+    banc.js("operer({ op: 'del', kind: 'plan', id: DB.plans[2].id }); DB.plans.splice(2, 1)"); time.sleep(0.8)
+    essais.verifier('mais un plan ou Romain a des prises reste chez lui, avec elles',
+                    [romain_avec_prises in cles('romain'), [t['clip'] for t in etat('romain')['db']['prises']]], [True, ['B001C001', 'B001C002']])
+    essais.verifier('les prises de Simon n ont pas bouge non plus', [t['clip'] for t in etat('simon')['db']['prises']], ['A001C001'])
+    # -- un nouveau venu, avec son propre decoupage seme a part, recoit celui de l'equipe
+    tom = banc.js("(() => { const d = normaliser(null); seed(d); d.prises = [Object.assign({}, NEUVE(), { id:'t1', planId: d.plans[5].id, seq: d.plans[5].seq, plan: d.plans[5].plan, jour: d.plans[5].jour, n: 1, clip: 'T001', par: 'Tom' })]; return d; })()")
+    api('ops', {'client': 'tel-tom', 'nom': 'Tom', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': tom, 'siVide': True}]})
+    et = etat('tom')['db']
+    essais.verifier('Tom arrive sur le decoupage de l equipe, memes plans, memes identifiants, avec sa prise',
+                    [[p['id'] for p in et['plans']] == [p['id'] for p in etat('simon')['db']['plans']], [t['clip'] for t in et['prises']],
+                     any(p['id'] == et['prises'][0]['planId'] for p in et['plans'])], [True, ['T001'], True])
+    essais.verifier('et son arrivee n a rien change chez Simon', len(cles('simon')), len(cles('tom')))
+    avant_vide = (len(cles('simon')), len(cles('romain')))
+    api('ops', {'client': 'tel-tom', 'nom': 'Tom', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': {'prod': {}, 'optiques': [], 'plans': [], 'prises': []}}]})
+    essais.verifier('vider son espace ne touche pas aux autres', [etat('tom')['db'], (len(cles('simon')), len(cles('romain')))], [None, avant_vide])
+
     # -- le DIT reunit tout : les espaces des autres, pas le sien
     esp = api('espaces')['espaces']
     essais.verifier('le serveur liste les espaces qui ont un projet',

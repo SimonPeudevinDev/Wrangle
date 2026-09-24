@@ -181,6 +181,16 @@ ses sauvegardes dans `data/sauvegardes-avant-espaces/`. Et si un carnet porte qu
 prises saisies par d'autres, la page le voit et propose de les leur rendre : chaque prise repart
 chez son auteur, ici et sur le serveur, et les siennes restent.
 
+**Les prises sont à chacun, le découpage est à tous.** Un plan ajouté, modifié, déplacé ou
+supprimé dans Préparation vaut pour toute l'équipe : le serveur reporte l'opération dans chaque
+espace (un plan s'y reconnaît à sa séquence et son numéro). Un plan sur lequel quelqu'un a déjà
+des prises ne lui est jamais retiré. La production et les optiques suivent la même règle. Un
+nouveau venu reçoit le découpage de l'équipe, mêmes plans et mêmes identifiants, et garde ses
+prises. « Recharger le découpage » (⚙ → Données) remet les plans dans l'ordre du DT, garde ce
+qui a été saisi dessus, replie les doublons et laisse les plans ajoutés sur le plateau à la
+suite ; comme c'est une opération sur le découpage, elle vaut pour tout le monde. Depuis la
+fiche d'un plan ouverte en Tournage, on ne supprime pas de plan : c'est dans Préparation.
+
 ## Le journal DIT par mail
 
 Le serveur peut envoyer le journal DIT en PDF, à la main (fiche Journée, « Envoyer maintenant »)
@@ -230,8 +240,8 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 - **+ Prise** (petit bouton) ou « + Prise N » sous chaque plan : ajoute une prise sans chrono.
 - Dans la liste : ★ (à monter), OK, NG sans ouvrir la fiche.
 - Dans la fiche : résultat (OK, NG, Série, Faux départ, Pick-up), note libre et mots rapides
-  (Raccord, Jeu, Cadre…), nom de clip avec suggestion du suivant (bouton ＋1), photo de référence
-  (moniteur, clap), relevés caméra pour le matchmove, réglages image, son.
+  (Raccord, Jeu, Cadre…), nom de clip avec suggestion du suivant (bouton ＋1), relevés caméra
+  pour le matchmove, réglages image, son.
 - Caméra, carte, optique, réglages : repris automatiquement de la prise précédente.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
@@ -257,7 +267,7 @@ haut (`Tout` = tout le tournage) et se lit en trois temps :
 
 1. **Pour le montage** : la liste des prises ★, dans l'ordre du tournage — clip, séquence, plan,
    durée, carte, note.
-2. **Pour les VFX**, plan par plan : la vignette du découpage, ce que le DT demandait, la prise qui
+2. **Pour les VFX**, plan par plan : ce que le DT demandait, la prise qui
    fait foi avec son optique et ses réglages image, les **éléments captés** (HDRI, charte, boule
    chrome, fond vert…) et les **relevés matchmove** (point de map, hauteur, mesuré depuis, pan /
    tilt / roll). Les autres prises sont rappelées en une ligne, pour retrouver un plan B.
@@ -306,12 +316,12 @@ La page marche aussi toute seule sur Internet : données dans le navigateur de c
 ni synchro. C'est ce qui est publié sur le nom de domaine.
 
 `py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `wrangle.html` tel quel
-sous le nom `index.html`, découpage et vignettes de la production compris (`window.DT_SEED`,
-`window.DT_THUMBS` et le dossier `public/vignettes/`). Tout le monde ouvre donc le site sur les plans du tournage, comme sur le
+sous le nom `index.html`, découpage de la production compris (`window.DT_SEED`). Tout le
+monde ouvre donc le site sur les plans du tournage, comme sur le
 plateau. Chacun garde ensuite ses prises dans son navigateur ; ⚙ > Données > « Recharger le
 découpage » remet les plans à jour sans toucher aux prises.
 
-Pour publier un carnet vide à la place (sans le découpage ni ses vignettes) : `py outils/construire_site.py --vide`.
+Pour publier un carnet vide à la place (sans le découpage) : `py outils/construire_site.py --vide`.
 La page pèse alors 200 Ko au lieu de 1,4 Mo, et un garde-fou refuse de construire s'il restait une
 trace des données. Le fichier du plateau n'est jamais touché.
 

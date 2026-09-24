@@ -45,4 +45,30 @@ with Banc(8776, 9361, taille=(1300, 800)) as banc:
 
     essais.verifier('l ancien Handheld est range en support',
                     banc.js('[DB.plans[1].mouv, DB.plans[1].support]'), ['', 'Épaule'])
+
+    # -- « Recharger le decoupage » : le meme ordre pour tout le monde, sans doublon.
+    #    Un carnet melange (plans dans le desordre, un plan en double avec une prise
+    #    dessus, un plan ajoute sur le plateau) revient dans l'ordre du DT, les
+    #    doubles se replient sur le premier, le plan du plateau suit a la fin.
+    banc.js("""
+      const seedOrdre = SEED.plans.map(s => clePlan(s));
+      DB.plans.reverse();
+      const double = Object.assign({}, DB.plans[3], { id: 'double', etat: 'todo' });
+      DB.plans.splice(10, 0, double);
+      ajouterPrise('double', false, { clip: 'DBL_001' });
+      DB.plans[5].etat = 'done'; DB.plans[5].notesInternes = 'gardee';
+      DB.plans.push(Object.assign({ id: 'plateau' }, PLAN_NEUF(), { seq: '99', plan: '77', jour: 'J1' }));
+      window.__attendu = { seedOrdre, garde: clePlan(DB.plans[5]), origine: DB.plans[3].id };
+      resync();
+    """)
+    time.sleep(0.4)
+    banc.js("$('dlg-oui').click()"); time.sleep(0.8)
+    essais.verifier('les plans reprennent l ordre du decoupage, le plan du plateau a la fin',
+                    banc.js("[DB.plans.slice(0, SEED.plans.length).map(p => clePlan(p)).join() === window.__attendu.seedOrdre.join(), DB.plans[DB.plans.length - 1].id, DB.plans.length]"),
+                    [True, 'plateau', n + 1])
+    essais.verifier('le doublon est replie et sa prise rendue au plan d origine',
+                    banc.js("[DB.plans.some(p => p.id === 'double'), prise(DB.prises.find(t => t.clip === 'DBL_001').id).planId === window.__attendu.origine]"), [False, True])
+    essais.verifier('ce qui a ete saisi sur le plateau est garde',
+                    banc.js("(() => { const p = DB.plans.find(x => clePlan(x) === window.__attendu.garde); return [p.etat, p.notesInternes]; })()"), ['done', 'gardee'])
+    essais.verifier('la page le dit', banc.js("$('toast-msg').textContent"), '%d plans mis à jour, 0 ajouté, 1 doublon replié' % n)
 essais.bilan()

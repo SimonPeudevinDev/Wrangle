@@ -361,13 +361,6 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
 #l-pick{padding-top:12px}
 
 .phead{display:flex;gap:12px;cursor:pointer;align-items:flex-start}
-/* la vignette, seulement quand le plan en a une : a la hauteur de la ligne de
-   titre, a gauche du numero. Sans image, rien : le texte du plan part du bord
-   gauche, aligne sur les numeros de prises. */
-.vig{
-  width:84px;height:42px;flex:none;border-radius:4px;
-  background:var(--surface2) center/cover no-repeat;
-}
 .pmain{flex:1;min-width:0}
 /* les etiquettes et la pastille « tourne » sont centrees sur le numero,
    pas posees sur sa ligne de base */
@@ -591,18 +584,18 @@ nav button i{display:none}
 .fab2:active{background:var(--surface2)}
 
 /* ------------------------------- Preparation ------------------------------- */
-/* la saisie du decoupage : une carte par plan ; l'image a la hauteur du bloc,
+/* la saisie du decoupage : une carte par plan ; les etiquettes a gauche,
    les champs sur une grille commune a toutes les cartes, les actions a droite */
 .ptitre{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:26px 0 6px}
 .ptitre b{display:block;font:700 23px var(--font-titre);letter-spacing:-.01em;color:var(--acc)}
 .ptitre span{font-size:13.5px;color:var(--dim)}
 .pnote{margin:0 0 4px;font-size:13.5px;color:var(--dim);line-height:1.5;max-width:78ch}
 .prow{
-  display:grid;grid-template-columns:176px minmax(0,1fr) auto;gap:0 20px;align-items:start;
+  display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:0 20px;align-items:start;
   margin:0 0 14px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
 }
 .pchamps{min-width:0;display:flex;flex-direction:column;gap:12px}
-.pcote{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.pcote{display:flex;flex-direction:column;gap:10px;align-items:flex-start;padding-top:16px}
 .pcote .ptags{margin:0}
 .pl{display:grid;gap:0 14px;align-items:end}
 .pl1{grid-template-columns:68px 62px minmax(0,1.4fr) 78px minmax(0,1fr)}
@@ -624,22 +617,6 @@ nav button i{display:none}
 .pc .menu{right:auto;min-width:200px}
 .w-num input{font:700 22px/1.1 var(--font-titre);padding:2px 0 5px}
 .w-ord input{font:700 17px/1.2 var(--font-titre);color:var(--acc);font-variant-numeric:tabular-nums;padding:4px 0 5px}
-/* l'image du plan : une vignette 16:9, la sienne ou celle du decoupage */
-.pimg{position:relative;width:176px;height:99px}
-.pimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:4px;background:var(--surface2);cursor:pointer}
-.pvide{
-  position:absolute;inset:0;width:100%;height:100%;border:1px dashed var(--line2);border-radius:4px;background:none;color:var(--dim2);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;padding:0;
-  font:700 10px var(--font);letter-spacing:.1em;text-transform:uppercase;
-}
-.pvide svg{width:22px;height:22px}
-.pvide:hover{color:var(--txt);border-color:var(--txt)}
-.pimg-x{
-  position:absolute;top:-8px;right:-8px;width:24px;height:24px;padding:0;border-radius:50%;
-  border:1px solid var(--line2);background:var(--surface3);color:var(--dim);display:grid;place-items:center;cursor:pointer;
-}
-.pimg-x svg{width:11px;height:11px}
-.pimg-x:hover{color:var(--ng);border-color:var(--ng)}
 /* les actions : Fiche et suppression, en haut a droite, a hauteur de la premiere ligne */
 .pactions{display:flex;flex-direction:column;align-items:flex-end;gap:12px;min-width:112px;padding-top:14px}
 .pbtns{display:flex;gap:8px;align-items:center}
@@ -673,7 +650,6 @@ nav button i{display:none}
 @media(max-width:560px){
   .prow{grid-template-columns:1fr;gap:12px;padding:14px;margin-bottom:12px}
   .pcote{width:100%}
-  .pimg{width:100%;height:auto;aspect-ratio:16/9}
   .pl{gap:0 10px}
   .pl1{grid-template-columns:64px 60px 1fr}
   .pl1 .w-flex,.pl1 .w-lieu{grid-column:1 / -1}
@@ -1065,7 +1041,6 @@ select option{background:var(--surface);color:var(--txt)}
   color:inherit;text-decoration:none;cursor:pointer;
 }
 .fplan:active{background:var(--surface)}
-.fplan img,.fplan .fvide{width:84px;height:47px;flex:none;border-radius:4px;object-fit:cover;background:var(--surface2)}
 .fplan .ftxt{flex:1;min-width:0}
 .fplan .fdesc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;line-height:1.4}
 .fplan .fctx{display:block;margin-top:3px;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1075,9 +1050,8 @@ select option{background:var(--surface);color:var(--txt)}
   border-right:1.5px solid var(--dim2);border-bottom:1.5px solid var(--dim2);
 }
 
-/* la fiche du plan : image et texte en bandeau, l'image s'agrandit au doigt */
+/* la fiche du plan : etiquettes et description en bandeau */
 .bandeau{display:flex;gap:16px;align-items:flex-start;padding:16px 20px;border-bottom:1px solid var(--line)}
-.bandeau img{width:132px;height:74px;flex:none;border-radius:4px;object-fit:cover;background:var(--surface2);cursor:zoom-in}
 .bandeau .btxt{flex:1;min-width:0}
 .bandeau .ptags{margin:0 0 8px}
 .bandeau .lead{font-size:14.5px;line-height:1.5}
@@ -1202,8 +1176,6 @@ select option{background:var(--surface);color:var(--txt)}
 /* l'equipe : un prenom par capsule, assez large pour le pouce sur le plateau */
 .choix{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
 .choix .btn{width:100%;text-align:center}
-#voile-photo{cursor:zoom-out}
-#voile-photo img{max-width:100%;max-height:100%;border-radius:var(--r)}
 /* la boite de dialogue (confirmer, saisir, prevenir) : la meme boite que le
    choix du prenom, au-dessus de tout, croquis compris ; elle glisse en place */
 .dlg{z-index:100;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;transition:opacity .15s}
@@ -1314,7 +1286,6 @@ select option{background:var(--surface);color:var(--txt)}
   /* un plan = un bloc insecable */
   #post .pplan{break-inside:avoid;padding:9pt 0;border-bottom:.5pt solid #ddd}
   #post .ptete{display:flex;gap:9pt;align-items:flex-start}
-  #post .pvig{width:104pt;height:58pt;object-fit:cover;border:.5pt solid #bbb;flex:none}
   #post .pno{font-size:12pt;font-weight:800;letter-spacing:-.01em}
   #post .pno span{font-size:7pt;font-weight:700;letter-spacing:.1em;border:.5pt solid #888;
     padding:1pt 3pt;margin-left:5pt;vertical-align:2pt;color:#444}

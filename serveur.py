@@ -210,6 +210,13 @@ def espace_neuf(nom):
             'derniere_sauv': 0.0, 'quand': 0.0, 't_ecriture': None}
 
 
+def projet_servi(e):
+    """Le projet d'un espace tel qu'on le sert : rien tant qu'il n'a pas de
+    plan — un espace vidé redemande son projet au premier appareil, comme
+    chez l'hébergeur."""
+    return e['db'] if e['db'] and e['db']['plans'] else None
+
+
 def espace_etat(nom):
     """L'espace de ce prénom (déjà en slug ou non), créé au premier appel ;
     « commun » quand l'appareil n'en dit pas."""
@@ -418,7 +425,10 @@ def appliquer(ops, client, esp):
             if op.get('siVide') and db is not None:
                 continue
             esp['db'] = db = normaliser(d)
-            sortie.append({'op': 'remplacer', 'db': db})
+            res = {'op': 'remplacer', 'db': db}
+            if op.get('siVide'):
+                res['siVide'] = True
+            sortie.append(res)
             continue
 
         if db is None:
@@ -543,6 +553,124 @@ def journal_depuis(e, rev):
         entrees.append(x)
         attendu += 1
     return entrees
+
+
+# ------------------------------------------------------- Découpage commun ---
+# Les prises sont à chacun ; tout le reste — les plans, la production, les
+# optiques — est commun : un plan ajouté, supprimé, déplacé ou modifié depuis
+# un espace vaut pour tous les autres. Chaque espace reçoit l'opération
+# traduite (un plan se reconnaît à sa séquence et son numéro : les identifiants
+# ne sont pas les mêmes d'un espace à l'autre), avec sa propre révision, pour
+# que ses appareils la reçoivent par leur flux.
+
+def cle_plan(p):
+    return '%s|%s' % (p.get('seq') or '', p.get('plan') or '')
+
+
+def plan_par_cle(db, cle):
+    for p in db['plans']:
+        if cle_plan(p) == cle:
+            return p
+    return None
+
+
+def cles_avant(db):
+    """id -> clé, pour retrouver un plan chez les autres après qu'il a changé."""
+    return {p.get('id'): cle_plan(p) for p in (db['plans'] if db else [])}
+
+
+def traduire(op, avant, db):
+    """L'opération, pour un autre espace ; None si elle ne le concerne pas."""
+    t, kind = op.get('op'), op.get('kind')
+    if t == 'optiques' or (t == 'patch' and kind == 'prod'):
+        return op
+    if kind != 'plan' and t != 'remplacer':
+        return None                         # les prises restent à chacun
+    if t == 'patch':
+        p = plan_par_cle(db, avant.get(op.get('id'), ''))
+        return {'op': 'patch', 'kind': 'plan', 'id': p['id'], 'data': op['data']} if p else None
+    if t == 'add':
+        d = op['data']
+        ex = plan_par_cle(db, cle_plan(d))
+        if ex:                              # déjà là chez lui : on aligne les champs
+            data = {k: v for k, v in d.items() if k != 'id'}
+            return {'op': 'patch', 'kind': 'plan', 'id': ex['id'], 'data': data}
+        n = dict(d)
+        if any(p.get('id') == n.get('id') for p in db['plans']):
+            n['id'] = n['id'] + '-' + os.urandom(3).hex()
+        res = {'op': 'add', 'kind': 'plan', 'data': n}
+        if 'apres' in op:
+            ap = plan_par_cle(db, avant.get(op['apres'], '')) if op['apres'] else None
+            res['apres'] = ap['id'] if ap else ''
+        return res
+    if t == 'del':
+        p = plan_par_cle(db, avant.get(op.get('id'), ''))
+        if not p or any(x.get('planId') == p['id'] for x in db['prises']):
+            return None                     # ses prises restent : le plan aussi
+        return {'op': 'del', 'kind': 'plan', 'id': p['id']}
+    if t == 'move':
+        p = plan_par_cle(db, avant.get(op.get('id'), ''))
+        if not p:
+            return None
+        ap = plan_par_cle(db, avant.get(op.get('apres'), '')) if op.get('apres') else None
+        return {'op': 'move', 'kind': 'plan', 'id': p['id'], 'apres': ap['id'] if ap else ''}
+    if t == 'remplacer':
+        # le découpage de la source, avec ses identifiants, désormais les mêmes
+        # partout ; ses prises à lui restent, rattachées par la clé du plan, et
+        # un plan qu'il a saisi mais qui n'est plus au découpage reste avec elles
+        src = op['db']
+        neuf = dict(src)
+        neuf['plans'] = [dict(p) for p in src['plans']]
+        par_cle = {cle_plan(p): p for p in neuf['plans']}
+        anciens = {p.get('id'): p for p in db['plans']}
+        prises = []
+        for x in db['prises']:
+            a = anciens.get(x.get('planId'))
+            cible = par_cle.get(cle_plan(a)) if a else None
+            if cible is None and a is not None:
+                cible = dict(a)
+                neuf['plans'].append(cible)
+                par_cle[cle_plan(a)] = cible
+            x = dict(x)
+            if cible is not None:
+                x['planId'] = cible['id']
+            prises.append(x)
+        neuf['prises'] = prises
+        return {'op': 'remplacer', 'db': neuf}
+    return None
+
+
+def accueillir(op, esp):
+    """Un nouveau venu envoie son projet à un espace vide : il reçoit le
+    découpage de l'équipe (celui d'un autre espace, mêmes plans, mêmes
+    identifiants) et garde ses prises, rattachées par la clé du plan. Sans
+    autre espace, son découpage devient celui de l'équipe."""
+    if not (isinstance(op, dict) and op.get('op') == 'remplacer' and op.get('siVide') and esp['db'] is None):
+        return op
+    d = op.get('db')
+    if not isinstance(d, dict) or not isinstance(d.get('plans'), list):
+        return op
+    with verrou:
+        donneur = next((e for e in espaces.values() if e is not esp and e['db'] and e['db']['plans'] and e['slug'] != 'commun'), None)
+    if donneur is None:
+        return op
+    neuf = traduire({'op': 'remplacer', 'db': donneur['db']}, {}, normaliser(d))
+    return {'op': 'remplacer', 'db': neuf['db'], 'siVide': True}
+
+
+def propager(source, faites, avant, client):
+    """Les opérations communes, appliquées à chaque autre espace qui a un projet."""
+    with verrou:
+        autres = [e for e in espaces.values() if e is not source and e['db'] and e['slug'] != 'commun']
+    for e in autres:
+        with verrou:
+            ops = [o for o in (traduire(op, avant, e['db']) for op in faites) if o]
+            if not ops:
+                continue
+            resultat = appliquer(ops, client, e)
+            rev = e['rev']
+        if resultat:
+            diffuser({'type': 'ops', 'client': client, 'rev': rev, 'ops': resultat}, espace=e['slug'], sauf=client)
 
 
 # --------------------------------------------------------------- Diffusion ---
@@ -769,7 +897,7 @@ class Requete(BaseHTTPRequestHandler):
         if u.path == '/api/etat':
             e = espace_etat((parse_qs(u.query).get('espace') or [''])[0])
             with verrou:
-                return self._json(200, {'db': e['db'], 'rev': e['rev'],
+                return self._json(200, {'db': projet_servi(e), 'rev': e['rev'],
                                         'presence': message_presence()['liste'],
                                         'adresses': self.server.adresses})
         if u.path == '/api/depuis':
@@ -827,11 +955,11 @@ class Requete(BaseHTTPRequestHandler):
             actuel = e['rev']
             rep = {'rev': actuel}
             if rev <= 0 or rev > actuel:
-                rep['db'] = e['db']
+                rep['db'] = projet_servi(e)
             elif rev < actuel:
                 entrees = journal_depuis(e, rev)
                 if entrees is None:
-                    rep['db'] = e['db']
+                    rep['db'] = projet_servi(e)
                 else:
                     rep['ops'] = entrees
             if client:
@@ -858,7 +986,7 @@ class Requete(BaseHTTPRequestHandler):
             abonnes.append(abonne)
             noter_presence(client, nom=nom, espace=e['slug'])
             noter_nom(e, nom)
-            premier = {'type': 'etat', 'db': e['db'], 'rev': e['rev'],
+            premier = {'type': 'etat', 'db': projet_servi(e), 'rev': e['rev'],
                        'adresses': self.server.adresses}
         print('+ %s (%s, espace %s) — %d connecté(s)' % (nom or client, self.client_address[0], e['slug'], len(abonnes)))
         try:
@@ -906,10 +1034,17 @@ class Requete(BaseHTTPRequestHandler):
             with verrou:
                 noter_presence(client, nom=corps.get('nom'), espace=e['slug'])
                 noter_nom(e, corps.get('nom'))
+                avant = cles_avant(e['db'])
+                ops = [accueillir(op, e) for op in ops]
                 faites = appliquer(ops, client, e)
                 rev = e['rev']
             if faites:
                 diffuser({'type': 'ops', 'client': client, 'rev': rev, 'ops': faites}, espace=e['slug'], sauf=client)
+                if e['slug'] != 'commun':
+                    # le découpage est à tout le monde ; l'arrivée d'un nouveau (siVide) ou un
+                    # espace qu'on vide (aucun plan) ne touchent pas aux autres
+                    communs = [op for op in faites if not (op['op'] == 'remplacer' and (op.get('siVide') or not op['db']['plans']))]
+                    propager(e, communs, avant, client)
                 for op in faites:
                     if op['op'] == 'remplacer':
                         print('Projet de l espace %s remplacé par %s (%d plans, %d prises)' % (

@@ -353,6 +353,185 @@ function liste_presence() {
     return $sortie;
 }
 
+// ---------------------------------------------------- Decoupage commun ---
+// Les prises sont a chacun ; tout le reste — les plans, la production, les
+// optiques — est commun : un plan ajoute, supprime, deplace ou modifie depuis
+// un espace vaut pour tous. Chaque autre espace recoit l'operation traduite
+// (un plan se reconnait a sa sequence et son numero : les identifiants ne sont
+// pas les memes d'un espace a l'autre), avec sa propre revision.
+
+function cle_plan($p) {
+    return ($p->seq ?? '') . '|' . ($p->plan ?? '');
+}
+
+function plan_par_cle($db, $cle) {
+    foreach ($db->plans as $p) {
+        if (cle_plan($p) === $cle) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+// id -> cle, pour retrouver un plan chez les autres apres qu'il a change
+function cles_avant($db) {
+    $m = [];
+    if ($db) {
+        foreach ($db->plans as $p) {
+            $m[$p->id ?? ''] = cle_plan($p);
+        }
+    }
+    return $m;
+}
+
+function a_des_prises($db, $id) {
+    foreach ($db->prises as $t) {
+        if (($t->planId ?? null) === $id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// l'operation, pour un autre espace ; null si elle ne le concerne pas
+function traduire($op, $avant, $db) {
+    $t = $op->op ?? null;
+    $kind = $op->kind ?? null;
+    if ($t === 'optiques' || ($t === 'patch' && $kind === 'prod')) {
+        return $op;
+    }
+    if ($kind !== 'plan' && $t !== 'remplacer') {
+        return null;                        // les prises restent a chacun
+    }
+    if ($t === 'patch') {
+        $p = plan_par_cle($db, $avant[$op->id ?? ''] ?? '');
+        return $p ? (object) ['op' => 'patch', 'kind' => 'plan', 'id' => $p->id, 'data' => $op->data] : null;
+    }
+    if ($t === 'add') {
+        $d = $op->data;
+        $ex = plan_par_cle($db, cle_plan($d));
+        if ($ex) {                          // deja la chez lui : on aligne les champs
+            $data = clone $d;
+            unset($data->id);
+            return (object) ['op' => 'patch', 'kind' => 'plan', 'id' => $ex->id, 'data' => $data];
+        }
+        $n = clone $d;
+        foreach ($db->plans as $p) {
+            if (($p->id ?? null) === ($n->id ?? null)) {
+                $n->id = $n->id . '-' . bin2hex(random_bytes(3));
+                break;
+            }
+        }
+        $res = (object) ['op' => 'add', 'kind' => 'plan', 'data' => $n];
+        if (property_exists($op, 'apres')) {
+            $ap = $op->apres ? plan_par_cle($db, $avant[$op->apres] ?? '') : null;
+            $res->apres = $ap ? $ap->id : '';
+        }
+        return $res;
+    }
+    if ($t === 'del') {
+        $p = plan_par_cle($db, $avant[$op->id ?? ''] ?? '');
+        if (!$p || a_des_prises($db, $p->id)) {
+            return null;                    // ses prises restent : le plan aussi
+        }
+        return (object) ['op' => 'del', 'kind' => 'plan', 'id' => $p->id];
+    }
+    if ($t === 'move') {
+        $p = plan_par_cle($db, $avant[$op->id ?? ''] ?? '');
+        if (!$p) {
+            return null;
+        }
+        $ap = !empty($op->apres) ? plan_par_cle($db, $avant[$op->apres] ?? '') : null;
+        return (object) ['op' => 'move', 'kind' => 'plan', 'id' => $p->id, 'apres' => $ap ? $ap->id : ''];
+    }
+    if ($t === 'remplacer') {
+        // le decoupage de la source, avec ses identifiants, desormais les memes
+        // partout ; ses prises a lui restent, rattachees par la cle du plan, et
+        // un plan qu'il a saisi mais qui n'est plus au decoupage reste avec elles
+        $src = $op->db;
+        $neuf = clone $src;
+        $neuf->plans = [];
+        $parCle = [];
+        foreach ($src->plans as $p) {
+            $c = clone $p;
+            $neuf->plans[] = $c;
+            $parCle[cle_plan($c)] = $c;
+        }
+        $anciens = [];
+        foreach ($db->plans as $p) {
+            $anciens[$p->id ?? ''] = $p;
+        }
+        $prises = [];
+        foreach ($db->prises as $x) {
+            $a = $anciens[$x->planId ?? ''] ?? null;
+            $cible = $a ? ($parCle[cle_plan($a)] ?? null) : null;
+            if ($cible === null && $a !== null) {
+                $cible = clone $a;
+                $neuf->plans[] = $cible;
+                $parCle[cle_plan($a)] = $cible;
+            }
+            $x = clone $x;
+            if ($cible !== null) {
+                $x->planId = $cible->id;
+            }
+            $prises[] = $x;
+        }
+        $neuf->prises = $prises;
+        return (object) ['op' => 'remplacer', 'db' => $neuf];
+    }
+    return null;
+}
+
+// le decoupage de l'equipe, pour un nouveau venu : celui d'un autre espace
+function donneur_decoupage($sauf) {
+    foreach (glob(DONNEES . '/espaces/*', GLOB_ONLYDIR) ?: [] as $d) {
+        $s = basename($d);
+        if ($s === $sauf || $s === 'commun' || !file_exists($d . '/projet.json')) {
+            continue;
+        }
+        $db = json_decode(file_get_contents($d . '/projet.json'));
+        if (is_object($db) && !empty($db->plans)) {
+            return normaliser($db);
+        }
+    }
+    return null;
+}
+
+// les operations communes, appliquees a chaque autre espace qui a un projet
+function propager($source, $faites, $avant, $client) {
+    global $ESPACE;
+    $origine = $ESPACE;
+    foreach (glob(DONNEES . '/espaces/*', GLOB_ONLYDIR) ?: [] as $d) {
+        $s = basename($d);
+        if ($s === $source || $s === 'commun' || !file_exists($d . '/projet.json')) {
+            continue;
+        }
+        choisir_espace($s);
+        verrouiller();
+        $db = lire_projet();
+        if ($db) {
+            $ops = [];
+            foreach ($faites as $op) {
+                $o = traduire($op, $avant, $db);
+                if ($o) {
+                    $ops[] = $o;
+                }
+            }
+            if ($ops) {
+                $res = appliquer($db, $ops);
+                if ($res) {
+                    $rev = lire_rev() + 1;
+                    ecrire_projet($db);
+                    ecrire_rev($rev);
+                    journal_ajouter($rev, $client, $res);
+                }
+            }
+        }
+        deverrouiller();
+    }
+    choisir_espace($origine);
+}
+
 // ---------------------------------------------------------- Operations ---
 // La meme logique que serveur.py : les operations d'un appareil, appliquees
 // au projet, parfois corrigees (numero de prise deja pris) ou completees

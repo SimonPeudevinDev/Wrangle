@@ -137,7 +137,8 @@ const frappe = (W, sel, val) => {
   A.closeSheet();
 
   // 11. suppression d'un plan et de ses prises, puis annulation
-  A.openPlan(p.id); A.delPlan(); await valider(Aw);
+  // depuis Preparation : la fiche ouverte en Tournage ne supprime plus de plan
+  A.supprimerPlanPrep(p.id); await valider(Aw);
   log(await attendre(() => !B.plan(p.id) && !B.DB.prises.some(t => t.planId === p.id)), 'plan supprimé sur A avec ses prises sur B');
   A.restaurer();
   log(await attendre(() => B.plan(p.id) && B.prisesDe(p.id).length === 3), 'Annuler : plan et ses 3 prises reviennent sur B');
