@@ -27,7 +27,6 @@ jobs:
       url: ${{ steps.deploiement.outputs.page_url }}
     env:
       OVH_FTP_HOTE: ${{ secrets.OVH_FTP_HOTE }}
-      API_DISTANTE: http://peojfus.cluster129.hosting.ovh.net/api
     steps:
       - uses: actions/checkout@v4
 
@@ -37,14 +36,13 @@ jobs:
 
       # deux sites : celui d'OVH fait serveur (les scripts PHP d'api/,
       # et la page le sait), celui de GitHub Pages est la page seule
-      # tant que foresight-movie.com pointe sur GitHub Pages, la page qu'on y
-      # publie appelle le serveur chez OVH a son adresse technique : chacun,
-      # sur son telephone, y depose ses saisies, et le DIT les y retrouve.
-      # A retirer (--api) une fois le domaine rattache a l'hebergement OVH.
+      # foresight-movie.com est chez OVH : la page et le serveur y sont ensemble.
+      # La copie GitHub Pages reste la page seule, sans serveur, a son adresse
+      # github.io (pour la publier vers un serveur, construire_site.py --api).
       - name: Construire le site
         run: |
           python outils/construire_site.py site-ovh --php
-          python outils/construire_site.py site --api "$API_DISTANTE"
+          python outils/construire_site.py site
           rm -rf site/api
 
       # le site chez OVH : le contenu de site-ovh/ dans le www de l'hebergement,

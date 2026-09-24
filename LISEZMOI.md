@@ -85,14 +85,13 @@ opérations et les sauvegardes, avec les mêmes appels et les mêmes réponses q
 liste des connectés est commune. Les données vivent dans `api/donnees/espaces/<prénom>/`, interdit
 au web.
 
-**Le domaine et le serveur.** Tant que foresight-movie.com mène chez GitHub Pages, la page qu'on y
-publie n'a pas de serveur à côté d'elle : elle appelle donc celui d'OVH à son adresse technique,
-posée en tête de page à la publication (`construire_site.py --api http://…/api`, variable
-`API_DISTANTE` du workflow ; les scripts PHP répondent à cette autre origine). Chacun, sur son
-téléphone et sa propre connexion, dépose ainsi ses saisies dans son espace, et le DIT les
-retrouve toutes par « Toute l'équipe », d'où qu'il ouvre le site. Le jour où le domaine est
-rattaché à l'hébergement OVH (voir « Publier le site », en bas), la page et le serveur sont au
-même endroit : retirer alors `--api` du workflow.
+**Le domaine et le serveur.** foresight-movie.com est rattaché à l'hébergement OVH (multisite,
+zone DNS vers l'adresse de l'hébergement, certificat Let's Encrypt) : la page et le serveur sont
+au même endroit, en https. Chacun, sur son téléphone et sa propre connexion, dépose ainsi ses
+saisies dans son espace, et le DIT les retrouve toutes par « Toute l'équipe ». La copie publiée
+sur GitHub Pages reste la page seule, sans serveur, à son adresse github.io. Si un jour une page
+publiée ailleurs doit parler à ce serveur, `construire_site.py --api https://foresight-movie.com/api`
+lui en donne l'adresse en tête ; les scripts PHP répondent aux autres origines.
 La page sait qu'elle est chez l'hébergeur par une ligne en tête (`window.WRANGLE_SERVEUR='php'`,
 posée par `construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH)
 et l'interroge toutes les deux secondes au lieu d'écouter un flux. Rien à installer ni à laisser
@@ -320,16 +319,18 @@ Pour voir le résultat avant de publier : ouvrir `site/index.html` directement d
 (Par `http://localhost`, la page se croit sur un serveur de plateau et affiche « Hors ligne » :
 c'est normal, `localhost` est une adresse locale.)
 
-Publier : `git push`. GitHub relance la construction et met le site en ligne en une minute
-(`.github/workflows/publier.yml`). Le nom de domaine est dans le fichier `CNAME` à la racine.
+Publier : `git push`. GitHub relance la construction (`.github/workflows/publier.yml`) et, en une
+minute, dépose le site chez OVH par FTP, dans le `www` de l'hébergement, puis met la copie sans
+serveur sur GitHub Pages, à son adresse github.io. L'envoi chez OVH tient à trois secrets dans
+GitHub (Settings > Secrets and variables > Actions) : `OVH_FTP_HOTE`
+(`ftp.clusterNNN.hosting.ovh.net`), `OVH_FTP_UTILISATEUR` et `OVH_FTP_MOTDEPASSE` ; sans eux,
+l'étape est sautée, et un envoi raté fait virer la publication au rouge.
 
-Le même automatisme peut aussi déposer le site chez OVH, par FTP, dans le `www` de l'hébergement :
-il suffit de poser trois secrets dans GitHub (Settings > Secrets and variables > Actions) :
-`OVH_FTP_HOTE` (`ftp.clusterNNN.hosting.ovh.net`), `OVH_FTP_UTILISATEUR` et `OVH_FTP_MOTDEPASSE`.
-Sans eux, l'étape est sautée. Pour que le nom de domaine mène chez OVH plutôt que chez GitHub :
-dans l'espace client OVH, l'hébergement > Multisite > ajouter le domaine avec sa zone DNS, puis
-commander le certificat SSL gratuit ; côté GitHub, retirer le domaine personnalisé des réglages
-Pages et supprimer le fichier `CNAME`.
+Le nom de domaine, foresight-movie.com, est rattaché à l'hébergement dans l'espace client OVH :
+l'hébergement > Mes sites > le domaine ajouté au site `www`, la zone DNS du domaine avec un
+enregistrement A (et `www`) vers l'adresse IPv4 de l'hébergement, et un certificat Let's Encrypt
+posé depuis l'onglet Certificats SSL. Le domaine n'est plus déclaré côté GitHub Pages : le
+fichier `CNAME` a disparu du dépôt. Pour rattacher un autre domaine, même chemin.
 
 Le mode partagé s'allume quand `serveur.py` sert la page : il la signe en tête
 (`window.WRANGLE_SERVEUR`), où qu'il soit posé — Wi-Fi du plateau, nom de domaine, réseau privé.
