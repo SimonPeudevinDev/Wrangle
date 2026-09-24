@@ -201,7 +201,10 @@ donne son nombre de plans : le monter pose autant de cartes vides à la fin du j
 après ; le baisser ne retire que des cartes encore vides (sans numéro, sans description, sans
 prise), les autres restent et la page le dit. « + Jour » ouvre le jour suivant (et y revient tant
 qu'il est vide), « Supprimer le jour » retire le jour et ses plans après confirmation. Sur la
-carte : séquence puis shot, la distribution se coche dans un menu déroulant.
+carte : ordre, séquence, shot, la distribution se coche dans un menu déroulant. Les décors du
+tournage se déclarent une fois (bouton « Décors » en Préparation, ou « + Ajouter un décor… » au
+bas du menu Décor) : ils sont rangés dans la production, donc chez tout le monde, et proposés au
+champ Décor de chaque plan.
 
 ## Le journal DIT par mail
 

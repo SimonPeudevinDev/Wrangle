@@ -605,12 +605,15 @@ nav button i{display:none}
 }
 .pchamps{min-width:0;display:flex;flex-direction:column;gap:12px}
 .pl{display:grid;gap:0 14px;align-items:end}
-.pl1{grid-template-columns:78px 68px minmax(0,1.4fr) 78px minmax(0,1fr)}
-.pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px 64px}   /* le cadrage peut en porter plusieurs */
+.pl1{grid-template-columns:56px 78px 68px minmax(0,1.4fr) 78px minmax(0,1fr)}
+.pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px}   /* le cadrage peut en porter plusieurs */
 .pl3{grid-template-columns:minmax(0,1fr)}
 /* la distribution : un champ qui se lit, son menu a cocher s'ouvre au clic */
 .w-dist input{cursor:pointer;text-overflow:ellipsis}
-.w-dist .menu button.autre{color:var(--acc)}
+.w-dist .menu button.autre,.menu button.autre{color:var(--acc)}
+/* la liste des decors : le nom, combien de plans y tournent, retirer ceux qui n'en ont pas */
+.spec.decor .compte{flex:1;color:var(--dim);font-size:13px}
+.spec.decor>label{width:auto;min-width:160px}
 .pc{display:flex;flex-direction:column;gap:2px;min-width:0;position:relative}
 .pc span{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);font-weight:700;white-space:nowrap}
 .pc input,.pc textarea{
@@ -624,7 +627,7 @@ nav button i{display:none}
 .pc .deroul svg{width:13px;height:13px}
 .pc:has(.deroul) input{padding-right:32px}
 .pc .menu{right:auto;min-width:200px}
-.w-num input,.w-seq input{font:700 22px/1.1 var(--font-titre);padding:2px 0 5px}
+.w-num input,.w-seq input{font:700 17px/1.2 var(--font-titre);padding:4px 0 5px}
 .w-ord input{font:700 17px/1.2 var(--font-titre);color:var(--acc);font-variant-numeric:tabular-nums;padding:4px 0 5px}
 /* les actions : Fiche et suppression, en haut a droite, a hauteur de la premiere ligne */
 /* a droite : les etiquettes du plan (LIVE / TBC…) puis Fiche et la croix, sur
@@ -655,16 +658,16 @@ nav button i{display:none}
 .pmove:hover{color:var(--txt);border-color:var(--txt)}
 #l-prep .jour{margin-bottom:16px}
 @media(max-width:1200px){
-  .pl1{grid-template-columns:78px 68px minmax(0,1fr) 78px}
+  .pl1{grid-template-columns:56px 78px 68px minmax(0,1fr) 78px}
   .pl1 .w-lieu{grid-column:1 / -1}
-  .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px 60px}
+  .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px}
 }
 @media(max-width:560px){
   .prow{grid-template-columns:1fr;gap:12px;padding:14px;margin-bottom:12px}
   .pl{gap:0 10px}
-  .pl1{grid-template-columns:74px 64px 1fr}
+  .pl1{grid-template-columns:52px 74px 64px 1fr}
   .pl1 .w-flex,.pl1 .w-lieu{grid-column:1 / -1}
-  .pl2{grid-template-columns:1fr 1fr 56px 60px}
+  .pl2{grid-template-columns:1fr 1fr 56px}
   .pl2 .w-desc{grid-column:1 / -1}
   .pactions{order:-1;justify-content:space-between;min-width:0;padding-top:0}
   .pl3 .spec.col{flex-direction:column;gap:4px}

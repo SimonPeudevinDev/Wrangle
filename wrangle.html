@@ -1084,7 +1084,7 @@ function frequences(vals){
   return Object.entries(n).sort((a, b) => b[1] - a[1]);
 }
 const LISTES = {
-  'dl-lieu':    () => connus(DB.plans, 'lieu'),
+  'dl-lieu':    () => fusion(DB.prod.decors || [], connus(DB.plans, 'lieu')),
   'dl-cadrage': () => fusion(['Très gros plan', 'Gros plan', 'Poitrine', 'Épaules', 'Taille', 'Américain', 'Moyen',
                               'Italien', 'Large', 'Ensemble'], connus(DB.plans, 'cadrage')),
   'dl-seq':     () => connus(DB.plans, 'seq'),
@@ -1125,8 +1125,10 @@ function ouvrirMenu(btn){
   const choisis = multi ? valeursDe(input.value) : [(input.value || '').trim()];
   const m = document.createElement('div');
   m.className = 'menu' + (multi ? ' multi' : '');
-  m.innerHTML = liste.map(x => `<button type="button" class="${choisis.some(c => memeVal(c, x)) ? 'on' : ''}" data-v="${esc(x)}"
-      onclick="choisirMenu(this)">${esc(x)}</button>`).join('') || '<div class="vide">Rien à proposer</div>';
+  const ajout = AJOUTS[btn.dataset.liste];
+  m.innerHTML = (liste.map(x => `<button type="button" class="${choisis.some(c => memeVal(c, x)) ? 'on' : ''}" data-v="${esc(x)}"
+      onclick="choisirMenu(this)">${esc(x)}</button>`).join('') || (ajout ? '' : '<div class="vide">Rien à proposer</div>')) +
+    (ajout ? `<button type="button" class="autre" onclick="ajoutMenu('${btn.dataset.liste}', this)">${ajout.nom}</button>` : '');
   row.appendChild(m);
   btn.classList.add('on');
   // au bas de la fiche, le menu s'ouvre vers le haut
@@ -1147,6 +1149,14 @@ function fermerMenu(){
 function clicHorsMenu(e){
   if (!e.target.isConnected) return;
   if (!e.target.closest('.menu') && !e.target.closest('.deroul') && !e.target.closest('.ptag')) fermerMenu();
+}
+/* Les listes qui s'allongent depuis leur menu : le nom du bouton, et ce qu'il fait
+   (une promesse de la valeur ajoutee, vide si on renonce). */
+const AJOUTS = { 'dl-lieu': { nom: '+ Ajouter un décor…', faire: () => ajouterDecor() } };
+function ajoutMenu(cle, b){
+  const input = b.closest('.spec, .pc').querySelector('input');
+  fermerMenu();
+  AJOUTS[cle].faire().then(v => { if (!v) return; input.value = v; live(input); });
 }
 /* Les valeurs d'un champ qui en porte plusieurs, separees par « / ». */
 const valeursDe = s => String(s || '').split('/').map(x => x.trim()).filter(Boolean);
@@ -2546,6 +2556,46 @@ const OBJ_POSE = ['cam', 'lum', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', '
 let dessin = null;   // l'editeur ouvert
 
 const fondDecor = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
+/* Les decors du tournage se declarent une fois pour toutes (DB.prod.decors,
+   propage a tous comme le reste de la production) : le champ Decor de chaque
+   plan les propose, en Preparation comme dans la fiche. Ceux qu'un plan porte
+   deja sont proposes aussi. */
+function ajouterDecor(){
+  return demanderTexte('Nom du décor', { ok:'Ajouter' }).then(nom => {
+    nom = (nom || '').trim();
+    if (!nom) return '';
+    const l = DB.prod.decors || [];
+    if (!l.some(x => memeVal(x, nom))) patch('prod', 'prod', { decors: l.concat([nom]) });
+    return nom;
+  });
+}
+function retirerDecor(nom){
+  patch('prod', 'prod', { decors: (DB.prod.decors || []).filter(x => !memeVal(x, nom)) });
+  openDecors();
+}
+function openDecors(){
+  openId = 'decors'; openType = 'decors';
+  videEntete();
+  const declares = DB.prod.decors || [];
+  const tous = fusion(declares, connus(DB.plans, 'lieu'));
+  const compte = d => DB.plans.filter(p => memeVal(p.lieu, d)).length;
+  $('stitle').textContent = 'Décors';
+  $('ssub').textContent = 'Les lieux où l’on tourne, proposés au champ Décor de chaque plan';
+  $('sbody').innerHTML = `
+    <div class="sec">
+      <div class="specs">
+        ${tous.map(d => { const n = compte(d); return `<div class="spec decor"><label>${esc(d)}</label>
+          <span class="compte">${n ? n + ' plan' + plur(n) : 'aucun plan'}</span>
+          ${n ? '' : `<button type="button" class="btn sm" onclick="retirerDecor('${esc(d)}')">Retirer</button>`}</div>`; }).join('') ||
+          '<div class="note">Aucun décor pour l’instant.</div>'}
+      </div>
+      <div class="btns" style="margin-top:12px">
+        <button type="button" class="btn p" onclick="ajouterDecor().then(openDecors)">+ Ajouter un décor</button>
+      </div>
+      <div class="note">Un décor qu’un plan porte déjà reste proposé tant qu’il est utilisé. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
+    </div>`;
+  montrerFiche(0);
+}
 /* Le decor dont le plan sert de fond au croquis : celui du plan, sauf si on en a choisi un autre. */
 const lieuFond = p => (p.fondLieu || p.lieu || '').trim();
 /* Les decors ou l'on tourne vraiment (le full CG n'a pas de plateau), les plus frequents d'abord. */
@@ -3395,6 +3445,9 @@ function rangPrep(p){
   return `<div class="prow${modeOrdre ? ' ordo' : ''}" data-id="${p.id}"${modeOrdre ? ' draggable="true"' : ''}>
     <div class="pchamps">
       <div class="pl pl1">
+        <label class="pc w-ord"><span>Ordre</span>
+          <input class="ordre-in" value="${positionPlan(p)}" inputmode="numeric" autocomplete="off" title="Position dans la journée : tapez un numéro pour y placer le plan"
+            onfocus="this.select()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onchange="placerPlan('${p.id}', this.value)"></label>
         ${champPrep(p, 'seq', 'Séq', {cls:'w-seq', ph:'01', dl:'dl-seq'})}
         ${champPrep(p, 'plan', 'Shot', {cls:'w-num', ph:'05', cap:'characters'})}
         ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
@@ -3406,9 +3459,6 @@ function rangPrep(p){
         ${champPrep(p, 'cadrage', 'Cadrage', {cls:'w-cadr', ph:'Large', dl:'dl-cadrage', multi:1})}
         ${champPrep(p, 'focale', 'Focale', {cls:'w-foc', ph:'35 mm', dl:'dl-focale'})}
         ${champPrep(p, 'duree', 'Durée', {cls:'w-dur', ph:'3s'})}
-        <label class="pc w-ord"><span>Ordre</span>
-          <input class="ordre-in" value="${positionPlan(p)}" inputmode="numeric" autocomplete="off" title="Position dans la journée : tapez un numéro pour y placer le plan"
-            onfocus="this.select()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onchange="placerPlan('${p.id}', this.value)"></label>
       </div>
       <div class="pl pl3">
         ${champDistribution(p)}
@@ -3457,6 +3507,7 @@ function renderPrep(){
       nP} plan${plur(nP)}${unJour ? '' : ' · ' + nj + ' jour' + plur(nj) + ' de tournage'}</span></div>
       <div class="pbtns">
         <button type="button" class="btn ${modeOrdre ? 'p' : ''}" onclick="basculerOrdre()">${modeOrdre ? 'Terminer' : 'Ordonner'}</button>
+        <button type="button" class="btn" onclick="openDecors()" ${modeOrdre ? 'hidden' : ''}>Décors</button>
         <button type="button" class="btn" onclick="ajouterJourPrep()" ${modeOrdre ? 'hidden' : ''}>+ Jour</button>
         <button type="button" class="btn p" onclick="ajouterPlanPrep('${unJour ? esc(fJourP) : ''}')" ${modeOrdre ? 'hidden' : ''}>+ Ajouter un plan</button>
       </div></div>

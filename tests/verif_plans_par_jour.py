@@ -123,4 +123,23 @@ with Banc(PORT, 9371, taille=(1300, 900)) as banc:
                     [banc.js("plansDuJour('%s').length" % suivant), banc.js(CHIPS)[0], nom_suivant in banc.js(CHIPS), banc.js("$('toast-msg').textContent")],
                     [0, 'Tout*', False, nom_suivant + ' supprimé'])
     essais.verifier('chez Romain aussi', attendre(lambda: romain(suivant) == []), True)
+
+    # -- les decors : declares une fois, proposes au champ Decor, chez tout le monde
+    banc.js("document.querySelector(`#l-prep .w-lieu .deroul`).click()"); time.sleep(0.3)
+    essais.verifier('le menu du decor finit par « + Ajouter un décor… »',
+                    banc.js("[...document.querySelectorAll('#l-prep .w-lieu .menu button')].pop().textContent"), '+ Ajouter un décor…')
+    banc.js("document.querySelector('#l-prep .w-lieu .menu button.autre').click()"); time.sleep(0.3)
+    banc.js("$('dlg-saisie').value = 'Hangar'; $('dlg-oui').click()"); time.sleep(0.5)
+    premier_id = banc.js("DB.plans[0].id")
+    essais.verifier('le decor tape entre dans le projet et dans le champ du plan',
+                    [banc.js("DB.prod.decors"), banc.js("plan('%s').lieu" % premier_id), 'Hangar' in banc.js("LISTES['dl-lieu']()")], [['Hangar'], 'Hangar', True])
+    essais.verifier('les decors du projet suivent chez Romain',
+                    attendre(lambda: (api('etat?espace=romain')['db']['prod'].get('decors') or []) == ['Hangar']), True)
+    banc.js("openDecors()"); time.sleep(0.3)
+    essais.verifier('la feuille Decors les liste avec leur nombre de plans',
+                    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].filter(d => d.querySelector('label').textContent === 'Hangar').map(d => d.querySelector('.compte').textContent)"), ['1 plan'])
+    banc.js("patch('plan', '%s', { lieu: '' }); openDecors()" % premier_id); time.sleep(0.3)
+    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].find(d => d.querySelector('label').textContent === 'Hangar').querySelector('.btn').click()"); time.sleep(0.4)
+    essais.verifier('un decor sans plan se retire', [banc.js("DB.prod.decors"), banc.js("[...document.querySelectorAll('#sbody .spec.decor label')].map(l => l.textContent).includes('Hangar')")], [[], False])
+    banc.js("closeSheet()")
 essais.bilan()
