@@ -54,5 +54,38 @@ with Banc(8785, 9385, taille=(1200, 900)) as banc:
     banc.ouvrir(repos=1.5)
     essais.verifier('apres rechargement, le plan vise est retrouve', banc.js('UI.vise'), ids[1])
     essais.verifier('et sa carte le montre', banc.js(VISES), [ids[1]])
+
+    # -- l'anneau tombe dans la colonne des ronds des prises, liste qui defile ou non.
+    #    Le navigateur de test cache ses barres de defilement : on en simule une,
+    #    comme sur un ecran d'ordinateur, sinon le decalage ne se verrait pas.
+    banc.js("""
+      const a = DB.plans[0].id, b = DB.plans[1].id;
+      for (let i = 0; i < 7; i++) ajouterPrise(a, false, { clip:'A' + i });
+      for (let i = 0; i < 2; i++) ajouterPrise(b, false, { clip:'B' + i });
+      renderShoot();
+    """)
+    time.sleep(0.5)
+    COLONNE = """(() => {
+      const bords = [];
+      document.querySelectorAll('#l-shoot .plan[data-id]').forEach(c => {
+        const v = c.querySelector('.viser'), t = c.querySelector('.tact button:last-child');
+        if (v && t) bords.push([c.querySelector('.prises').classList.contains('defile'),
+                                Math.round(v.getBoundingClientRect().right - t.getBoundingClientRect().right)]);
+      });
+      return bords;
+    })()"""
+    bords = banc.js(COLONNE)
+    essais.verifier('sans barre de defilement, l anneau est sur les ronds des prises',
+                    [sorted({e for _, e in bords}), any(d for d, _ in bords), any(not d for d, _ in bords)], [[0], True, True])
+    banc.js("""
+      document.documentElement.style.setProperty('--gouttiere', 'calc(var(--air) + 12px)');
+      const s = document.createElement('style');
+      s.textContent = '.prises.defile{border-right:12px solid transparent}';   // une barre de douze pixels
+      document.head.appendChild(s);
+    """)
+    time.sleep(0.4)
+    bords = banc.js(COLONNE)
+    essais.verifier('avec une barre, la colonne ne bouge pas d un plan a l autre',
+                    [sorted({e for _, e in bords}), any(d for d, _ in bords), any(not d for d, _ in bords)], [[0], True, True])
     essais.exceptions(banc)
 essais.bilan()

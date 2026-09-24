@@ -9,18 +9,18 @@ WRANGLE — construit le site publie a partir de la page du plateau.
                                                   le site fait serveur, la page le sait
 
 Le site publie, c'est la page : wrangle.html devient index.html a cote de
-public/. Par defaut la page part telle quelle, decoupage et vignettes du
-tournage compris (window.DT_SEED, window.DT_THUMBS) : tout le monde ouvre le
-site sur les plans de la production, comme sur le plateau.
+public/. Par defaut la page part telle quelle, le decoupage du tournage
+compris (window.DT_SEED) : tout le monde ouvre le site sur les plans de la
+production, comme sur le plateau.
 
 Avec --php, une ligne en tete de la page (window.WRANGLE_SERVEUR='php') lui
 dit que les scripts d'api/ repondent a cote d'elle : elle partage alors le
 projet entre tous, comme avec serveur.py. Sans, elle travaille seule, et les
 scripts PHP restent des fichiers inertes (GitHub Pages).
 
-Avec --vide, ces deux lignes et public/vignettes/ sont laisses de cote et le site s'ouvre sur un
-carnet vide, chacun importe son decoupage par le bouton engrenage. Un
-garde-fou refuse alors d'ecrire un site ou il en resterait une trace.
+Avec --vide, cette ligne est laissee de cote et le site s'ouvre sur un carnet
+vide, chacun important son decoupage par le bouton engrenage. Un garde-fou
+refuse alors d'ecrire un site ou il en resterait une trace.
 """
 
 import os
@@ -33,8 +33,8 @@ PAGE = os.path.join(ICI, 'wrangle.html')
 PUBLIC = os.path.join(ICI, 'public')
 CNAME = os.path.join(ICI, 'CNAME')
 
-# les donnees de production integrees a la page : une ligne chacune
-GRAINES = ('window.DT_SEED=', 'window.DT_THUMBS=')
+# le decoupage integre a la page : une seule ligne
+GRAINES = ('window.DT_SEED=',)
 
 
 def lignes_page(vide):
@@ -42,7 +42,7 @@ def lignes_page(vide):
     with open(PAGE, 'r', encoding='utf-8', newline='') as f:
         lignes = f.readlines()
     if not vide:
-        print('page : %d lignes, decoupage et vignettes compris' % len(lignes))
+        print('page : %d lignes, decoupage compris' % len(lignes))
         return lignes
     gardees = [l for l in lignes if not l.startswith(GRAINES)]
     print('page : %d lignes, %d de donnees laissees de cote'
@@ -83,9 +83,7 @@ def construire(sortie, vide=False, php=False):
     index = os.path.join(sortie, 'index.html')
     with open(index, 'w', encoding='utf-8', newline='') as f:
         f.writelines(gardees)
-    # les vignettes vont avec le decoupage : un carnet vide s'en passe
-    shutil.copytree(PUBLIC, os.path.join(sortie, 'public'),
-                    ignore=shutil.ignore_patterns('vignettes') if vide else None)
+    shutil.copytree(PUBLIC, os.path.join(sortie, 'public'))
 
     # le serveur en PHP (api/) : utile chez un hebergeur qui l'execute (OVH) ;
     # ailleurs, fichiers inertes

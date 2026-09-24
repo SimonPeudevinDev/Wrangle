@@ -42,6 +42,8 @@
   --font:"Figtree","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
   --font-titre:"Outfit","Figtree","Segoe UI",system-ui,sans-serif;   /* titres, numeros */
   --h-prise:64px;                   /* une prise : deux lignes, jamais plus (voir .prises) */
+  --air:10px;                       /* l'air entre les ronds et la barre de defilement */
+  --gouttiere:var(--air);           /* + la largeur de la barre, mesuree au demarrage */
   --voile:rgba(23,17,16,.42);
 }
 /* Plein soleil : le meme cafe au lait, en clair ; le caramel s'assombrit pour rester lisible. */
@@ -367,7 +369,7 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
    contre le bord droit, dans la colonne des ronds OK / NG des prises. */
 .pnum{font:700 22px/1 var(--font-titre);letter-spacing:-.02em;display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;min-height:42px}
 .pnum .ptags{order:2}
-.pnum .viser{order:3;margin-left:auto}
+.pnum .viser{order:3;margin-left:auto;margin-right:var(--gouttiere)}
 /* le plan vise : celui que le Moteur et + Prise vont tourner. Un anneau discret
    sur chaque carte ; en caramel, avec son mot, sur le plan choisi. */
 /* le viseur : un rond au trait a icone, le meme que les ronds OK / NG des
@@ -441,7 +443,14 @@ button.ptag:hover,button.ptag.on{filter:brightness(1.25)}
    vingt prises ne repousse plus les suivants hors de l'ecran. Cinq lignes
    tout rond, et le defilement s'arrete sur le haut d'une prise : aucune
    n'est jamais coupee. */
-.prises.defile{max-height:calc(5 * var(--h-prise));overflow-y:auto;padding-right:10px;
+/* La barre de defilement prend de la place a droite de la liste qui defile, et
+   d'elle seule : les ronds d'une prise se decaleraient d'un plan a l'autre, et
+   le rond Moteur, lui, resterait au bord. On reserve donc partout la meme
+   gouttiere — un pouce d'air plus la largeur de la barre, mesuree au demarrage
+   par mesurerGouttiere() — pour que tous les ronds tombent dans une seule
+   colonne, du haut de la carte au bas de la liste. */
+.prises{padding-right:var(--gouttiere)}
+.prises.defile{max-height:calc(5 * var(--h-prise));overflow-y:auto;padding-right:var(--air);
   scroll-snap-type:y mandatory;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
 .prises.defile .prise{scroll-snap-align:start}
 .prise{display:flex;gap:12px;align-items:center;height:var(--h-prise);box-sizing:border-box;
@@ -1227,12 +1236,16 @@ select option{background:var(--surface);color:var(--txt)}
   .top{position:fixed;top:0;left:0;bottom:0;width:var(--cote);z-index:46;
     display:grid;grid-template-columns:1fr 44px;grid-template-rows:1fr auto;align-items:end;gap:10px;
     padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 22px;border-bottom:none;border-right:1px solid var(--line)}
-  .top .ttl{grid-column:1 / -1;align-self:start;display:block}
+  /* Le dessin du logo ne remplit pas sa boite : seize pixels de vide au-dessus
+     du mot. On les reprend, pour qu'il commence a la hauteur du rembourrage
+     comme le bord gauche, et les onglets remontent d'autant : le bloc du haut
+     garde son air, mais plus haut dans la colonne. */
+  .top .ttl{grid-column:1 / -1;align-self:start;display:block;margin-top:-16px}
   .marque{height:60px;margin:0 0 0 -4px;display:block}
   /* en bas : la pastille reseau et la roue cote a cote */
   #pres{width:100%;justify-content:flex-start}
   /* les onglets, sous le logo */
-  nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 108px);left:0;right:auto;bottom:auto;width:var(--cote);z-index:47;
+  nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 92px);left:0;right:auto;bottom:auto;width:var(--cote);z-index:47;
     flex-direction:column;align-items:stretch;gap:4px;padding:0 12px;background:none;border:none;justify-content:flex-start}
   nav button{height:46px;justify-content:flex-start;padding:0 14px;border-radius:var(--r);font-size:15.5px}
   nav button.on{background:var(--surface)}
