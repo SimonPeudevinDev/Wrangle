@@ -4275,7 +4275,8 @@ function modeleDIT(j){
   const qui = t => [t.par, t.heure].filter(Boolean).join(' · ');
   const prise = t => ({ n: String(t.n || ''), clip: t.clip || '', carte: t.carte || '', statut: t.statut || '',
                         retenue: !!t.retenue, tcIn: t.tcIn || '', tcOut: t.tcOut || '', duree: t.duree || '',
-                        note: t.notes || '', qui: qui(t), par: t.par || '', heure: t.heure || '', seq: t.seq || '', plan: t.plan || '' });
+                        note: t.notes || '', qui: qui(t), par: t.par || '', heure: t.heure || '', seq: t.seq || '', plan: t.plan || '',
+                        ecarts: t.ecarts || [] });
   const ordre = new Map(DB.plans.map((x, i) => [x.id, i]));
 
   return jours.map(jour => {
@@ -4295,7 +4296,7 @@ function modeleDIT(j){
       if (pr.length || x.etat === 'done'){
         const ok = pr.filter(t => t.statut === 'OK').length, ng = pr.filter(t => t.statut === 'NG').length,
               ret = pr.filter(t => t.retenue).length;
-        const b = { seq: '', seqTitre: '', plan: x.plan || '—', prises: pr.map(prise),
+        const b = { seq: '', seqTitre: '', plan: x.plan || '—', prises: pr.map(prise), ecarts: x.ecarts || [],
                     meta: [ETATS[x.etat], meta].filter(Boolean).join(' · '),
                     bilan: pr.length ? [pr.length + ' prise' + plur(pr.length), ok && ok + ' OK', ng && ng + ' NG',
                                         ret && ret + ' retenue' + plur(ret)].filter(Boolean).join(' · ') : 'aucune prise' };
@@ -4321,8 +4322,9 @@ function modeleDIT(j){
       sansClip: T.filter(t => !(t.clip || '').trim()).length
     };
     const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
+    const ecarts = tournes.reduce((n, b) => n + b.ecarts.length + b.prises.reduce((m, t) => m + t.ecarts.length, 0), 0);
     return {
-      jour, titre: p.titre || 'Projet sans titre', sauvegarde,
+      jour, titre: p.titre || 'Projet sans titre', sauvegarde, ecarts,
       sous: ['Journal DIT', nomJour(jour), dec, p.date, p.unit, p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler]
               .filter(Boolean).join(' · '),
       chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
@@ -4655,6 +4657,7 @@ function pdfDIT(j){
     const manques = [s.sansCarte && s.cartes.length ? s.sansCarte + ' prise' + plur(s.sansCarte) + ' sans carte' : '',
                      s.sansClip ? s.sansClip + ' prise' + plur(s.sansClip) + ' sans nom de clip' : ''].filter(Boolean);
     if (manques.length){ doc.place(14); doc.texte(PDF_M, doc.y - 9, 'À compléter : ' + manques.join(' · ') + '.', { taille: 7.5, couleur: 'ng' }); doc.y -= 13; }
+    if (m.ecarts){ doc.place(14); doc.texte(PDF_M, doc.y - 9, m.ecarts + ' écart' + plur(m.ecarts) + ' entre les saisies de l’équipe, signalé' + plur(m.ecarts) + ' sous les plans.', { taille: 7.5, police: 'HB', couleur: 'ng' }); doc.y -= 13; }
 
     // 1. ce que le montage attend
     section('Pour le montage — prises retenues');
@@ -4683,6 +4686,11 @@ function pdfDIT(j){
       if (b.prises.length)
         tableauPdf(doc, colsP, b.prises.map(t => rangee(colsP, t, { fond: t.retenue, gras: t.retenue })), 8, 'Plan ' + b.plan + ', suite');
       else { doc.texte(PDF_M, doc.y - 8, 'Marqué tourné, aucune prise enregistrée.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
+      // les ecarts entre les saisies de l'equipe, en rouge sous le plan
+      const dire = e => e.champ + ' : ' + e.valeurs.map(([n, v]) => n + ' ' + v).join(' · ');
+      b.ecarts.map(e => 'Écart — ' + dire(e))
+        .concat(b.prises.flatMap(t => t.ecarts.map(e => 'Écart prise ' + t.n + ' — ' + dire(e))))
+        .forEach(l => { doc.place(11); doc.texte(PDF_M, doc.y - 8, lignesPdf(l, L, 7.5, 'HB')[0], { taille: 7.5, police: 'HB', couleur: 'ng' }); doc.y -= 11; });
       doc.y -= 8;
     });
 
@@ -4815,9 +4823,22 @@ function rapprocher(sources){
 }
 
 /* La fusion : la premiere source pour base, les autres comblent ses vides,
-   ajoutent leurs plans et leurs prises absents ; les elements captes s'additionnent. */
+   ajoutent leurs plans et leurs prises absents ; les elements captes s'additionnent.
+   Deux personnes ont saisi la meme prise (meme plan, meme numero) : une seule
+   ligne, qui porte les deux noms, et un ecart note dessus quand ce qui compte
+   differe — statut, a monter, focale, carte, clip, reglages… L'heure, les
+   timecodes et la duree ne comptent pas : un chrono oublie ou quelques
+   secondes d'ecart ne sont pas un desaccord. Les notes s'ajoutent l'une a
+   l'autre. Le journal DIT signale ces ecarts sous chaque plan. */
+const CHAMPS_ECART = RAP_PRISE.filter(([k]) => ['heure', 'tcIn', 'tcOut', 'duree', 'notes'].indexOf(k) < 0);
+function noterEcart(o, champ, nomA, a, nomB, b){
+  o.ecarts = o.ecarts || [];
+  let e = o.ecarts.find(x => x.champ === champ);
+  if (!e){ e = { champ, valeurs: [[nomA, a]] }; o.ecarts.push(e); }
+  if (!e.valeurs.some(([n]) => n === nomB)) e.valeurs.push([nomB, b]);
+}
 function fusionRap(sources){
-  const base = structuredClone(sources[0].db);
+  const base = structuredClone(sources[0].db), nomBase = sources[0].nom || '';
   const parCle = new Map(base.plans.map(p => [clePlan(p), p]));
   const combler = (b, o, sauf) => Object.keys(o).forEach(k => {
     if (sauf.indexOf(k) >= 0 || (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]))) return;
@@ -4828,15 +4849,23 @@ function fusionRap(sources){
       let b = parCle.get(clePlan(p));
       if (!b){ b = structuredClone(p); base.plans.push(b); parCle.set(clePlan(p), b); }
       else {
-        combler(b, p, ['id']);
+        const ea = champPlan(b, 'etat'), eb = champPlan(p, 'etat');
+        if (ea && eb && ea !== eb) noterEcart(b, 'État', nomBase, ea, s.nom, eb);
+        combler(b, p, ['id', 'ecarts']);
         b.elements = b.elements || {};
         Object.keys(p.elements || {}).forEach(k => { if (p.elements[k]) b.elements[k] = true; });
       }
       const prisesB = base.prises.filter(t => t.planId === b.id);
       s.db.prises.filter(t => t.planId === p.id).forEach(t => {
         const tb = prisesB.find(x => String(x.n) === String(t.n));
-        if (!tb){ const c = structuredClone(t); c.planId = b.id; base.prises.push(c); prisesB.push(c); }
-        else combler(tb, t, ['id', 'planId']);
+        if (!tb){ const c = structuredClone(t); c.planId = b.id; base.prises.push(c); prisesB.push(c); return; }
+        CHAMPS_ECART.forEach(([k, label]) => {
+          const a = valRap(tb[k]), v = valRap(t[k]);
+          if (a && v && a.toLowerCase() !== v.toLowerCase()) noterEcart(tb, label, nomBase, a, s.nom, v);
+        });
+        if (valRap(t.notes) && valRap(tb.notes) && valRap(t.notes) !== valRap(tb.notes)) tb.notes = tb.notes.trim() + ' · ' + s.nom + ' : ' + t.notes.trim();
+        if (t.par && (tb.par || '').split(', ').indexOf(t.par) < 0) tb.par = tb.par ? tb.par + ', ' + t.par : t.par;
+        combler(tb, t, ['id', 'planId', 'ecarts']);
       });
     });
   });

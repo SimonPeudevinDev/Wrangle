@@ -187,6 +187,24 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     essais.verifier('le PDF DIT porte les prises de tous, la derniere de Romain comprise',
                     [c in texte for c in ('A001C001', 'B001C001', 'B001C002', 'B001C003', 'Romain', 'Simon')], [True] * 6)
     essais.verifier('et la page dit sur quoi il porte', banc.js("$('toast-msg').textContent"), 'Journal DIT exporté : toute l’équipe · Simon, Romain')
+    # -- deux personnes ont saisi la meme prise : une seule ligne, et seuls les ecarts qui comptent
+    banc.js("patch('prise', DB.prises[0].id, { statut: 'OK', focale: '35 mm', heure: '10:02', duree: '0:12', carte: 'A001' }); flush()"); time.sleep(0.4)
+    api('ops', {'client': 'tel-romain', 'nom': 'Romain', 'espace': 'romain', 'ops': [
+        {'op': 'add', 'kind': 'prise', 'data': {'id': 'r-double', 'planId': banc.js('DB.prises[0].planId'), 'n': banc.js('DB.prises[0].n'),
+                                                'clip': 'A001C001', 'statut': 'NG', 'focale': '50 mm', 'heure': '10:03', 'duree': '', 'carte': 'A001', 'par': 'Romain'}}]})
+    banc.js("RAP.sources = []"); time.sleep(0.2)
+    reuni = banc.cdp.appel('Runtime.evaluate', expression="avecEquipeAJour(() => surLePerimetre(() => JSON.stringify(DB.prises.filter(t => t.clip === 'A001C001'))))",
+                           awaitPromise=True, returnByValue=True)['result']['value']
+    reuni = json.loads(reuni)
+    essais.verifier('la prise saisie par les deux ne fait qu une ligne, aux deux noms',
+                    [len(reuni), reuni[0]['par']], [1, 'Simon, Romain'])
+    essais.verifier('elle note les ecarts qui comptent, pas l heure ni la duree',
+                    sorted((e['champ'], [v for _, v in e['valeurs']]) for e in reuni[0]['ecarts']), [('Focale', ['35 mm', '50 mm']), ('Statut', ['OK', 'NG'])])
+    texte = banc.cdp.appel('Runtime.evaluate', expression="avecEquipeAJour(() => surLePerimetre(() => Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('')))",
+                           awaitPromise=True, returnByValue=True)['result']['value']
+    essais.verifier('le PDF DIT les signale sous le plan, et compte les ecarts en tete',
+                    ['cart prise 1 \x97 Focale : Simon 35 mm \xb7 Romain 50 mm' in texte, 'Statut : Simon OK \xb7 Romain NG' in texte, '2 \xe9carts entre les saisies' in texte, '10:02' in texte or '10:03' in texte],
+                    [True, True, True, True])
 
     # -- recharger la page garde la personne, son espace, et le choix « Toute l'equipe »
     banc.ouvrir('/?t=2')
@@ -195,7 +213,7 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
                     ['Simon', True, ['A001C001']])
     banc.js("view = 'report'; renderAll()")
     essais.verifier('« Toute l equipe » est retenu, et le rapport va chercher les saisies tout seul',
-                    [banc.js('RAP.equipe'), attendre(lambda: banc.js('RAP.sources.map(s => s.nom + " " + s.db.prises.length)') == ['Romain 3'])], [True, True])
+                    [banc.js('RAP.equipe'), attendre(lambda: banc.js('RAP.sources.map(s => s.nom + " " + s.db.prises.length)') == ['Romain 4'])], [True, True])
     essais.verifier('le bilan compte a nouveau les prises de tous', attendre(lambda: banc.js("$('report').querySelector('.kpi .v').textContent") == '4'), True)
     essais.exceptions(banc)
 

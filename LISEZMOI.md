@@ -153,9 +153,13 @@ Ensuite `sudo wrangle-maj` met à jour et relance. Le journal par mail y marche 
 ## Rapprocher les saisies
 
 « Toute l'équipe » réunit les saisies sans rien demander : les prises de chacun s'ajoutent, et quand
-deux personnes ont rempli la même prise, celles d'ici font foi sur les écarts, les autres comblent
-les vides. Pour voir ces écarts en détail, ou pour en faire son projet : « Rapprocher les saisies »,
-juste en dessous dans le Rapport.
+deux personnes ont rempli la même prise (même plan, même numéro), elle ne fait qu'une ligne, aux
+deux noms : celles d'ici font foi, les autres comblent les vides, les notes s'ajoutent. Ce qui
+compte et diffère — statut, à monter, focale, clip, carte, réglages… — est noté comme **écart** sur
+la prise, et le journal DIT (PDF) le signale en rouge sous le plan, avec un compte en tête de
+journée. L'heure, les timecodes et la durée ne comptent pas : un chrono oublié ou quelques secondes
+d'écart ne sont pas un désaccord. Pour voir ces écarts en détail, ou pour en faire son projet :
+« Rapprocher les saisies », juste en dessous dans le Rapport.
 
 Sans serveur, chacun saisit de son côté, dans son navigateur, et personne ne voit les autres. Pour
 tout réunir : chacun exporte sa sauvegarde (⚙ → Données → Sauvegarde JSON) et l'envoie au DIT, qui
