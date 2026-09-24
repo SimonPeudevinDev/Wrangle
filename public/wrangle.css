@@ -592,13 +592,22 @@ nav button i{display:none}
 .pnote{margin:0 0 4px;font-size:13.5px;color:var(--dim);line-height:1.5;max-width:78ch}
 /* dans l'en-tete d'un jour : son nombre de plans, a regler avant le detail, et sa suppression */
 .jour .jctrl{margin-left:auto;display:inline-flex;align-items:center;gap:12px;align-self:center}
-.pjour{display:inline-flex;align-items:center;gap:8px;font:600 12.5px var(--font);color:var(--dim)}
-.pjour input{
-  width:52px;height:34px;padding:0 8px;text-align:center;border-radius:var(--rp);border:1px solid var(--line2);
-  background:var(--surface2);color:var(--txt);font:700 16px var(--font-titre);outline:none;
+.pjour{
+  display:inline-flex;align-items:center;height:36px;padding-left:12px;border-radius:var(--rp);
+  border:1px solid var(--line2);background:var(--surface2);font:600 12.5px var(--font);color:var(--dim);
 }
-.pjour input:focus{border-color:var(--acc)}
-.pjour input::-webkit-inner-spin-button{opacity:1}
+.pjour>span{margin-right:6px}
+.pjour .pas{
+  width:34px;height:34px;padding:0;border:none;background:none;color:var(--dim);cursor:pointer;
+  font:500 19px/1 var(--font);display:grid;place-items:center;
+}
+.pjour .pas:hover{color:var(--txt)}
+.pjour .pas:active{color:var(--acc)}
+.pjour input{
+  width:34px;height:34px;padding:0;text-align:center;border:none;background:none;color:var(--txt);
+  font:700 16px var(--font-titre);font-variant-numeric:tabular-nums;outline:none;
+}
+.pjour input:focus{color:var(--acc)}
 .prow{
   display:grid;grid-template-columns:minmax(0,1fr);gap:0 20px;align-items:start;
   margin:0 0 14px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);

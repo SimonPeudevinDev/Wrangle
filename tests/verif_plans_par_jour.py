@@ -88,6 +88,11 @@ with Banc(PORT, 9371, taille=(1300, 900)) as banc:
                     [3, True, [suivant] * 3])
     essais.verifier('la page le dit', banc.js("$('toast-msg').textContent"), '3 plans ajoutés au %s' % nom_suivant.lower())
     essais.verifier('les trois cartes arrivent chez Romain, memes identifiants', attendre(lambda: romain(suivant) == ids), True)
+    banc.js("document.querySelector(`#l-prep .jour .pjour .pas:last-of-type`).click()"); time.sleep(0.6)
+    banc.js("document.querySelector(`#l-prep .jour .pjour .pas`).click()"); time.sleep(0.6)
+    essais.verifier('les boutons + et − du compteur ajoutent et retirent une carte vide',
+                    [banc.js("$('toast-msg').textContent"), banc.js("plansDuJour('%s').length" % suivant), banc.js(COMPTEUR)], ['1 plan vide retiré', 3, suivant + ' 3'])
+    ids = banc.js("plansDuJour('%s').map(p => p.id)" % suivant)
 
     # -- une carte remplie ne part pas quand on baisse le nombre
     banc.js("patch('plan', '%s', { desc: 'Le premier, déjà décrit' })" % ids[0]); time.sleep(0.3)

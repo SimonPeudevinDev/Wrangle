@@ -3680,10 +3680,17 @@ function joursPrep(){
 /* Dans l'en-tete d'un jour : son nombre de plans a regler, et de quoi le supprimer. */
 function enteteJour(j, n){
   if (!j || j === 'CG' || modeOrdre) return '';
-  return `<span class="jctrl"><label class="pjour"><span>Plans</span>
-      <input type="number" min="0" max="99" inputmode="numeric" value="${n}" data-jour="${esc(j)}"
-        onchange="fixerNombreJour('${esc(j)}', this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></label>
+  return `<span class="jctrl"><span class="pjour"><span>Plans</span>
+      <button type="button" class="pas" onclick="pasJour('${esc(j)}', -1)" aria-label="Un plan de moins">&minus;</button>
+      <input type="text" inputmode="numeric" value="${n}" data-jour="${esc(j)}" aria-label="Nombre de plans"
+        onfocus="this.select()" onchange="fixerNombreJour('${esc(j)}', this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+      <button type="button" class="pas" onclick="pasJour('${esc(j)}', 1)" aria-label="Un plan de plus">+</button></span>
     <button type="button" class="btn sm d" onclick="supprimerJourPrep('${esc(j)}')">Supprimer le jour</button></span>`;
+}
+function pasJour(j, d){
+  const i = document.querySelector(`#l-prep .jour input[data-jour="${j}"]`); if (!i) return;
+  i.value = Math.max(0, (parseInt(i.value, 10) || 0) + d);
+  fixerNombreJour(j, i);
 }
 function ajouterJourPrep(){
   // un jour deja ouvert et encore vide attend son nombre : on y retourne, on n'en empile pas un autre
