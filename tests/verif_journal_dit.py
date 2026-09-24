@@ -90,5 +90,11 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
       return [l.length, c.scrollHeight > c.clientHeight, c.clientHeight <= 5 * l[0].getBoundingClientRect().height + 2]; })()""")
     essais.verifier('sept alertes : la liste defile au-dela de cinq', mesure, [mesure[0], True, True])
     essais.verifier('et il y en a bien plus de cinq', mesure[0] > 5, True)
+    # -- le nom complet d'un fichier ARRI : « +1 » ne garde que bobine et clip
+    essais.verifier('le clip suivant d un fichier ARRI complet : la bobine et le clip, sans date ni heure',
+                    banc.js("""(() => { const t = ajouterPrise(DB.plans[0].id, false, { clip: 'A_0001C007_260921_095621_a1F6K.mxf' });
+                                        const u = ajouterPrise(DB.plans[0].id, false, {}); return clipSuivant(u); })()"""), 'A_0001C008')
+    essais.verifier('et un nom court reste court', banc.js("""(() => { const t = ajouterPrise(DB.plans[0].id, false, { clip: 'B003C012' });
+                                        const u = ajouterPrise(DB.plans[0].id, false, {}); return clipSuivant(u); })()"""), 'B003C013')
     essais.exceptions(banc)
 essais.bilan()

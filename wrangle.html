@@ -2106,7 +2106,9 @@ function clipSuivant(t){
   const memeCam = t.cam ? autres.filter(x => x.cam === t.cam) : [];
   const ref = memeCam[memeCam.length - 1] || autres[autres.length - 1];
   if (!ref) return '';
-  const c = ref.clip.trim();
+  // le nom complet d'un fichier ARRI (A_0001C007_260921_095621_a1F6K) : on ne
+  // garde que bobine et clip, la date, l'heure et l'identifiant sont a la camera
+  const c = ref.clip.trim().replace(/_\d{6}_\d{6}_[A-Za-z0-9]+(\.\w+)?$/, '');
   const m = c.match(/^(.*?C)(\d+)(.*)$/i);
   if (m) return m[1] + String(+m[2] + 1).padStart(m[2].length, '0') + m[3];
   const d = c.match(/^(.*?)(\d+)(\D*)$/);
