@@ -4625,14 +4625,14 @@ function pdfDIT(j){
     // les deux timecodes dans une colonne, l'un sous l'autre quand il y en a deux
     tc:     ['TC in / out', 72, 'C', t => t.tcIn && t.tcOut ? t.tcIn + ' – ' + t.tcOut : t.tcIn || t.tcOut],
     duree:  ['Durée', 34, 'H', t => t.duree],
-    carte:  ['Carte', 40, 'H', t => t.carte],
+    carte:  ['Carte', 52, 'H', t => t.carte ? { t: t.carte, police: 'HB', couleur: 'encre' } : { t: '—', couleur: 'tan' }],
     note:   ['Note', 0, 'H', t => t.note],
     qui:    ['Saisi par', 78, 'H', saisi]
   };
   const colonnes = (fixes, prises) => {
     const avec = k => prises.some(t => t[k]);
     const ids = fixes.slice(0, -1)
-      .concat(avec('tcIn') || avec('tcOut') ? ['tc'] : [], avec('duree') ? ['duree'] : [], avec('carte') ? ['carte'] : [],
+      .concat(avec('tcIn') || avec('tcOut') ? ['tc'] : [], avec('duree') ? ['duree'] : [],
               avec('note') ? ['note'] : [], fixes.slice(-1));
     const cols = ids.map(id => COLONNES[id].slice());
     const reste = L - cols.reduce((a, c) => a + c[1], 0);
@@ -4651,8 +4651,9 @@ function pdfDIT(j){
   jours.forEach((m, i) => {
     if (i) doc.nouvellePage();
     const toutes = m.tournes.flatMap(b => b.prises);
-    const colsM = colonnes(['clip', 'ou', 'statut', 'qui'], m.montage);
-    const colsP = colonnes(['n', 'clip', 'statut', 'ret', 'qui'], toutes);
+    // la carte est toujours la : le DIT voit d'un coup d'oeil sur quelle carte est chaque prise
+    const colsM = colonnes(['clip', 'ou', 'statut', 'carte', 'qui'], m.montage);
+    const colsP = colonnes(['n', 'clip', 'statut', 'ret', 'carte', 'qui'], toutes);
     const chiffres = m.chiffres.filter(c => c[1] !== 'à tourner').concat(m.ecarts ? [[m.ecarts, 'écart' + plur(m.ecarts) + ' entre saisies']] : []);
     entetePdf(doc, m.titre, m.sous, chiffres);
 
