@@ -67,9 +67,11 @@ l'ouverture au lieu d'être stocké en image. Seuls les plans de décor importé
 plus léger du JPEG et du WebP. Comptez 2 à 3 Mo pour un tournage entier, sauvegardes non
 comprises.
 
-Première mise en route : quand un espace est encore vide sur le serveur, le premier appareil de
-cette personne y envoie son projet (découpage compris, et les prises déjà saisies dans ce
-navigateur sous ce prénom s'il y en a).
+Première mise en route : quand un espace n'a encore rien reçu sur le serveur, le premier appareil de
+cette personne y envoie son projet (les prises déjà saisies dans ce navigateur sous ce prénom
+s'il y en a), et reçoit le découpage de l'équipe s'il en existe un. Un espace vidé exprès
+(✕ Effacer, ou tous les plans retirés) reste un projet vide : les appareils qui le retrouvent
+s'y rangent, ils ne renvoient pas leur ancienne copie.
 
 ## Travailler seul, sans serveur
 
@@ -315,15 +317,16 @@ l'interface, en téléphone et en grand écran, pour la contrôler à l'œil.
 La page marche aussi toute seule sur Internet : données dans le navigateur de chacun, sans serveur
 ni synchro. C'est ce qui est publié sur le nom de domaine.
 
-`py outils/construire_site.py` fabrique ce site dans `site/` : il reprend `wrangle.html` tel quel
-sous le nom `index.html`, découpage de la production compris (`window.DT_SEED`). Tout le
-monde ouvre donc le site sur les plans du tournage, comme sur le
-plateau. Chacun garde ensuite ses prises dans son navigateur ; ⚙ > Données > « Recharger le
-découpage » remet les plans à jour sans toucher aux prises.
+`py outils/construire_site.py --vide` fabrique ce site dans `site/` : il reprend `wrangle.html`
+sous le nom `index.html`, sans le découpage intégré (`window.DT_SEED`). C'est ce que publie le
+workflow : le site s'ouvre sur un carnet vide, et la liste des plans se saisit dans Préparation
+par une personne, pour toute l'équipe (voir « Les prises sont à chacun, le découpage est à
+tous »). La page pèse 200 Ko au lieu de 1,4 Mo, et un garde-fou refuse de construire s'il
+restait une trace des données. Le fichier du plateau n'est jamais touché.
 
-Pour publier un carnet vide à la place (sans le découpage) : `py outils/construire_site.py --vide`.
-La page pèse alors 200 Ko au lieu de 1,4 Mo, et un garde-fou refuse de construire s'il restait une
-trace des données. Le fichier du plateau n'est jamais touché.
+Sans `--vide`, le site embarque le découpage du DT : tout le monde l'ouvre sur les plans du
+tournage, et ⚙ > Données > « Recharger le découpage » remet les plans à jour sans toucher aux
+prises.
 
 Pour voir le résultat avant de publier : ouvrir `site/index.html` directement dans le navigateur.
 (Par `http://localhost`, la page se croit sur un serveur de plateau et affiche « Hors ligne » :

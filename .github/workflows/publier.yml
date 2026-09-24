@@ -41,8 +41,8 @@ jobs:
       # github.io (pour la publier vers un serveur, construire_site.py --api).
       - name: Construire le site
         run: |
-          python outils/construire_site.py site-ovh --php
-          python outils/construire_site.py site
+          python outils/construire_site.py site-ovh --php --vide
+          python outils/construire_site.py site --vide
           rm -rf site/api
 
       # le site chez OVH : le contenu de site-ovh/ dans le www de l'hebergement,

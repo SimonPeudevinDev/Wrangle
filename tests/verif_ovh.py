@@ -114,7 +114,7 @@ essais.verifier('un appel sans client est refuse', statut, 400)
 ops('testA', 'Alice', 'essai-a', [{'op': 'remplacer', 'db': VIDE}])
 ops('testB', 'Bob', 'essai-b', [{'op': 'remplacer', 'db': VIDE}])
 statut, l = api('espaces.php')
-essais.verifier('les espaces d essai sont vides et hors liste', [etat('essai-a')['db'], [x['espace'] for x in l['espaces'] if x['espace'].startswith('essai-')]], [None, []])
+essais.verifier('les espaces d essai sont vides et hors liste', [etat('essai-a')['db']['plans'], [x['espace'] for x in l['espaces'] if x['espace'].startswith('essai-')]], [[], []])
 if ref:
     essais.verifier('le decoupage de l equipe est intact', cles(etat(equipe[0]['espace'])['db']), cles(ref))
 essais.bilan()

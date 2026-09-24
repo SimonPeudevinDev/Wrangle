@@ -23,7 +23,7 @@ $siVide = false;
 foreach ($ops as $i => $op) {
     if (is_object($op) && ($op->op ?? '') === 'remplacer' && !empty($op->siVide)) {
         $siVide = true;
-        if ($db === null && is_object($op->db ?? null) && is_array($op->db->plans ?? null)) {
+        if (($db === null || empty($db->plans)) && is_object($op->db ?? null) && is_array($op->db->plans ?? null)) {
             $donneur = donneur_decoupage($ESPACE);
             if ($donneur) {
                 $ops[$i] = (object) ['op' => 'remplacer', 'siVide' => true,

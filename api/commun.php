@@ -221,9 +221,12 @@ function normaliser($db) {
 }
 
 // le projet de l'espace, ou null tant qu'aucun appareil n'en a envoye un
+// Le projet de l'espace : rien tant qu'aucun appareil n'y a rien ecrit. Un
+// espace vide expres reste un projet, vide : les appareils qui le retrouvent
+// s'y rangent au lieu de renvoyer leur copie.
 function lire_projet() {
     $db = lire_json(dossier_espace() . '/projet.json');
-    if (!is_object($db) || empty($db->plans)) {
+    if (!is_object($db) || !is_array($db->plans ?? null)) {
         return null;
     }
     return normaliser($db);
@@ -590,7 +593,7 @@ function appliquer(&$db, $ops) {
             }
             // envoi initial d'un appareil qui a trouve le serveur vide : si un autre
             // appareil l'a devance entre-temps, son projet reste, celui-ci est ignore
-            if (!empty($op->siVide) && $db !== null) {
+            if (!empty($op->siVide) && $db !== null && !empty($db->plans)) {
                 continue;
             }
             $db = normaliser($d);

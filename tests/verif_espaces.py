@@ -136,7 +136,7 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     essais.verifier('et son arrivee n a rien change chez Simon', len(cles('simon')), len(cles('tom')))
     avant_vide = (len(cles('simon')), len(cles('romain')))
     api('ops', {'client': 'tel-tom', 'nom': 'Tom', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': {'prod': {}, 'optiques': [], 'plans': [], 'prises': []}}]})
-    essais.verifier('vider son espace ne touche pas aux autres', [etat('tom')['db'], (len(cles('simon')), len(cles('romain')))], [None, avant_vide])
+    essais.verifier('vider son espace ne touche pas aux autres, et il reste servi, vide', [etat('tom')['db']['plans'], (len(cles('simon')), len(cles('romain')))], [[], avant_vide])
 
     # -- le DIT reunit tout : les espaces des autres, pas le sien
     esp = api('espaces')['espaces']

@@ -211,10 +211,10 @@ def espace_neuf(nom):
 
 
 def projet_servi(e):
-    """Le projet d'un espace tel qu'on le sert : rien tant qu'il n'a pas de
-    plan — un espace vidé redemande son projet au premier appareil, comme
-    chez l'hébergeur."""
-    return e['db'] if e['db'] and e['db']['plans'] else None
+    """Le projet d'un espace tel qu'on le sert : rien tant qu'aucun appareil
+    n'y a rien écrit. Un espace vidé exprès reste un projet, vide : les
+    appareils qui le retrouvent s'y rangent au lieu de renvoyer leur copie."""
+    return e['db']
 
 
 def espace_etat(nom):
@@ -422,7 +422,7 @@ def appliquer(ops, client, esp):
                 continue
             # envoi initial d'un appareil qui a trouvé le serveur vide : si un autre
             # appareil l'a devancé entre-temps, son projet reste, celui-ci est ignoré
-            if op.get('siVide') and db is not None:
+            if op.get('siVide') and db is not None and db['plans']:
                 continue
             esp['db'] = db = normaliser(d)
             res = {'op': 'remplacer', 'db': db}
@@ -645,7 +645,7 @@ def accueillir(op, esp):
     découpage de l'équipe (celui d'un autre espace, mêmes plans, mêmes
     identifiants) et garde ses prises, rattachées par la clé du plan. Sans
     autre espace, son découpage devient celui de l'équipe."""
-    if not (isinstance(op, dict) and op.get('op') == 'remplacer' and op.get('siVide') and esp['db'] is None):
+    if not (isinstance(op, dict) and op.get('op') == 'remplacer' and op.get('siVide') and not (esp['db'] and esp['db']['plans'])):
         return op
     d = op.get('db')
     if not isinstance(d, dict) or not isinstance(d.get('plans'), list):
