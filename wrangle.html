@@ -3803,6 +3803,13 @@ function voirEquipe(oui){
   if (oui && !RAP.sources.length && RESEAU.possible) return actualiserEquipe();
   renderReport();
 }
+/* Le bouton du rapprochement fait la meme chose que « Toute l'equipe » : on va
+   chercher les saisies de chacun, et tout le rapport — bilan, ecarts, PDF —
+   porte sur l'ensemble. Un seul geste, pas deux boutons qui se ressemblent. */
+function reunirEquipe(){
+  RAP.equipe = true; UI.equipe = true; ecrireUI();
+  return actualiserEquipe();
+}
 function actualiserEquipe(){
   RAP.tente = true;
   if (!RESEAU.possible) return renderReport();   // sans serveur, il n'y a que les fichiers deposes
@@ -4703,7 +4710,7 @@ function htmlRapprochement(){
         ${RESEAU.possible ? '' : `<button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>`}
         <button class="btn" onclick="telechargerRapprochement()">Écarts (PDF)</button></div>`;
   }
-  return `<div class="rsources">${puces}${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="recupererEspaces()">Récupérer les saisies de l’équipe</button>` : ''}
+  return `<div class="rsources">${puces}${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="reunirEquipe()">Récupérer les saisies de l’équipe</button>` : ''}
     <button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
 }
 function garderFusion(){

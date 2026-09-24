@@ -113,7 +113,7 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     banc.js("view = 'report'; renderAll(); recupererEspaces()")
     essais.verifier('le rapprochement ramene les saisies de Romain',
                     attendre(lambda: banc.js('RAP.sources.map(s => s.nom + \" \" + s.db.prises.length)') == ['Romain 2']), True)
-    essais.verifier('le bouton est dans le rapport', banc.js("!!document.querySelector('#rapprocher button[onclick=\"recupererEspaces()\"]')"), True)
+    essais.verifier('le bouton est dans le rapport', banc.js("!!document.querySelector('#rapprocher button[onclick=\"reunirEquipe()\"]')"), True)
 
     # -- « Toute l'equipe » : le bilan et les exports du DIT portent sur tous, sans toucher a son projet
     essais.verifier('le bilan porte d abord sur mes saisies', banc.js("$('report').querySelector('.kpi .v').textContent"), '1')
@@ -125,6 +125,11 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     essais.verifier('le bilan dit qui est reuni', 'Romain' in banc.js("$('perimetre').textContent") and 'Simon (ici)' in banc.js("$('perimetre').textContent"), True)
     banc.js('voirEquipe(false)'); time.sleep(0.3)
     essais.verifier('« Mes saisies » : retour a mon bilan', [banc.js("$('report').querySelector('.kpi .v').textContent"), banc.js("fname('x', 'csv')").endswith('_equipe.csv')], ['1', False])
+    # -- le bouton du rapprochement fait la meme chose : tout le rapport passe sur l'equipe
+    banc.js("document.querySelector('#rapprocher button[onclick=\"reunirEquipe()\"]').click()")
+    essais.verifier('« Récupérer les saisies de l equipe » met aussi le bilan sur toute l equipe',
+                    [attendre(lambda: banc.js("$('report').querySelector('.kpi .v').textContent") == '3'), banc.js('RAP.equipe && UI.equipe')], [True, True])
+    banc.js('voirEquipe(false)'); time.sleep(0.3)
 
     # -- le PDF du DIT va rechercher les saisies de chacun avant de se fabriquer :
     #    meme si la liste reunie est vide ou perimee, rien ne manque
