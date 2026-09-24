@@ -131,6 +131,13 @@ button{transition:background .2s,color .2s,border-color .2s,opacity .2s}
   display:flex;align-items:center;gap:8px;flex:none;white-space:nowrap;
 }
 .pill i{width:8px;height:8px;border-radius:50%;background:var(--dim2);display:block;flex:none}
+/* le texte de la pastille cede avant de pousser ce qu'il y a a cote */
+.pill span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* a plusieurs, le point devient une pastille qui compte les connectes :
+   « 2 » en vert a cote du prenom, plutot que « · 2 en ligne » en toutes lettres */
+.pill i[data-n]{width:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;margin-left:-3px;
+  display:grid;place-items:center;font:800 11px/1 var(--font);color:var(--ok-txt);letter-spacing:0}
+.pill i[data-n]::after{content:attr(data-n)}
 /* Sur telephone la pastille se resserre a la taille des boutons ronds, pour
    laisser la place au logo. Cette regle doit suivre celle du dessus : a
    specificite egale c'est l'ordre qui tranche, et une requete media n'ajoute
@@ -415,6 +422,10 @@ button.ptag:hover,button.ptag.on{filter:brightness(1.25)}
 .menu.puce button.t-bleu{color:var(--tag-bleu)} .menu.puce button.t-orange{color:var(--tag-orange)}
 /* la description du plan : c'est ce qu'on lit en premier sur le plateau */
 /* la description : deux lignes au plus, en gris ; la fiche dit le reste */
+/* Le texte d'un plan s'arrete avant la colonne des ronds, comme la ligne d'une
+   prise s'arrete avant les siens : le rond Moteur garde son air, et le bord
+   droit du texte est le meme d'un bout a l'autre de la carte. */
+.pdesc,.pctx,.pelem{padding-right:calc(var(--gouttiere) + 54px)}
 .pdesc{font-size:14px;line-height:1.4;color:var(--dim);margin-top:4px;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 /* le contexte technique : lisible, pas relegue en gris minuscule */
@@ -548,18 +559,20 @@ nav button i{display:none}
 }
 .fabs > button{pointer-events:auto}
 
-/* le bouton caramel : la seule chose pleine de l'ecran */
+/* le bouton Moteur : rouge, comme le declencheur d'une camera et comme
+   l'anneau du plan qui tourne ; l'oeil de l'anneau y est repris */
 .fab{
   height:52px;padding:0 22px;border-radius:var(--rp);border:none;
-  background:var(--acc);color:var(--acc-txt);
+  background:var(--ng);color:var(--ng-txt);
   font-weight:700;font-size:15px;cursor:pointer;
   display:flex;align-items:center;gap:8px;
 }
-.fab:hover{background:var(--g1)}
-.fab:active{background:var(--g3)}
+.fab:hover{background:var(--ng-g1)}
+.fab:active{background:var(--ng-g2)}
 .fab em{font-style:normal;font-weight:600;opacity:.7;font-size:12.5px}
-/* ca tourne : le bouton est rouge et une onde s'en eloigne, lentement,
-   toujours dans le meme sens. Pas de va-et-vient : il ne clignote pas. */
+/* ca tourne : une onde s'eloigne du bouton, lentement, toujours dans le meme
+   sens, et le carre remplace l'oeil. Pas de va-et-vient : il ne clignote pas.
+   C'est a cela, et au mot, qu'on distingue « ca tourne » de « prêt a tourner ». */
 .fab.rec{
   background:var(--ng);color:var(--ng-txt);
   animation:rec 1.8s ease-out infinite;
@@ -1023,6 +1036,10 @@ select option{background:var(--surface);color:var(--txt)}
 .rec-row{margin-top:12px}
 .btn.rec{background:var(--ng);color:var(--ng-txt);border-color:var(--ng);width:100%;display:flex;
   justify-content:center;gap:10px;align-items:center}
+/* le Moteur de la fiche : le meme rouge et le meme oeil que le bouton flottant */
+.btn.moteur{background:var(--ng);color:var(--ng-txt);border-color:var(--ng);
+  display:flex;justify-content:center;gap:8px;align-items:center}
+.btn.moteur:hover{background:var(--ng-g1);border-color:var(--ng-g1)}
 .btn.rec em{font-style:normal;font-variant-numeric:tabular-nums;opacity:.9}
 
 /* ------------------------------- Prise ------------------------------- */
@@ -1243,7 +1260,9 @@ select option{background:var(--surface);color:var(--txt)}
   .top .ttl{grid-column:1 / -1;align-self:start;display:block;margin-top:-16px}
   .marque{height:60px;margin:0 0 0 -4px;display:block}
   /* en bas : la pastille reseau et la roue cote a cote */
-  #pres{width:100%;justify-content:flex-start}
+  /* la pastille tient dans sa colonne, quoi qu'elle dise : elle raccourcit
+     son texte avant de pousser la roue */
+  #pres{width:100%;min-width:0;justify-content:flex-start}
   /* les onglets, sous le logo */
   nav{position:fixed;top:calc(env(safe-area-inset-top,0px) + 92px);left:0;right:auto;bottom:auto;width:var(--cote);z-index:47;
     flex-direction:column;align-items:stretch;gap:4px;padding:0 12px;background:none;border:none;justify-content:flex-start}

@@ -133,12 +133,16 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
                     ['Simon', True, ['A001C001']])
     essais.exceptions(banc)
 
-# -- le projet d'avant les espaces devient l'espace « commun »
+# -- le projet d'avant les espaces se partage entre ses auteurs : chacun recoit le
+#    decoupage et ses prises ; les prises sans nom vont dans « commun »
 data = tempfile.mkdtemp(prefix='wrangle-migration-')
 try:
     vieux = {'version': 2, 'prod': {'titre': 'Ancien'}, 'optiques': [],
              'plans': [{'id': 'p1', 'seq': '01', 'plan': '01', 'jour': 'J1', 'elements': {}}],
-             'prises': [{'id': 't1', 'planId': 'p1', 'n': 1, 'clip': 'Z001C001', 'par': 'Simon'}]}
+             'prises': [{'id': 't1', 'planId': 'p1', 'n': 1, 'clip': 'Z001C001', 'par': 'Simon'},
+                        {'id': 't2', 'planId': 'p1', 'n': 2, 'clip': 'Z001C002', 'par': 'Noémie'},
+                        {'id': 't3', 'planId': 'p1', 'n': 3, 'clip': 'Z001C003', 'par': 'Simon'},
+                        {'id': 't4', 'planId': 'p1', 'n': 4, 'clip': 'Z001C004'}]}
     with open(os.path.join(data, 'projet.json'), 'w', encoding='utf-8') as f:
         json.dump(vieux, f)
     os.makedirs(os.path.join(data, 'sauvegardes'))
@@ -149,16 +153,20 @@ try:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         patienter(lambda: api('etat', port=port) or True, tours=60, pause=0.25)
-        commun = api('etat?espace=commun', port=port)['db']
-        essais.verifier('l ancien projet est servi comme espace « commun »',
-                        [commun['prod']['titre'], [t['clip'] for t in commun['prises']]], ['Ancien', ['Z001C001']])
-        essais.verifier('le fichier a demenage, avec ses sauvegardes',
+        simon, noemie, commun = (api('etat?espace=' + e, port=port)['db'] for e in ('simon', 'noemie', 'commun'))
+        essais.verifier('Simon recoit le decoupage et ses deux prises',
+                        [simon['prod']['titre'], len(simon['plans']), [t['clip'] for t in simon['prises']]], ['Ancien', 1, ['Z001C001', 'Z001C003']])
+        essais.verifier('Noemie la sienne, dans un espace a son nom sans accent',
+                        [[t['clip'] for t in noemie['prises']], [(e['espace'], e['nom']) for e in api('espaces', port=port)['espaces'] if e['espace'] == 'noemie']],
+                        [['Z001C002'], [('noemie', 'Noémie')]])
+        essais.verifier('la prise sans nom attend dans « commun »', [t['clip'] for t in commun['prises']], ['Z001C004'])
+        essais.verifier('le fichier d avant reste a cote, avec ses sauvegardes',
                         [os.path.exists(os.path.join(data, 'projet.json')),
-                         os.path.exists(os.path.join(data, 'espaces', 'commun', 'projet.json')),
-                         os.path.exists(os.path.join(data, 'espaces', 'commun', 'sauvegardes', 'projet_2026-01-01_000000.json'))],
+                         os.path.exists(os.path.join(data, 'projet.json.ancien')),
+                         os.path.exists(os.path.join(data, 'sauvegardes-avant-espaces', 'projet_2026-01-01_000000.json'))],
                         [False, True, True])
-        essais.verifier('et le DIT le voit dans la liste des espaces',
-                        [(e['espace'], e['nom']) for e in api('espaces', port=port)['espaces']], [('commun', 'Commun')])
+        essais.verifier('le DIT voit les trois espaces',
+                        [e['espace'] for e in api('espaces', port=port)['espaces']], ['commun', 'noemie', 'simon'])
         essais.verifier('un appareil sans espace tombe dans commun', api('etat', port=port)['db']['prod']['titre'], 'Ancien')
     finally:
         srv.terminate()

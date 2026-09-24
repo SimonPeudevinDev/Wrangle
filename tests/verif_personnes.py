@@ -105,11 +105,11 @@ with Banc(8775, 9375, taille=(1200, 900)) as banc:
     pose(banc, par='Simon', cle='fstdw.v1:romain', ui={'nom': 'Romain'})
     banc.ouvrir('/?seul=1&t=9', repos=1.5)
     essais.verifier('la page voit que ce carnet n est pas celui de Romain', [banc.js("!$('dlg').hidden"), banc.js("$('dlg-titre').textContent")], [True, 'Ce carnet a été saisi par Simon, pas par vous.'])
-    essais.verifier('elle propose de le rendre', [banc.js("$('dlg-oui').textContent"), banc.js("$('dlg-non').textContent")], ['Le rendre à Simon', 'C’est le mien'])
+    essais.verifier('elle propose de le rendre', [banc.js("$('dlg-oui').textContent"), banc.js("$('dlg-non').textContent")], ['Les rendre à Simon', 'C’est le mien'])
     banc.js("$('dlg-oui').click()"); time.sleep(0.6)
     essais.verifier('Romain repart du decoupage', [banc.js('UI.nom'), banc.js('DB.prises.length'), banc.js('DB.plans.length')], ['Romain', 0, 56])
     essais.verifier('et le carnet est passe chez Simon', banc.js("(() => { const d = JSON.parse(localStorage.getItem('fstdw.v1:simon')); return [d.prises.length, d.prises[0].par]; })()"), [2, 'Simon'])
-    essais.verifier('la page le dit', banc.js("$('toast-msg').textContent"), 'Carnet rendu à Simon')
+    essais.verifier('la page le dit', banc.js("$('toast-msg').textContent"), '2 prises rendues à Simon')
     banc.js("choisirNom(1)"); time.sleep(0.6)
     essais.verifier('Simon ouvre son carnet, rendu', [banc.js('UI.nom'), banc.js('DB.prises.length')], ['Simon', 2])
     essais.verifier('et on ne lui demande rien : ce sont ses prises', banc.js("$('dlg').hidden"), True)
@@ -127,6 +127,56 @@ with Banc(8775, 9375, taille=(1200, 900)) as banc:
     banc.ouvrir('/?seul=1&t=13')
     essais.verifier('et la question ne revient pas', [banc.js("$('dlg').hidden"), banc.js('DB.prises.length')], [True, 2])
     essais.exceptions(banc, quoi='aucune exception en console (c est le mien)')
+
+# le carnet d'avant, quand tout le monde y saisissait : douze prises de Simon, une de Romain
+POSE_MIXTE = """(() => {
+    const d = normaliser(null); seed(d);
+    const p = d.plans[0], q = d.plans[1];
+    const prise = (n, plan, par, clip) => Object.assign({}, NEUVE(), { id:'melange' + n, planId:plan.id, seq:plan.seq,
+        plan:plan.plan, jour:plan.jour, n, clip, statut:'OK', par });
+    d.prises = [prise(1, p, 'Simon', 'A001_0012'), prise(2, p, 'Simon', 'A001_0013'), prise(3, p, 'Romain', 'A001_0023'),
+                prise(1, q, 'Simon', 'A001_0016')];
+    localStorage.setItem(%s, JSON.stringify(d));
+    localStorage.setItem('fstdw.ui', JSON.stringify(%s));
+    DB = d;
+  })()"""
+
+with Banc(8775, 9375, taille=(1200, 900)) as banc:
+    # -- un carnet d'avant a plusieurs auteurs se partage : chacun y prend ses prises
+    banc.ouvrir('/?seul=1&t=14')
+    banc.js(POSE_MIXTE % (json.dumps('fstdw.v1'), '{}'))
+    banc.ouvrir('/?seul=1&t=15', repos=1.5)
+    banc.js("choisirNom(0)"); time.sleep(0.6)     # Romain, le premier
+    essais.verifier('Romain prend le decoupage et sa prise, pas celles de Simon',
+                    [banc.js('UI.nom'), banc.js("DB.prises.map(t => t.clip)"), banc.js("$('dlg').hidden")], ['Romain', ['A001_0023'], True])
+    essais.verifier('les prises de Simon restent dans le carnet d avant',
+                    banc.js("JSON.parse(localStorage.getItem('fstdw.v1')).prises.map(t => t.par)"), ['Simon', 'Simon', 'Simon'])
+    banc.js("choisirNom(1)"); time.sleep(0.6)     # puis Simon
+    essais.verifier('Simon prend les siennes, sur les memes plans',
+                    [banc.js("DB.prises.map(t => t.clip)"), banc.js("DB.plans[0].id === JSON.parse(localStorage.getItem('fstdw.v1:romain')).plans[0].id")],
+                    [['A001_0012', 'A001_0013', 'A001_0016'], True])
+    essais.verifier('plus rien a prendre : le carnet d avant s efface', banc.js("localStorage.getItem('fstdw.v1')"), None)
+    banc.js("choisirNom(0)"); time.sleep(0.5)
+    essais.verifier('Romain retrouve la sienne, et rien d autre', banc.js("DB.prises.map(t => t.par + ' ' + t.clip)"), ['Romain A001_0023'])
+    essais.exceptions(banc, quoi='aucune exception en console (carnet partage)')
+
+with Banc(8775, 9375, taille=(1200, 900)) as banc:
+    # -- un carnet deja repris en bloc sous un prenom : on rend aux autres leurs prises, on garde les siennes
+    banc.ouvrir('/?seul=1&t=16')
+    banc.js(POSE_MIXTE % (json.dumps('fstdw.v1:romain'), json.dumps({'nom': 'Romain'})))
+    banc.ouvrir('/?seul=1&t=17', repos=1.5)
+    essais.verifier('la page voit les prises des autres dans le carnet de Romain',
+                    [banc.js("!$('dlg').hidden"), banc.js("$('dlg-titre').textContent"), banc.js("$('dlg-oui').textContent"), banc.js("$('dlg-non').textContent")],
+                    [True, 'Ce carnet porte 3 prises saisies par Simon.', 'Les rendre à Simon', 'Elles sont à moi'])
+    banc.js("$('dlg-oui').click()"); time.sleep(0.8)
+    essais.verifier('Romain garde la sienne', [banc.js('UI.nom'), banc.js("DB.prises.map(t => t.clip)")], ['Romain', ['A001_0023']])
+    essais.verifier('Simon recoit les siennes, sur le meme decoupage',
+                    banc.js("(() => { const d = JSON.parse(localStorage.getItem('fstdw.v1:simon')); return [d.prises.map(t => t.clip), d.plans.length, d.plans[0].id === DB.plans[0].id]; })()"),
+                    [['A001_0012', 'A001_0013', 'A001_0016'], 56, True])
+    essais.verifier('la page le dit', banc.js("$('toast-msg').textContent"), '3 prises rendues à Simon')
+    banc.js("choisirNom(1)"); time.sleep(0.6)
+    essais.verifier('Simon ouvre son carnet, sans question', [banc.js("DB.prises.map(t => t.clip)"), banc.js("$('dlg').hidden")], [['A001_0012', 'A001_0013', 'A001_0016'], True])
+    essais.exceptions(banc, quoi='aucune exception en console (prises rendues)')
 
 with Banc(8775, 9375, taille=(1200, 900)) as banc:
     # -- avec le serveur du plateau aussi, chacun ses saisies : changer de prenom change d'espace

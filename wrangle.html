@@ -354,34 +354,46 @@ function normaliser(d){
 }
 
 /* ---- Le carnet d'avant les prenoms ------------------------------------
-   Le site rangeait un seul carnet par navigateur, sans demander de prenom.
-   Ce carnet appartient a qui l'a saisi — chaque prise porte son prenom — et a
-   personne d'autre : le donner au premier qui se nomme lui montrerait les
-   saisies d'un autre. On ne le reprend donc tout seul que si c'est sans
-   ambiguite : aucune prise (le decoupage seul, rien a heriter), ou toutes
-   saisies par la personne qui arrive. Sinon la page demande, une fois. */
+   Le site, et le serveur du plateau, ne gardaient qu'un carnet par
+   navigateur, ou tout le monde saisissait. Chaque prise y porte le prenom de
+   qui l'a saisie : ce carnet se partage donc, il ne se donne pas. Quand une
+   personne se nomme, elle y prend le decoupage et ses prises a elle, et laisse
+   celles des autres, qui les prendront a leur tour ; quand il n'y reste plus
+   de prise, il s'efface. Seules des prises sans nom laissent un doute : la
+   page demande alors, une fois par personne. */
 const auteursDe = db => [...new Set(((db && db.prises) || []).map(t => (t.par || '').trim()).filter(Boolean))];
+const estDe = (t, nom) => !!(t.par || '').trim() && espaceDe(t.par) === espaceDe(nom);
 function ancienCarnet(){
   try{
     const brut = localStorage.getItem(KEY);
     if (!brut) return null;
     const db = JSON.parse(brut);
     if (!db || !Array.isArray(db.plans)) return null;
-    return { brut, db, prises: (db.prises || []).length, auteurs: auteursDe(db) };
+    if (!Array.isArray(db.prises)) db.prises = [];
+    return { brut, db, prises: db.prises.length, auteurs: auteursDe(db) };
   }catch(e){ return null; }
 }
-const ancienEstDe = (a, nom) => !!a && (!a.prises || (a.auteurs.length === 1 && espaceDe(a.auteurs[0]) === espaceDe(nom)));
-const ancienADemander = a => !!a && a.prises > 0 && a.auteurs.length !== 1;
+/* la part d'une personne : le decoupage, et ses prises a elle */
+const partDe = (a, nom) => Object.assign({}, a.db, { prises: a.db.prises.filter(t => estDe(t, nom)) });
+/* ce qu'elle laisse aux autres ; plus de prise, plus de carnet */
+function laisserLeReste(a, nom){
+  const reste = a.db.prises.filter(t => !estDe(t, nom));
+  try{
+    if (reste.length) localStorage.setItem(KEY, JSON.stringify(Object.assign({}, a.db, { prises: reste })));
+    else localStorage.removeItem(KEY);
+  }catch(e){}
+}
+const ancienADemander = a => !!a && a.prises > 0 && a.auteurs.length === 0;   // il ne reste que des prises sans nom
 
 function load(){
   let db = null;
   try{
     const cle = cleLocale();
     let raw = localStorage.getItem(cle);
-    // le carnet d'avant les prenoms revient a celui qui l'a saisi, pas au premier venu
+    // le carnet d'avant les prenoms se partage : chacun y prend le decoupage et ses prises
     if (!raw && cle !== KEY){
       const a = ancienCarnet();
-      if (ancienEstDe(a, UI.nom)){ raw = a.brut; localStorage.setItem(cle, raw); localStorage.removeItem(KEY); }
+      if (a){ raw = JSON.stringify(partDe(a, UI.nom)); localStorage.setItem(cle, raw); laisserLeReste(a, UI.nom); }
     }
     if (raw) db = JSON.parse(raw);
   }catch(e){}
@@ -777,14 +789,18 @@ function majPresence(){
   const b = $('pres');
   const n = RESEAU.presence.length;
   b.className = 'pill ' + RESEAU.etat;
-  // le prenom de qui saisit sur cet appareil ; le point dit l'etat du reseau
+  // le prenom de qui saisit sur cet appareil ; le point dit l'etat du reseau,
+  // et porte le nombre de connectes quand ils sont plusieurs : la pastille
+  // reste courte, dans la colonne comme sur un telephone
   const moi = UI.nom || '';
   b.querySelector('span').textContent =
     RESEAU.etat === 'local' ? (moi ? moi + ' · local' : 'Local') :
     RESEAU.etat === 'coupe' ? (moi ? moi + ' · hors ligne' : 'Hors ligne') :
-    (moi || 'En ligne') + (n > 1 ? ' · ' + n + ' en ligne' : '');
+    (moi || 'En ligne');
+  const point = b.querySelector('i');
+  if (RESEAU.etat === 'ok' && n > 1) point.dataset.n = n; else delete point.dataset.n;
   b.title = RESEAU.etat === 'local' ? 'Page ouverte en local : un seul appareil'
-          : RESEAU.presence.map(x => x.nom || 'sans nom').join(', ');
+          : (n > 1 ? n + ' en ligne : ' : '') + RESEAU.presence.map(x => x.nom || 'sans nom').join(', ');
   majMarqueurs();
   const e = $('equipe');
   if (e) e.innerHTML = htmlListeEquipe();
@@ -858,40 +874,54 @@ const carnetMarque = () => !!(UI.carnetOk || {})[espaceDe(UI.nom)];
 function marquerCarnet(){ UI.carnetOk = Object.assign(UI.carnetOk || {}, { [espaceDe(UI.nom)]: true }); ecrireUI(); }
 function veillerAuCarnet(){
   if (!UI.nom || carnetMarque()) return;
-  const autres = auteursDe(DB);
-  if (DB.prises.length && autres.length === 1 && espaceDe(autres[0]) !== espaceDe(UI.nom))
-    return rendreLeCarnet(autres[0]);
+  const autres = auteursDe(DB).filter(x => espaceDe(x) !== espaceDe(UI.nom));
+  if (autres.length) return rendreLesPrises(autres);
   const a = ancienCarnet();
   if (ancienADemander(a)) proposerAncienCarnet(a);
 }
-/* le carnet ouvert porte les saisies d'un seul autre : on propose de le rendre */
-function rendreLeCarnet(qui){
-  confirmer('Ce carnet a été saisi par ' + esc(qui) + ', pas par vous.', {
-    detail: DB.prises.length + ' prise' + plur(DB.prises.length) + ' à son nom. Il a sans doute été repris par erreur, du temps où ce navigateur n’en gardait qu’un. Le rendre remet votre carnet sur le découpage, sans prises.',
-    ok: 'Le rendre à ' + qui, annuler: 'C’est le mien' }).then(oui => {
+/* Le carnet ouvert porte des prises saisies par d'autres — reprises en bloc
+   du temps ou le navigateur n'avait qu'un carnet. On propose de les rendre,
+   chacune a son auteur : dans son carnet sur cet appareil, et dans son espace
+   sur le serveur s'il y en a un. Les prises de la personne restent ici. */
+function rendreLesPrises(autres){
+  const leurs = DB.prises.filter(t => autres.some(x => estDe(t, x)));
+  const n = leurs.length, toutes = n === DB.prises.length;
+  confirmer(toutes && autres.length === 1
+      ? 'Ce carnet a été saisi par ' + esc(autres[0]) + ', pas par vous.'
+      : 'Ce carnet porte ' + n + ' prise' + plur(n) + ' saisie' + plur(n) + ' par ' + esc(autres.join(', ')) + '.', {
+    detail: (toutes ? n + ' prise' + plur(n) + ' à son nom, et aucune à vous. ' : '')
+      + 'Sans doute reprises par erreur, du temps où ce navigateur n’avait qu’un carnet. Les rendre les remet chez '
+      + (autres.length > 1 ? 'chacun' : esc(autres[0])) + ', ici et sur le serveur' + (toutes ? ' ; vous repartez du découpage.' : ' ; les vôtres restent ici.'),
+    ok: autres.length === 1 ? 'Les rendre à ' + esc(autres[0]) : 'Les rendre',
+    annuler: toutes ? 'C’est le mien' : 'Elles sont à moi' }).then(oui => {
     if (!oui) return marquerCarnet();
-    const cible = KEY + ':' + espaceDe(qui);
-    let occupe = false;
-    try{ const r = localStorage.getItem(cible); occupe = !!(r && (JSON.parse(r).prises || []).length); }catch(e){}
-    if (occupe) return prevenir(qui + ' a déjà un carnet sur cet appareil.', { detail:'Pour réunir les deux, passez par Rapport → Rapprocher les saisies.' });
-    const rendu = DB;
-    try{ localStorage.setItem(cible, JSON.stringify(rendu)); }catch(e){}
-    // avec un serveur, le carnet part aussi dans l'espace de cette personne
-    if (RESEAU.possible) poster(API('ops'), JSON.stringify({ client: CLIENT, nom: qui, espace: espaceDe(qui),
-        ops: [{ op:'remplacer', db: rendu, siVide: true }] })).catch(() => {});
-    DB = normaliser(null); if (SEED) seed(DB);
+    autres.forEach(qui => rendreA(qui, DB.prises.filter(t => estDe(t, qui))));
+    DB.prises = DB.prises.filter(t => !autres.some(x => estDe(t, x)));
     dernierPlan = null; chrono = null; corbeille = null; RAP.sources = [];
     marquerCarnet(); flush();
     if (RESEAU.possible){ nouvelleSession([]); ecrireAttente(); operer({ op:'remplacer', db: DB }); }
     closeSheet(); renderAll();
-    toast('Carnet rendu à ' + qui);
+    toast(n + ' prise' + plur(n) + ' rendue' + plur(n) + (autres.length === 1 ? ' à ' + autres[0] : ''));
   });
 }
-/* un carnet d'avant les prenoms, sans auteur clair : a qui est-il ? */
+/* les prises d'une personne, remises dans son carnet : celui de cet appareil,
+   et son espace sur le serveur. Son carnet fait foi ; les prises s'y ajoutent
+   par la fusion du rapprochement, qui retrouve chaque plan par son numero. */
+function rendreA(qui, prises){
+  const apport = { nom: UI.nom, db: Object.assign({}, DB, { prises }) };
+  const fondre = db => normaliser(fusionRap([{ nom: qui, db: normaliser(db) }, apport]));
+  const cle = KEY + ':' + espaceDe(qui);
+  try{ localStorage.setItem(cle, JSON.stringify(fondre(JSON.parse(localStorage.getItem(cle) || 'null')))); }catch(e){}
+  if (!RESEAU.possible) return;
+  fetch(API('etat') + '?espace=' + encodeURIComponent(espaceDe(qui)), { cache:'no-store' }).then(r => r.json())
+    .then(x => poster(API('ops'), JSON.stringify({ client: CLIENT, nom: qui, espace: espaceDe(qui),
+                                                    ops: [{ op:'remplacer', db: fondre(x.db) }] })))
+    .catch(() => {});
+}
+/* il ne reste, dans le carnet d'avant, que des prises sans nom : a qui sont-elles ? */
 function proposerAncienCarnet(a){
   confirmer('Reprendre le carnet déjà commencé sur cet appareil ?', {
-    detail: a.prises + ' prise' + plur(a.prises) + (a.auteurs.length ? ', saisies par ' + esc(a.auteurs.join(', ')) : ', sans nom de saisisseur')
-      + ', d’avant que chacun ait le sien. Le reprendre le met sous votre prénom ; sinon il reste ici, pour son propriétaire.',
+    detail: a.prises + ' prise' + plur(a.prises) + ' sans nom de saisisseur, d’avant que chacun ait le sien. Les reprendre les met sous votre prénom ; sinon elles restent ici, pour leur auteur.',
     ok: 'Reprendre', annuler: 'Pas à moi' }).then(oui => {
     if (!oui) return marquerCarnet();
     DB = normaliser(a.db);
@@ -1884,10 +1914,10 @@ function majFab(){
   if (chrono){
     const t = prise(chrono.priseId);
     cls = 'fab rec';
-    html = `&#9632; Coupez <em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em>`;
+    html = `${ICO_COUPEZ} Coupez <em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em>`;
   } else {
     cls = 'fab';
-    html = p ? `&#9679; Moteur <em>plan ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : `&#9679; Moteur`;
+    html = ICO_MOTEUR + (p ? ` Moteur <em>plan ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : ' Moteur');
   }
   if (f.className !== cls) f.className = cls;
   if (f.dataset.html !== html){ f.dataset.html = html; f.innerHTML = html; }
@@ -1906,6 +1936,11 @@ const fmtChrono = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return d
    prise ailleurs ne le deplace pas. Sans choix, on suit le dernier plan
    touche. L'appareil se souvient du choix d'un chargement a l'autre. */
 const ICO_VISER = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', 14, 2);
+/* Le meme oeil, en plus grand, sur les boutons Moteur : l'anneau d'une carte
+   dit quel plan tourne, le bouton le lance. Un carre plein pour couper, comme
+   sur une camera. */
+const ICO_MOTEUR = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', 17, 2);
+const ICO_COUPEZ = ICO('<rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" stroke="none"/>', 17, 2);
 function planVise(){
   return (UI.vise && plan(UI.vise)) || (dernierPlan && plan(dernierPlan)) || null;
 }
@@ -2427,10 +2462,10 @@ function majMoteurFiche(){
   const t = chrono && prise(chrono.priseId);
   if (t && t.planId === p.id){
     b.className = 'btn rec'; b.disabled = false;
-    b.innerHTML = `&#9632; Coupez <em>${fmtChrono(Date.now() - chrono.debut)}</em>`;
+    b.innerHTML = `${ICO_COUPEZ} Coupez <em>${fmtChrono(Date.now() - chrono.debut)}</em>`;
     b.onclick = couper;
   } else {
-    b.className = 'btn'; b.disabled = !!chrono; b.innerHTML = '&#9679; Moteur';
+    b.className = 'btn moteur'; b.disabled = !!chrono; b.innerHTML = ICO_MOTEUR + ' Moteur';
     b.onclick = chrono ? null : () => moteurSur(p.id);
   }
 }
@@ -3878,22 +3913,20 @@ function renderBilan(perimetre, rapprochement){
       <h3>Rapprocher les saisies</h3>
       <div class="note">Chacun saisit de son côté ; ${RESEAU.possible ? 'le bouton ci-dessous ramène les saisies de toute l’équipe, telles qu’elles sont sur le serveur'
           : 'déposez ici les sauvegardes JSON des autres (⚙ → Données → Sauvegarde JSON)'}.
-        Le rapport montre ce qui ne concorde pas, plan par plan. La fusion garde tout : vos saisies font foi
-        sur les écarts, les autres comblent les vides et apportent leurs prises en plus.</div>
+        Le rapport montre ce qui ne concorde pas, plan par plan. ${RESEAU.possible
+          ? 'Votre carnet reste le vôtre : pour tout avoir d’un coup, « Toute l’équipe », plus haut, réunit les saisies de chacun pour le bilan et les PDF.'
+          : 'La fusion garde tout : vos saisies font foi sur les écarts, les autres comblent les vides et apportent leurs prises en plus.'}</div>
       ${rapprochement}
     </div>
 
     <div class="btns noprint" style="margin-bottom:30px">
-      <button class="btn p" onclick="telechargerDIT()">Journal DIT (PDF)</button>
-      <button class="btn p" onclick="imprimerPost()">Fiche pour la post (PDF)</button>
-      <button class="btn" onclick="exportCSV('montage')">Feuille de montage</button>
-      <button class="btn" onclick="exportALE()">ALE</button>
-      <button class="btn" onclick="window.print()">Imprimer ce bilan</button>
+      <button class="btn p" onclick="telechargerDIT()">DIT (PDF)</button>
+      <button class="btn p" onclick="imprimerPost()">VFX (PDF)</button>
     </div>
-    <div class="note noprint" style="margin:-18px 0 30px">Les deux fiches reprennent le jour choisi en haut.
-      Le journal DIT se télécharge tout de suite : les prises retenues pour le montage, puis tous les plans
-      avec leurs prises, celle qui est retenue, et qui a saisi quoi à quelle heure. La fiche pour la post
-      donne les prises retenues, les éléments et relevés matchmove plan par plan ; dans sa fenêtre
+    <div class="note noprint" style="margin:-18px 0 30px">Les deux PDF reprennent le jour choisi en haut.
+      Le DIT se télécharge tout de suite : ce qu’il y a à sauvegarder, les prises retenues pour le montage,
+      puis tous les plans avec leurs prises, et qui a saisi quoi à quelle heure. Le VFX donne, plan par
+      plan, les prises retenues, les éléments captés et les relevés matchmove ; dans sa fenêtre
       d’impression, choisir « Enregistrer au format PDF ».</div>`;
 }
 
@@ -4640,7 +4673,7 @@ function htmlRapprochement(){
           ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('')
         : '<div class="alert g"><i>&#10003;</i><div>Rien ne se contredit : les saisies concordent.</div></div>') +
       `<div class="btns" style="margin-top:14px">
-        <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>
+        ${RESEAU.possible ? '' : `<button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>`}
         <button class="btn" onclick="telechargerRapprochement()">Écarts (PDF)</button></div>`;
   }
   return `<div class="rsources">${puces}${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="recupererEspaces()">Récupérer les saisies de l’équipe</button>` : ''}

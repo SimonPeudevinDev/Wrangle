@@ -50,11 +50,17 @@ $ESPACE = 'commun';
 
 // l'espace demande par l'appel : ?espace=… ou { espace } dans le corps, en lettres
 // minuscules, chiffres et tirets ; a defaut, « commun »
-function espace_demande($corps = null) {
-    $e = (string) ($_GET['espace'] ?? (is_object($corps) ? ($corps->espace ?? '') : ''));
-    $a = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $e);   // « Noémie » et « noemie » : un seul espace
+// « Noémie » -> noemie : le nom de l'espace d'une personne, comme la page le calcule
+function slug_espace($e) {
+    $e = (string) $e;
+    $a = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $e);
     $e = trim(strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', $a !== false ? $a : $e)), '-');
-    return $e === '' ? 'commun' : substr($e, 0, 40);
+    return substr($e, 0, 40);
+}
+
+function espace_demande($corps = null) {
+    $e = slug_espace($_GET['espace'] ?? (is_object($corps) ? ($corps->espace ?? '') : ''));
+    return $e === '' ? 'commun' : $e;
 }
 
 function choisir_espace($e) {
@@ -87,22 +93,45 @@ function preparer() {
     if (!file_exists(DONNEES . '/.htaccess')) {
         file_put_contents(DONNEES . '/.htaccess', "Require all denied\n");
     }
-    // le projet du temps ou le site n'avait qu'un carnet pour tout le monde
-    // devient l'espace « commun » : le DIT peut l'y reprendre au lieu de le perdre
+    // le projet du temps ou le site n'avait qu'un carnet pour tout le monde se
+    // partage entre ses auteurs : chacun recoit dans son espace le decoupage et
+    // ses prises a lui (chaque prise porte son prenom) ; celles sans nom vont
+    // dans « commun ». Le fichier d'avant reste a cote, en .ancien.
     $vieux = DONNEES . '/projet.json';
     if (file_exists($vieux)) {
-        $d = DONNEES . '/espaces/commun';
-        if (!is_dir($d)) {
-            mkdir($d, 0755, true);
-        }
-        if (file_exists($d . '/projet.json')) {
-            @unlink($vieux);
-        } else {
-            @rename($vieux, $d . '/projet.json');
-            if (file_exists(DONNEES . '/rev.txt')) {
-                @rename(DONNEES . '/rev.txt', $d . '/rev.txt');
+        $db = json_decode(file_get_contents($vieux));
+        if (is_object($db) && is_array($db->plans ?? null)) {
+            $parts = [];
+            foreach ((is_array($db->prises ?? null) ? $db->prises : []) as $t) {
+                $nom = trim((string) ($t->par ?? ''));
+                $s = $nom === '' ? 'commun' : (slug_espace($nom) ?: 'commun');
+                if (!isset($parts[$s])) {
+                    $parts[$s] = [$nom, []];
+                }
+                $parts[$s][1][] = $t;
+            }
+            if (!$parts) {
+                $parts['commun'] = ['', []];
+            }
+            foreach ($parts as $s => $part) {
+                list($nom, $prises) = $part;
+                $d = DONNEES . '/espaces/' . $s;
+                if (file_exists($d . '/projet.json')) {
+                    continue;   // cet espace existe deja : on ne l'ecrase pas
+                }
+                if (!is_dir($d)) {
+                    mkdir($d, 0755, true);
+                }
+                $copie = clone $db;
+                $copie->prises = $prises;
+                file_put_contents($d . '/projet.json', json_encode($copie, JSON_SORTIE));
+                if ($nom !== '' && $s !== 'commun') {
+                    file_put_contents($d . '/nom.txt', couper($nom, 40));
+                }
             }
         }
+        @rename($vieux, $vieux . '.ancien');
+        @unlink(DONNEES . '/rev.txt');
     }
 }
 

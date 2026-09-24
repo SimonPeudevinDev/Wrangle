@@ -167,14 +167,17 @@ l'entrée : passer de Simon à Romain sur le même téléphone (à l'entrée, ou
 saisies, revenir les retrouve. Avec un serveur, l'appareil change en même temps d'espace dessus :
 Romain retrouve ce qu'il a saisi sur ses autres appareils, et rien de ce que Simon a saisi.
 
-**Le carnet d'avant.** Jusqu'à cette version, le site ne demandait pas de prénom et ne gardait
-qu'un carnet par navigateur. Ce carnet appartient à qui l'a saisi, et chaque prise porte son
-prénom : la page ne le reprend donc toute seule que si c'est sans ambiguïté — aucune prise (le
-découpage seul), ou toutes saisies par la personne qui arrive. Si les prises sont sans nom ou de
-plusieurs personnes, elle demande, une fois par personne, et le laisse en place si on répond
-« pas à moi ». Et si un carnet se retrouve quand même sous le mauvais prénom, la page le voit
-(toutes les prises au nom d'un autre) et propose de le rendre à son auteur : le carnet passe sous
-son prénom, ici et sur le serveur, et celui qui le rend repart du découpage.
+**Le carnet d'avant.** Jusqu'à cette version, le site comme le serveur du plateau ne gardaient
+qu'un carnet par navigateur, où tout le monde saisissait. Chaque prise y porte le prénom de qui
+l'a saisie : ce carnet se partage donc, il ne se donne pas. Quand une personne se nomme, elle y
+prend le découpage et ses prises à elle, et laisse celles des autres, qui les prendront à leur
+tour ; quand il n'y reste plus de prise, il s'efface. Seules des prises sans nom laissent un
+doute : la page demande alors, une fois par personne, et les laisse en place si on répond « pas
+à moi ». Le serveur du plateau fait de même au premier démarrage avec `data/projet.json` : un
+espace par auteur, les prises sans nom dans « commun », le fichier d'avant gardé en `.ancien` et
+ses sauvegardes dans `data/sauvegardes-avant-espaces/`. Et si un carnet porte quand même des
+prises saisies par d'autres, la page le voit et propose de les leur rendre : chaque prise repart
+chez son auteur, ici et sur le serveur, et les siennes restent.
 
 ## Le journal DIT par mail
 

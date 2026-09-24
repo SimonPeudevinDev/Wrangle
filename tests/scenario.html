@@ -56,7 +56,8 @@ const frappe = (W, sel, val) => {
   log(await attendre(() => A.DB.plans[0].id === B.DB.plans[0].id && !A.RESEAU.attente.length && !B.RESEAU.attente.length, 6000), 'un seul découpage a été retenu par le serveur (mêmes identifiants des deux côtés)');
   log(A.DB.plans.length === B.DB.plans.length && A.DB.plans.length > 0, 'même découpage des deux côtés (' + A.DB.plans.length + ' plans)');
   log(A.RESEAU.presence.some(x => x.client === 'testB') && B.RESEAU.presence.some(x => x.client === 'testA'), 'chacun voit l’autre dans la liste des connectés');
-  log(Aw.document.getElementById('pres').textContent.indexOf('Simon') === 0 && Aw.document.getElementById('pres').textContent.indexOf('en ligne') > 0, 'la pastille porte le prénom, et le compte des connectés (' + Aw.document.getElementById('pres').textContent + ')');
+  // le compte des connectes est dans le point, pas dans le texte : la pastille reste courte
+  log(Aw.document.getElementById('pres').textContent.trim() === 'Simon' && Aw.document.querySelector('#pres i').dataset.n === String(A.RESEAU.presence.length) && A.RESEAU.presence.length >= 2, 'la pastille porte le prénom, et le point compte les connectés (' + Aw.document.getElementById('pres').textContent + ' · ' + Aw.document.querySelector('#pres i').dataset.n + ')');
   const p = A.DB.plans[0];
   // la page pose ses questions dans sa propre boite : on y repond comme au doigt
   const valider = async w => { await attendre(() => !w.document.getElementById('dlg').hidden); w.document.getElementById('dlg-oui').click(); };

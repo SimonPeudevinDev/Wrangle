@@ -254,21 +254,45 @@ def liste_espaces():
 
 
 def reprendre_ancien_projet():
-    """Le projet du temps où le serveur n'avait qu'un carnet (data/projet.json,
-    et ses sauvegardes) devient l'espace « commun », au lieu de rester orphelin."""
+    """Le projet du temps où le serveur n'avait qu'un carnet (data/projet.json)
+    se partage entre ses auteurs : chaque prise porte le prénom de qui l'a
+    saisie, et chacun reçoit dans son espace le découpage et ses prises à lui.
+    Les prises sans nom vont dans l'espace « commun ». Le fichier d'avant reste
+    à côté, en .ancien, et ses sauvegardes dans sauvegardes-avant-espaces/."""
     vieux = os.path.join(DATA, 'projet.json')
     if not os.path.exists(vieux):
         return
-    d = os.path.join(ESPACES, 'commun')
-    os.makedirs(d, exist_ok=True)
-    if os.path.exists(os.path.join(d, 'projet.json')):
-        os.replace(vieux, vieux + '.ancien')    # l'espace commun existe déjà : on garde le fichier de côté
+    try:
+        with open(vieux, 'r', encoding='utf-8') as f:
+            db = normaliser(json.load(f))
+    except Exception as e:
+        os.replace(vieux, vieux + '.illisible')
+        print('Le projet d avant les espaces est illisible, mis de côté :', e)
         return
-    os.replace(vieux, os.path.join(d, 'projet.json'))
+    parts = {}                     # slug -> (prénom tel qu'écrit, prises)
+    for t in db['prises']:
+        nom = str((t.get('par') if isinstance(t, dict) else '') or '').strip()
+        parts.setdefault(slug(nom) or 'commun', (nom, []))[1].append(t)
+    if not parts:
+        parts['commun'] = ('', [])  # rien que le découpage : il attend dans « commun »
+    for s, (nom, prises) in parts.items():
+        d = os.path.join(ESPACES, s)
+        f = os.path.join(d, 'projet.json')
+        if os.path.exists(f):
+            print('Espace %s : déjà là, les %d prise(s) du projet d avant restent dans projet.json.ancien' % (nom or s, len(prises)))
+            continue
+        os.makedirs(d, exist_ok=True)
+        part = dict(db)
+        part['prises'] = prises
+        ecrire_json(f, part)
+        if nom and s != 'commun':
+            with open(os.path.join(d, 'nom.txt'), 'w', encoding='utf-8') as fh:
+                fh.write(nom[:40])
+        print('Espace %s : le découpage et %d prise(s) du projet d avant' % (nom or s, len(prises)))
+    os.replace(vieux, vieux + '.ancien')
     anciennes = os.path.join(DATA, 'sauvegardes')
-    if os.path.isdir(anciennes) and not os.path.exists(os.path.join(d, 'sauvegardes')):
-        os.replace(anciennes, os.path.join(d, 'sauvegardes'))
-    print('Le projet d avant les espaces est rangé dans l espace « commun » :', d)
+    if os.path.isdir(anciennes) and not os.path.exists(anciennes + '-avant-espaces'):
+        os.replace(anciennes, anciennes + '-avant-espaces')
 
 
 def charger():
