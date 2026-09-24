@@ -126,11 +126,27 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     banc.js('voirEquipe(false)'); time.sleep(0.3)
     essais.verifier('« Mes saisies » : retour a mon bilan', [banc.js("$('report').querySelector('.kpi .v').textContent"), banc.js("fname('x', 'csv')").endswith('_equipe.csv')], ['1', False])
 
-    # -- recharger la page garde la personne et son espace
+    # -- le PDF du DIT va rechercher les saisies de chacun avant de se fabriquer :
+    #    meme si la liste reunie est vide ou perimee, rien ne manque
+    banc.js('voirEquipe(true)'); time.sleep(0.4)
+    api('ops', {'client': 'tel-romain', 'nom': 'Romain', 'espace': 'romain', 'ops': [
+        {'op': 'add', 'kind': 'prise', 'data': {'id': 'r3', 'planId': banc.js('RAP.sources[0].db.plans[1].id'), 'n': 3, 'clip': 'B001C003', 'statut': 'OK', 'par': 'Romain'}}]})
+    banc.js("RAP.sources = []; chargerLogo()"); time.sleep(0.6)     # la liste reunie est perdue (rechargement, longue attente…)
+    texte = banc.cdp.appel('Runtime.evaluate', expression="avecEquipeAJour(() => { const t = surLePerimetre(() => Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('')); direPerimetre('Journal DIT exporté'); return t; })",
+                           awaitPromise=True, returnByValue=True)['result']['value']
+    essais.verifier('le PDF DIT porte les prises de tous, la derniere de Romain comprise',
+                    [c in texte for c in ('A001C001', 'B001C001', 'B001C002', 'B001C003', 'Romain', 'Simon')], [True] * 6)
+    essais.verifier('et la page dit sur quoi il porte', banc.js("$('toast-msg').textContent"), 'Journal DIT exporté : toute l’équipe · Simon, Romain')
+
+    # -- recharger la page garde la personne, son espace, et le choix « Toute l'equipe »
     banc.ouvrir('/?t=2')
     essais.verifier('au rechargement, toujours Simon, branche sur son espace',
                     [banc.js('UI.nom'), attendre(lambda: banc.js('RESEAU.etat') == 'ok'), banc.js('DB.prises.map(t => t.clip)')],
                     ['Simon', True, ['A001C001']])
+    banc.js("view = 'report'; renderAll()")
+    essais.verifier('« Toute l equipe » est retenu, et le rapport va chercher les saisies tout seul',
+                    [banc.js('RAP.equipe'), attendre(lambda: banc.js('RAP.sources.map(s => s.nom + " " + s.db.prises.length)') == ['Romain 3'])], [True, True])
+    essais.verifier('le bilan compte a nouveau les prises de tous', attendre(lambda: banc.js("$('report').querySelector('.kpi .v').textContent") == '4'), True)
     essais.exceptions(banc)
 
 # -- le projet d'avant les espaces se partage entre ses auteurs : chacun recoit le

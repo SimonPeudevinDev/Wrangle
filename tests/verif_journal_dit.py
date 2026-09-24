@@ -81,7 +81,7 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('le bouton Journal DIT est dans le rapport',
                     banc.js("""!!document.querySelector('#report button[onclick="telechargerDIT()"]')"""), True)
     banc.js('telechargerDIT()'); time.sleep(0.5)
-    essais.verifier('cliquer telecharge le fichier', banc.js("$('toast-msg').textContent"), 'Fichier exporté')
+    essais.verifier('cliquer telecharge le fichier, et dit sur quoi il porte', banc.js("$('toast-msg').textContent"), 'Journal DIT exporté : vos saisies')
 
     # -- les listes du rapport : cinq lignes, puis elles defilent
     banc.js("""for (let k = 0; k < 7; k++){ const t = ajouterPrise(%s, false, { clip:'B00' + k }); patch('prise', t.id, { carte:'' }); }

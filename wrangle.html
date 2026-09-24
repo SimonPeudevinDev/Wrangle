@@ -860,7 +860,7 @@ function changerDePersonne(n){
       .then(r => { if (r.ok) try{ sessionStorage.removeItem(saCle); }catch(e){} }).catch(() => {});
   setNom(n);
   DB = load();
-  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipe = false;
+  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipe = false; RAP.tente = false; UI.equipe = false;
   if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
   // les reponses parties sous l'ancien prenom ne valent plus rien : on change de session
   nouvelleSession(lireAttente());
@@ -3796,14 +3796,30 @@ function projetEquipe(){ return fusionRap(sourcesRap()); }
 /* fait tourner fn avec ce projet a la place du mien, puis remet le mien */
 function avecProjet(db, fn){ const mien = DB; DB = db; try{ return fn(); } finally{ DB = mien; } }
 const surLePerimetre = fn => equipeReunie() ? avecProjet(projetEquipe(), fn) : fn();
+/* Le choix « Toute l'equipe » est garde sur l'appareil : le DIT le retrouve
+   apres un rechargement, et le rapport va chercher les saisies tout seul. */
 function voirEquipe(oui){
-  RAP.equipe = !!oui;
+  RAP.equipe = !!oui; UI.equipe = RAP.equipe; ecrireUI();
   if (oui && !RAP.sources.length && RESEAU.possible) return actualiserEquipe();
   renderReport();
 }
 function actualiserEquipe(){
+  RAP.tente = true;
   if (!RESEAU.possible) return renderReport();   // sans serveur, il n'y a que les fichiers deposes
-  recupererEspaces();                             // rend le rapport une fois les saisies la
+  return recupererEspaces();                      // rend le rapport une fois les saisies la
+}
+/* Avant un PDF ou un export sur toute l'equipe, on va rechercher les saisies
+   de chacun : rien ne manque, meme si la page est restee ouverte longtemps ou
+   vient d'etre rechargee. Puis on dit sur quoi le document porte. */
+function avecEquipeAJour(fn){
+  if (!(RAP.equipe && RESEAU.possible)) return Promise.resolve(fn());
+  return recupererEspaces().then(() => fn());
+}
+function direPerimetre(quoi){
+  if (!RAP.equipe) return toast(quoi + ' : vos saisies');
+  const s = sourcesRap();
+  toast(equipeReunie() ? quoi + ' : toute l’équipe · ' + s.map(x => x.nom).join(', ')
+                       : quoi + ' : vos saisies seulement, personne d’autre n’a encore saisi');
 }
 function htmlPerimetre(){
   const noms = sourcesRap().map(x => esc(x.nom) + (x.ici ? ' (ici)' : x.quand ? ' (' + esc(quandDepot(x.quand)) + ')' : ''));
@@ -3823,6 +3839,9 @@ function htmlPerimetre(){
 }
 
 function renderReport(){
+  // « Toute l'equipe » retenu d'une fois sur l'autre : au premier rendu, on va
+  // chercher les saisies des autres (une fois ; Actualiser ira revoir)
+  if (RAP.equipe && !RAP.sources.length && RESEAU.possible && !RAP.tente && !RAP.chargement) actualiserEquipe();
   // le rapprochement compare les saisies d'ici a celles des autres : il se
   // calcule avant que le projet reuni prenne la place du mien
   const perimetre = htmlPerimetre(), rapprochement = htmlRapprochement();
@@ -4499,15 +4518,18 @@ function pdfDIT(j){
 }
 function telechargerDIT(){
   const j = fJourR;
-  chargerLogo().then(() => surLePerimetre(() =>
-    download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf')));
+  chargerLogo().then(() => avecEquipeAJour(() => {
+    surLePerimetre(() => download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf'));
+    direPerimetre('Journal DIT exporté');
+  }));
 }
 
 /* --------------------------------------------- Les saisies de l'equipe */
 /* Sur le serveur, chacun a son espace : le DIT ramene le projet de chacun
    des autres pour les reunir ou les rapprocher, sans fichier a echanger. */
 function recupererEspaces(){
-  fetch(API('espaces'), { cache:'no-store' }).then(r => r.json()).then(rep => {
+  RAP.chargement = true;
+  return fetch(API('espaces'), { cache:'no-store' }).then(r => r.json()).then(rep => {
     const autres = (rep.espaces || []).filter(e => e.espace !== monEspace());
     return Promise.all(autres.map(e =>
       fetch(API('etat') + '?espace=' + encodeURIComponent(e.espace), { cache:'no-store' })
@@ -4523,9 +4545,11 @@ function recupererEspaces(){
         n++;
       }catch(e){}
     });
+    RAP.chargement = false;
     renderReport();
     toast(n ? n + ' saisie' + plur(n) + ' récupérée' + plur(n) : 'Personne d’autre n’a encore saisi');
-  }).catch(() => prevenir('Impossible de lire les saisies de l’équipe.', { detail:'Serveur injoignable. Réessayez.' }));
+    return n;
+  }).catch(() => { RAP.chargement = false; prevenir('Impossible de lire les saisies de l’équipe.', { detail:'Serveur injoignable. Réessayez.' }); return 0; });
 }
 const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + ' ' + hhmm(d); };
 
@@ -4536,7 +4560,7 @@ const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deux
    ce qu'un seul a saisi (une prise chez un seul). La fusion garde tout : la
    premiere source, ce navigateur, fait foi sur les ecarts ; les autres
    comblent les vides et apportent leurs prises en plus. */
-const RAP = { sources: [], equipe: false };   // equipe : le bilan porte sur toute l'equipe
+const RAP = { sources: [], equipe: !!UI.equipe, tente: false, chargement: false };   // equipe : le bilan porte sur toute l'equipe
 const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
   ['tcIn', 'TC in'], ['tcOut', 'TC out'], ['duree', 'Durée'], ['heure', 'Heure'], ['notes', 'Note'], ['focale', 'Focale'],
   ['focaleStop', 'Focale arrivée'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
@@ -4941,9 +4965,12 @@ function majEtatMail(){
    on n'imprime pas la page de saisie, on imprime la fiche. Dans la fenetre
    d'impression, « Enregistrer au format PDF » fait le fichier. */
 function imprimerPost(){
-  $('post').innerHTML = surLePerimetre(() => htmlPost(fJourR));
-  document.body.classList.add('impr-post');
-  window.print();
+  avecEquipeAJour(() => {
+    $('post').innerHTML = surLePerimetre(() => htmlPost(fJourR));
+    document.body.classList.add('impr-post');
+    direPerimetre('Fiche VFX');
+    window.print();
+  });
 }
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('impr-post');
