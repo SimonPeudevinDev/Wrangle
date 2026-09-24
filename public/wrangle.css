@@ -605,10 +605,10 @@ nav button i{display:none}
 }
 .pchamps{min-width:0;display:flex;flex-direction:column;gap:12px}
 .pl{display:grid;gap:0 14px;align-items:end}
-.pl1{grid-template-columns:56px 78px 68px minmax(0,1.4fr) 78px minmax(0,1fr)}
+.pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) minmax(0,1.4fr)}
 .pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px}   /* le cadrage peut en porter plusieurs */
-.pl3{grid-template-columns:minmax(0,1fr)}
-/* la distribution : un champ qui se lit, son menu a cocher s'ouvre au clic */
+/* la distribution : un champ qui se lit, son menu a cocher s'ouvre au clic ;
+   elle loge a droite, sous les etiquettes et Fiche, la ou la carte avait du vide */
 .w-dist input{cursor:pointer;text-overflow:ellipsis}
 .w-dist .menu button.autre,.menu button.autre{color:var(--acc)}
 /* la liste des decors : le nom, combien de plans y tournent, retirer ceux qui n'en ont pas */
@@ -627,12 +627,13 @@ nav button i{display:none}
 .pc .deroul svg{width:13px;height:13px}
 .pc:has(.deroul) input{padding-right:32px}
 .pc .menu{right:auto;min-width:200px}
-.w-num input,.w-seq input{font:700 17px/1.2 var(--font-titre);padding:4px 0 5px}
-.w-ord input{font:700 17px/1.2 var(--font-titre);color:var(--acc);font-variant-numeric:tabular-nums;padding:4px 0 5px}
+.w-num input,.w-seq input,.w-jour input{font:700 17px/1.2 var(--font-titre);padding:4px 0 5px}
+.w-ord input{font:700 17px/1.2 var(--font-titre);font-variant-numeric:tabular-nums;padding:4px 0 5px}
 /* les actions : Fiche et suppression, en haut a droite, a hauteur de la premiere ligne */
 /* a droite : les etiquettes du plan (LIVE / TBC…) puis Fiche et la croix, sur
-   la ligne du numero ; en dessous, rien qui gene les champs */
-.pactions{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:14px;min-width:112px;padding-top:14px}
+   la ligne du numero ; en dessous, la distribution */
+.pactions{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:250px;padding-top:0}
+.pactions .haut{display:flex;align-items:center;justify-content:flex-end;gap:14px}
 .pactions .ptags{margin:0;flex-wrap:nowrap}
 .pbtns{display:flex;gap:8px;align-items:center}
 .pdel,.pfiche{
@@ -658,8 +659,8 @@ nav button i{display:none}
 .pmove:hover{color:var(--txt);border-color:var(--txt)}
 #l-prep .jour{margin-bottom:16px}
 @media(max-width:1200px){
-  .pl1{grid-template-columns:56px 78px 68px minmax(0,1fr) 78px}
-  .pl1 .w-lieu{grid-column:1 / -1}
+  .pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr)}
+  .pl1 .w-flex{grid-column:1 / -1}
   .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px}
 }
 @media(max-width:560px){
@@ -669,9 +670,8 @@ nav button i{display:none}
   .pl1 .w-flex,.pl1 .w-lieu{grid-column:1 / -1}
   .pl2{grid-template-columns:1fr 1fr 56px}
   .pl2 .w-desc{grid-column:1 / -1}
-  .pactions{order:-1;justify-content:space-between;min-width:0;padding-top:0}
-  .pl3 .spec.col{flex-direction:column;gap:4px}
-  .pl3 .spec.col>label{padding:0}
+  .pactions{width:auto;padding-top:0}
+  .pactions .haut{order:-1;justify-content:space-between}
 }
 
 /* ------------------------------- Croquis ------------------------------- */

@@ -1021,10 +1021,38 @@ function live(el){
   if (!kind) return;
   patch(kind, id, { [k]: el.type === 'checkbox' ? el.checked : el.value });
   if (kind === 'plan' && ['jour', 'plan', 'seq'].indexOf(k) >= 0) propager(cible(id));
+  if (kind === 'plan' && ['seqTitre', 'lieu', 'seq'].indexOf(k) >= 0) titrerSequence(cible(id), k);
   if (openType === kind) majResumes();
   if (!el.dataset.refresh) return;
   // a la frappe, la liste attend une pause ; un choix ou une sortie de champ l'actualise tout de suite
   if (typeof event !== 'undefined' && event && event.type === 'input') renderListBientot(); else renderList();
+}
+/* Le titre et le decor d'une sequence valent pour toute la sequence : tapes
+   sur un plan, ils se posent sur les autres plans du meme numero de sequence ;
+   un plan qui change de sequence prend ceux qu'elle porte deja. Les cartes a
+   l'ecran suivent. */
+const CHAMPS_SEQ = ['seqTitre', 'lieu'];
+function titrerSequence(p, k){
+  if (!p) return;
+  const seq = (p.seq || '').trim();
+  if (!seq) return;
+  const freres = DB.plans.filter(x => x !== p && (x.seq || '').trim() === seq);
+  if (k === 'seq'){
+    const d = {};
+    CHAMPS_SEQ.forEach(c => {
+      const v = freres.map(x => (x[c] || '').trim()).find(Boolean);
+      if (v && v !== (p[c] || '')) d[c] = v;
+    });
+    if (Object.keys(d).length) patch('plan', p.id, d);
+  } else {
+    freres.forEach(x => { if ((x[k] || '') !== (p[k] || '')) patch('plan', x.id, { [k]: p[k] || '' }); });
+  }
+  CHAMPS_SEQ.forEach(c => document.querySelectorAll(`input[data-k="${c}"]`).forEach(el => {
+    if (el === document.activeElement) return;
+    const o = plan(el.dataset.o); if (!o) return;
+    const v = o[c] || '';
+    if (el.value !== v) el.value = v;
+  }));
 }
 let tListe = null;
 function renderListBientot(){
@@ -2569,9 +2597,38 @@ function ajouterDecor(){
     return nom;
   });
 }
+/* Renommer un decor : dans la liste, sur chaque plan qui le porte, et le plan du decor du croquis suit. */
+function renommerDecor(nom){
+  demanderTexte('Nouveau nom du décor', { valeur: nom, ok:'Renommer' }).then(neuf => {
+    neuf = (neuf || '').trim();
+    if (!neuf || neuf === nom) return;
+    const l = (DB.prod.decors || []).filter(x => !memeVal(x, nom) && !memeVal(x, neuf)).concat([neuf]);
+    const fonds = Object.assign({}, DB.prod.fonds || {});
+    if (fonds[nom] !== undefined){ fonds[neuf] = fonds[nom]; delete fonds[nom]; }
+    patch('prod', 'prod', { decors: l, fonds });
+    DB.plans.forEach(x => {
+      const d = {};
+      if (memeVal(x.lieu, nom)) d.lieu = neuf;
+      if (memeVal(x.fondLieu, nom)) d.fondLieu = neuf;
+      if (Object.keys(d).length) patch('plan', x.id, d);
+    });
+    oublierPrep(); renderAll(); openDecors();
+    toast('« ' + nom + ' » renommé en « ' + neuf + ' »');
+  });
+}
+/* Retirer un decor : de la liste, et des plans qui le portent — leur sequence n'a plus de decor. */
 function retirerDecor(nom){
-  patch('prod', 'prod', { decors: (DB.prod.decors || []).filter(x => !memeVal(x, nom)) });
-  openDecors();
+  const plans = DB.plans.filter(x => memeVal(x.lieu, nom) || memeVal(x.fondLieu, nom));
+  const faire = () => {
+    const fonds = Object.assign({}, DB.prod.fonds || {}); delete fonds[nom];
+    patch('prod', 'prod', { decors: (DB.prod.decors || []).filter(x => !memeVal(x, nom)), fonds });
+    plans.forEach(x => patch('plan', x.id, Object.assign(memeVal(x.lieu, nom) ? { lieu: '' } : {}, memeVal(x.fondLieu, nom) ? { fondLieu: '' } : {})));
+    oublierPrep(); renderAll(); openDecors();
+    toast('« ' + nom + ' » retiré' + (plans.length ? ' : ' + plans.length + ' plan' + plur(plans.length) + ' sans décor' : ''));
+  };
+  if (!plans.length) return faire();
+  confirmer('Retirer le décor « ' + nom + ' » ?', { detail: plans.length + ' plan' + plur(plans.length) + ' le porte' + plur(plans.length) + ' : ' + (plans.length > 1 ? 'ils n’auront' : 'il n’aura') + ' plus de décor.', ok:'Retirer', danger:true })
+    .then(oui => { if (oui) faire(); });
 }
 function openDecors(){
   openId = 'decors'; openType = 'decors';
@@ -2586,13 +2643,14 @@ function openDecors(){
       <div class="specs">
         ${tous.map(d => { const n = compte(d); return `<div class="spec decor"><label>${esc(d)}</label>
           <span class="compte">${n ? n + ' plan' + plur(n) : 'aucun plan'}</span>
-          ${n ? '' : `<button type="button" class="btn sm" onclick="retirerDecor('${esc(d)}')">Retirer</button>`}</div>`; }).join('') ||
+          <button type="button" class="btn sm" onclick="renommerDecor('${esc(d)}')">Modifier</button>
+          <button type="button" class="btn sm" onclick="retirerDecor('${esc(d)}')">Retirer</button></div>`; }).join('') ||
           '<div class="note">Aucun décor pour l’instant.</div>'}
       </div>
       <div class="btns" style="margin-top:12px">
         <button type="button" class="btn p" onclick="ajouterDecor().then(openDecors)">+ Ajouter un décor</button>
       </div>
-      <div class="note">Un décor qu’un plan porte déjà reste proposé tant qu’il est utilisé. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
+      <div class="note">Modifier renomme le décor sur tous les plans qui le portent ; Retirer les laisse sans décor. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
     </div>`;
   montrerFiche(0);
 }
@@ -3446,13 +3504,13 @@ function rangPrep(p){
     <div class="pchamps">
       <div class="pl pl1">
         <label class="pc w-ord"><span>Ordre</span>
-          <input class="ordre-in" value="${positionPlan(p)}" inputmode="numeric" autocomplete="off" title="Position dans la journée : tapez un numéro pour y placer le plan"
+          <input class="ordre-in" value="${String(positionPlan(p)).padStart(2, '0')}" inputmode="numeric" autocomplete="off" title="Position dans la journée : tapez un numéro pour y placer le plan"
             onfocus="this.select()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onchange="placerPlan('${p.id}', this.value)"></label>
         ${champPrep(p, 'seq', 'Séq', {cls:'w-seq', ph:'01', dl:'dl-seq'})}
         ${champPrep(p, 'plan', 'Shot', {cls:'w-num', ph:'05', cap:'characters'})}
-        ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
         ${champPrep(p, 'jour', 'Jour', {cls:'w-jour', ph:'J1', dl:'dl-jour', cap:'characters'})}
         ${champPrep(p, 'lieu', 'Décor', {cls:'w-lieu', ph:'Royal Academy', dl:'dl-lieu'})}
+        ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
       </div>
       <div class="pl pl2">
         ${champPrep(p, 'desc', 'Description', {cls:'w-desc', area:1, ph:'Ce que l’on voit, ce qui se passe…'})}
@@ -3460,19 +3518,19 @@ function rangPrep(p){
         ${champPrep(p, 'focale', 'Focale', {cls:'w-foc', ph:'35 mm', dl:'dl-focale'})}
         ${champPrep(p, 'duree', 'Durée', {cls:'w-dur', ph:'3s'})}
       </div>
-      <div class="pl pl3">
-        ${champDistribution(p)}
-      </div>
     </div>
     <div class="pactions">
-      <span class="ptags">${htmlPtags(p)}</span>
-      ${modeOrdre ? `<div class="pbtns">
-        <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', -1)" title="Monter" aria-label="Monter">${CHEVRON_HAUT}</button>
-        <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', 1)" title="Descendre" aria-label="Descendre">${CHEVRON_BAS}</button>
-      </div>` : `<div class="pbtns">
-        <button type="button" class="pfiche" onclick="openPlan('${p.id}')">Fiche ${CHEVRON(1)}</button>
-        <button type="button" class="pdel" onclick="supprimerPlanPrep('${p.id}')" title="Supprimer ce plan" aria-label="Supprimer ce plan">${ICONES.croix}</button>
-      </div>`}
+      <div class="haut">
+        <span class="ptags">${htmlPtags(p)}</span>
+        ${modeOrdre ? `<div class="pbtns">
+          <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', -1)" title="Monter" aria-label="Monter">${CHEVRON_HAUT}</button>
+          <button type="button" class="pdel pmove" onclick="monterPlan('${p.id}', 1)" title="Descendre" aria-label="Descendre">${CHEVRON_BAS}</button>
+        </div>` : `<div class="pbtns">
+          <button type="button" class="pfiche" onclick="openPlan('${p.id}')">Fiche ${CHEVRON(1)}</button>
+          <button type="button" class="pdel" onclick="supprimerPlanPrep('${p.id}')" title="Supprimer ce plan" aria-label="Supprimer ce plan">${ICONES.croix}</button>
+        </div>`}
+      </div>
+      ${champDistribution(p)}
     </div>
   </div>`;
 }

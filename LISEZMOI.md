@@ -201,10 +201,14 @@ donne son nombre de plans : le monter pose autant de cartes vides à la fin du j
 après ; le baisser ne retire que des cartes encore vides (sans numéro, sans description, sans
 prise), les autres restent et la page le dit. « + Jour » ouvre le jour suivant (et y revient tant
 qu'il est vide), « Supprimer le jour » retire le jour et ses plans après confirmation. Sur la
-carte : ordre, séquence, shot, la distribution se coche dans un menu déroulant. Les décors du
-tournage se déclarent une fois (bouton « Décors » en Préparation, ou « + Ajouter un décor… » au
-bas du menu Décor) : ils sont rangés dans la production, donc chez tout le monde, et proposés au
-champ Décor de chaque plan.
+carte : ordre, séquence, shot, jour, décor, titre de séquence ; la distribution, à droite sous
+les étiquettes, se coche dans un menu déroulant. Le titre et le décor d'une séquence valent pour
+toute la séquence : tapés sur un plan, ils se posent sur les autres plans du même numéro, et un
+plan qui change de séquence prend ceux qu'elle porte déjà. Les décors du tournage se déclarent
+une fois (bouton « Décors » en Préparation, ou « + Ajouter un décor… » au bas du menu Décor) :
+ils sont rangés dans la production, donc chez tout le monde, et proposés au champ Décor de chaque
+plan. Dans la feuille Décors, « Modifier » renomme un décor partout où des plans le portent,
+« Retirer » l'enlève de la liste et laisse ces plans sans décor, après confirmation.
 
 ## Le journal DIT par mail
 

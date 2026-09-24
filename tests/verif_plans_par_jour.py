@@ -135,11 +135,41 @@ with Banc(PORT, 9371, taille=(1300, 900)) as banc:
                     [banc.js("DB.prod.decors"), banc.js("plan('%s').lieu" % premier_id), 'Hangar' in banc.js("LISTES['dl-lieu']()")], [['Hangar'], 'Hangar', True])
     essais.verifier('les decors du projet suivent chez Romain',
                     attendre(lambda: (api('etat?espace=romain')['db']['prod'].get('decors') or []) == ['Hangar']), True)
+    seq0 = banc.js("DB.plans[0].seq")
+    n_seq = banc.js("DB.plans.filter(p => p.seq === '%s').length" % seq0)
+    essais.verifier('le decor pose sur un plan vaut pour toute sa sequence', banc.js("DB.plans.filter(p => p.lieu === 'Hangar').length"), n_seq)
     banc.js("openDecors()"); time.sleep(0.3)
     essais.verifier('la feuille Decors les liste avec leur nombre de plans',
-                    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].filter(d => d.querySelector('label').textContent === 'Hangar').map(d => d.querySelector('.compte').textContent)"), ['1 plan'])
-    banc.js("patch('plan', '%s', { lieu: '' }); openDecors()" % premier_id); time.sleep(0.3)
-    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].find(d => d.querySelector('label').textContent === 'Hangar').querySelector('.btn').click()"); time.sleep(0.4)
-    essais.verifier('un decor sans plan se retire', [banc.js("DB.prod.decors"), banc.js("[...document.querySelectorAll('#sbody .spec.decor label')].map(l => l.textContent).includes('Hangar')")], [[], False])
+                    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].filter(d => d.querySelector('label').textContent === 'Hangar').map(d => d.querySelector('.compte').textContent)"), ['%d plans' % n_seq])
+    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].find(d => d.querySelector('label').textContent === 'Hangar').querySelectorAll('.btn')[1].click()"); time.sleep(0.3)
+    essais.verifier('Retirer un decor porte par des plans demande confirmation', banc.js("$('dlg-titre').textContent"), 'Retirer le décor « Hangar » ?')
+    banc.js("$('dlg-oui').click()"); time.sleep(0.5)
+    essais.verifier('retire : plus dans la liste, et la sequence n a plus de decor',
+                    [banc.js("DB.prod.decors"), banc.js("DB.plans.some(p => p.lieu === 'Hangar')"), banc.js("plan('%s').lieu" % premier_id),
+                     banc.js("[...document.querySelectorAll('#sbody .spec.decor label')].map(l => l.textContent).includes('Hangar')")], [[], False, '', False])
+    banc.js("patch('plan', '%s', { lieu: 'Atelier' }); patch('prod', 'prod', { decors: ['Atelier'] }); openDecors()" % premier_id); time.sleep(0.3)
+    banc.js("[...document.querySelectorAll('#sbody .spec.decor')].find(d => d.querySelector('label').textContent === 'Atelier').querySelector('.btn').click()"); time.sleep(0.3)
+    banc.js("$('dlg-saisie').value = 'Atelier de nuit'; $('dlg-oui').click()"); time.sleep(0.5)
+    essais.verifier('Modifier renomme le decor dans la liste et sur tous les plans qui le portent',
+                    [banc.js("DB.prod.decors"), banc.js("DB.plans.some(p => p.lieu === 'Atelier')"), banc.js("plan('%s').lieu" % premier_id),
+                     banc.js("[...document.querySelectorAll('#sbody .spec.decor label')].map(l => l.textContent).includes('Atelier de nuit')")],
+                    [['Atelier de nuit'], False, 'Atelier de nuit', True])
+    essais.verifier('chez Romain aussi', attendre(lambda: not any(p.get('lieu') in ('Atelier', 'Hangar') for p in api('etat?espace=romain')['db']['plans'])), True)
     banc.js("closeSheet()")
+
+    # -- le titre d'une sequence vaut pour toute la sequence
+    banc.js("setJourP('*')"); time.sleep(0.4)
+    seq = banc.js("DB.plans[0].seq")
+    freres = banc.js("DB.plans.filter(p => p.seq === '%s').map(p => p.id)" % seq)
+    banc.js("(() => { const i = document.querySelector(`#l-prep .prow[data-id='%s'] input[data-k='seqTitre']`); i.focus(); i.value = 'Le retour'; i.dispatchEvent(new Event('input')); })()" % freres[0]); time.sleep(0.3)
+    essais.verifier('tape sur un plan, le titre se pose sur tous les plans de la sequence, cartes comprises',
+                    [banc.js("DB.plans.filter(p => p.seq === '%s').every(p => p.seqTitre === 'Le retour')" % seq),
+                     banc.js("[...document.querySelectorAll(`#l-prep input[data-k='seqTitre']`)].filter(i => plan(i.dataset.o).seq === '%s').every(i => i.value === 'Le retour')" % seq),
+                     banc.js("DB.plans.some(p => p.seq !== '%s' && p.seqTitre === 'Le retour')" % seq)],
+                    [True, True, False])
+    autre = banc.js("DB.plans.find(p => p.seq !== '%s').id" % seq)
+    banc.js("(() => { const i = document.querySelector(`#l-prep .prow[data-id='%s'] input[data-k='seq']`); i.focus(); i.value = '%s'; i.dispatchEvent(new Event('input')); i.blur(); })()" % (autre, seq)); time.sleep(0.3)
+    essais.verifier('un plan qui rejoint la sequence en prend le titre', banc.js("plan('%s').seqTitre" % autre), 'Le retour')
+    essais.verifier('et chez Romain, la sequence entiere porte le titre',
+                    attendre(lambda: all(p.get('seqTitre') == 'Le retour' for p in api('etat?espace=romain')['db']['plans'] if p.get('seq') == seq)), True)
 essais.bilan()
