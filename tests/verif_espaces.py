@@ -185,7 +185,7 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     texte = banc.cdp.appel('Runtime.evaluate', expression="avecEquipeAJour(() => { const t = surLePerimetre(() => Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('')); direPerimetre('Journal DIT exporté'); return t; })",
                            awaitPromise=True, returnByValue=True)['result']['value']
     essais.verifier('le PDF DIT porte les prises de tous, la derniere de Romain comprise',
-                    [c in texte for c in ('A001C001', 'B001C001', 'B001C002', 'B001C003', 'Romain', 'Simon')], [True] * 6)
+                    [c in texte for c in ('A001C001', 'B001C001', 'B001C002', 'B001C003', '(Ro)', '(Si)')], [True] * 6)
     essais.verifier('et la page dit sur quoi il porte', banc.js("$('toast-msg').textContent"), 'Journal DIT exporté : toute l’équipe · Simon, Romain')
     # -- deux personnes ont saisi la meme prise : une seule ligne, et seuls les ecarts qui comptent
     banc.js("patch('prise', DB.prises[0].id, { statut: 'OK', focale: '35 mm', heure: '10:02', duree: '0:12', carte: 'A001' }); flush()"); time.sleep(0.4)
@@ -202,8 +202,8 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
                     sorted((e['champ'], [v for _, v in e['valeurs']]) for e in reuni[0]['ecarts']), [('Focale', ['35 mm', '50 mm']), ('Statut', ['OK', 'NG'])])
     texte = banc.cdp.appel('Runtime.evaluate', expression="avecEquipeAJour(() => surLePerimetre(() => Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('')))",
                            awaitPromise=True, returnByValue=True)['result']['value']
-    essais.verifier('le PDF DIT les signale sous le plan, et compte les ecarts en tete',
-                    ['CART prise 1 \x97 Focale : Simon 35 mm \xb7 Romain 50 mm' in texte, 'Statut : Simon OK \xb7 Romain NG' in texte, '2 \xc9CARTS ENTRE LES SAISIES' in texte, '10:02' in texte or '10:03' in texte],
+    essais.verifier('le PDF DIT les signale sous la prise, compte les ecarts en tete, et garde l heure du milieu aux deux initiales',
+                    ['CART prise 1 \x97 Focale : Simon 35 mm \xb7 Romain 50 mm' in texte, 'Statut : Simon OK \xb7 Romain NG' in texte, '2 \xc9CARTS ENTRE LES SAISIES' in texte, '(Si, Ro)' in texte and '(10:03)' in texte and '(10:02)' not in texte],
                     [True, True, True, True])
 
     # -- recharger la page garde la personne, son espace, et le choix « Toute l'equipe »

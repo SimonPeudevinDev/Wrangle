@@ -2267,8 +2267,6 @@ function openPrise(id, y){
         ${F(t, 'Caméra', 'cam', {ph:'CAM-A', refresh:1, cap:'characters', dl:'dl-camname'})}
         ${F(t, 'Carte', 'carte', {ph:'A_0001 ou 1F6K', refresh:1, cap:'characters'})}
         ${F(t, 'Modèle', 'camModel', {dl:'dl-cam', ph:'ARRI Alexa 35'})}
-        ${F(t, 'TC début', 'tcIn', {ph:'10:00:00:00', refresh:1})}
-        ${F(t, 'TC fin', 'tcOut', {ph:'10:00:15:00'})}
         ${F(t, 'Heure', 'heure', {ph:'14:35', refresh:1})}
         ${F(t, 'Durée', 'duree', {ph:'15s', refresh:1})}
       </div>`)}
@@ -4611,8 +4609,9 @@ function pdfDIT(j){
   const vide = s => { doc.texte(PDF_M, doc.y - 8, s, { taille: 8.5, couleur: 'tan' }); doc.y -= 13; };
   // le statut d'une prise, dans sa couleur : OK en vert, NG en rouge, le reste en tan
   const statut = s => ({ t: s, couleur: s === 'OK' ? 'ok' : s === 'NG' ? 'ng' : 'tan', police: s === 'OK' || s === 'NG' ? 'HB' : 'H' });
-  // qui a saisi : le prenom en gras, l'heure en tan
-  const saisi = t => ({ parts: [{ t: t.par, police: 'HB', couleur: 'encre' }, { t: t.par && t.heure ? ' · ' : '', couleur: 'tan' },
+  // qui a saisi : les deux premieres lettres de chaque prenom en gras (Si, Ro), l'heure en tan
+  const initiales = par => String(par || '').split(/\s*,\s*/).filter(Boolean).map(n => n.slice(0, 2)).join(', ');
+  const saisi = t => ({ parts: [{ t: initiales(t.par), police: 'HB', couleur: 'encre' }, { t: t.par && t.heure ? ' · ' : '', couleur: 'tan' },
                                 { t: t.heure, couleur: 'tan' }] });
   /* les colonnes d'une journee : celles qui ont quelque chose a dire. Chaque
      colonne sait lire sa cellule dans une prise ; la note prend la place qui reste. */
@@ -4622,17 +4621,15 @@ function pdfDIT(j){
     ou:     ['Plan · prise', 84, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n],
     statut: ['Statut', 42, 'H', t => statut(t.statut)],
     ret:    ['Montage', 54, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
-    // le timecode d'entree seul : avec la duree, il suffit au montage, et la ligne reste sur une ligne
-    tc:     ['TC in', 68, 'C', t => t.tcIn || t.tcOut],
     duree:  ['Durée', 34, 'H', t => t.duree],
     carte:  ['Carte', 52, 'H', t => t.carte ? { t: t.carte, police: 'HB', couleur: 'encre' } : { t: '—', couleur: 'tan' }],
     note:   ['Note', 0, 'H', t => t.note],
-    qui:    ['Saisi par', 78, 'H', saisi]
+    qui:    ['Saisi par', 64, 'H', saisi]
   };
   const colonnes = (fixes, prises) => {
     const avec = k => prises.some(t => t[k]);
     const ids = fixes.slice(0, -1)
-      .concat(avec('tcIn') || avec('tcOut') ? ['tc'] : [], avec('duree') ? ['duree'] : [],
+      .concat(avec('duree') ? ['duree'] : [],
               avec('note') ? ['note'] : [], fixes.slice(-1));
     const cols = ids.map(id => COLONNES[id].slice());
     const reste = L - cols.reduce((a, c) => a + c[1], 0);
@@ -4809,6 +4806,7 @@ function rapprocher(sources){
    secondes d'ecart ne sont pas un desaccord. Les notes s'ajoutent l'une a
    l'autre. Le journal DIT signale ces ecarts sous chaque plan. */
 const CHAMPS_ECART = RAP_PRISE.filter(([k]) => ['heure', 'tcIn', 'tcOut', 'duree', 'notes'].indexOf(k) < 0);
+const minutesDe = h => { const m = String(h || '').match(/^(\d{1,2})[:h](\d{2})$/); return m ? +m[1] * 60 + +m[2] : null; };
 function noterEcart(o, champ, nomA, a, nomB, b){
   o.ecarts = o.ecarts || [];
   let e = o.ecarts.find(x => x.champ === champ);
@@ -4842,6 +4840,12 @@ function fusionRap(sources){
           if (a && v && a.toLowerCase() !== v.toLowerCase()) noterEcart(tb, label, nomBase, a, s.nom, v);
         });
         if (valRap(t.notes) && valRap(tb.notes) && valRap(t.notes) !== valRap(tb.notes)) tb.notes = tb.notes.trim() + ' · ' + s.nom + ' : ' + t.notes.trim();
+        // deux montres a quelques minutes pres : l'heure du milieu
+        const ha = minutesDe(tb.heure), hb = minutesDe(t.heure);
+        if (ha != null && hb != null && ha !== hb && Math.abs(ha - hb) <= 10){
+          const v = Math.round((ha + hb) / 2);
+          tb.heure = String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+        }
         if (t.par && (tb.par || '').split(', ').indexOf(t.par) < 0) tb.par = tb.par ? tb.par + ', ' + t.par : t.par;
         combler(tb, t, ['id', 'planId', 'ecarts']);
       });
