@@ -275,8 +275,7 @@ La barre des jours et des filtres suit la liste quand on descend : on change de 
 
 - **Les jours** : `Tout`, puis `J1`, `J2`… Chaque pastille donne les plans tournés sur les plans
   prévus (`7/18`), avec un trait d'avancement en pied. La journée bouclée passe au vert.
-  Un point d'or marque le jour que l'on tourne — celui de la fiche ⚙ « Journée », ou à défaut
-  le premier jour commencé. La pastille du jour affiché reste toujours en vue.
+  La pastille du jour affiché reste toujours en vue.
 - **L'état du plan**, une seule réponse à la fois : `Tous`, `À tourner`, `Tournés`
   (`Abandonnés` n'apparaît que s'il y en a).
 - **Les marqueurs**, à cumuler avec l'état et entre eux :

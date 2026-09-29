@@ -1775,17 +1775,15 @@ document.addEventListener('scroll', e => {
 }, true);
 window.addEventListener('resize', () => document.querySelectorAll('.chips').forEach(bordsChips));
 
-/* Une pastille par jour : son libelle, son compte, un point d'or si c'est le
-   jour du tournage et un trait d'avancement en pied. `info` decrit ce que
-   compte la page qui appelle (plans ici, prises dans le rapport). */
+/* Une pastille par jour : son libelle, son compte et un trait d'avancement en
+   pied. `info` decrit ce que compte la page qui appelle (plans ici, prises
+   dans le rapport). */
 function chipsJours(actif, fn, info, jours){
-  const auj = jourDuTournage();
   const un = (j, label) => {
     const d = info(j) || {};
     const fini = d.total > 0 && d.fait === d.total;
     return `<button class="chip${actif === j ? ' on' : ''}${fini ? ' fini' : ''}${d.vide ? ' vide' : ''}"
-      onclick="${fn}('${esc(j)}')"${d.titre ? ` title="${esc(d.titre)}"` : ''}>${
-      j !== '*' && j === auj ? '<u></u>' : ''}${label}</button>`;
+      onclick="${fn}('${esc(j)}')"${d.titre ? ` title="${esc(d.titre)}"` : ''}>${label}</button>`;
   };
   // le nom du jour seul : les comptes et l'avancement sont dans la ligne de
   // filtres et dans l'en-tete de chaque journee
