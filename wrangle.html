@@ -265,7 +265,8 @@ const SUPPORT_ANCIEN = { handheld:'Épaule', 'épaule':'Épaule', epaule:'Épaul
    definitif. Lu par normaliser, donc declare ici, avant le chargement du projet. */
 const ACTEUR_ANCIEN = { 'homme de main':'Homme de main A' };
 
-const HERITE = ['cam', 'camModel', 'carte', 'objectif', 'focale', 'diaph', 'filtre',
+// la focale d'arrivee aussi : apres un zoom, la prise suivante reprend depart et arrivee
+const HERITE = ['cam', 'camModel', 'carte', 'objectif', 'focale', 'focaleStop', 'diaph', 'filtre',
                 'codec', 'reso', 'fps', 'shutter', 'ei', 'wb', 'nd', 'lut',
                 'mesureDepuis', 'sonRoll', 'sync', 'mouvement', 'support', 'meteo'];
 
@@ -1161,6 +1162,7 @@ function live(el){
   const id = el.dataset.o, k = el.dataset.k, kind = kindDe(id);
   if (!kind) return;
   patch(kind, id, { [k]: el.type === 'checkbox' ? el.checked : el.value });
+  if (kind === 'prise' && k === 'clip') carteSuitClip(cible(id));
   if (kind === 'plan' && ['jour', 'plan', 'seq'].indexOf(k) >= 0) propager(cible(id));
   if (kind === 'plan' && ['seqTitre', 'lieu', 'seq'].indexOf(k) >= 0) titrerSequence(cible(id), k);
   if (openType === kind){ majResumes(); decorerFiche(); }
@@ -1470,7 +1472,8 @@ const ICO_AMBIANCE = {
    rejoint la serie du tournage), le mouvement et le support. */
 const CHAMP_METEO   = () => ({ k:'meteo', nom:'Météo', liste: METEOS, ico:1, autre:'poserValeur' });
 const CHAMP_FOCALE  = (k, nom) => ({ k, nom, liste: focales(), court:1, autre:'ajouterFocale', trier: trierFocales, aide:'32, 18-35 zoom, 150 Macro…', im:'decimal' });
-const CHAMP_MOUV    = k => ({ k, nom:'Mouvement', liste: MOUVEMENTS, autre:'poserValeur' });
+// sep : plusieurs choix, gardes ensemble dans le meme texte (« Pan / Tilt »)
+const CHAMP_MOUV    = k => ({ k, nom:'Mouvement', liste: MOUVEMENTS, sep:' / ', autre:'poserDansTexte' });
 const CHAMP_SUPPORT = () => ({ k:'support', nom:'Support', liste: SUPPORTS, autre:'poserValeur' });
 const CHAMPS_PLAN = () => [
   { k:'lieu',       nom:'Décor',         liste: fusion(decorsTournage(), LISTES['dl-lieu']()), autre:'poserValeur' },
@@ -1478,7 +1481,7 @@ const CHAMPS_PLAN = () => [
   { k:'momentJour', nom:'Moment',        liste: ['Jour', 'Nuit', 'Aube', 'Crépuscule'], ico:1 },
   CHAMP_METEO(),
   { k:'acteurs',    nom:'Distribution',  liste: acteursConnus(), multi:1, cases:[['figu', 'Figuration']], autre:'poserDansListe', aide:'Nom du rôle…' },
-  { k:'cadrage',    nom:'Cadrage',       liste: LISTES['dl-cadrage'](), autre:'poserValeur' },
+  { k:'cadrage',    nom:'Cadrage',       liste: LISTES['dl-cadrage'](), sep:' / ', autre:'poserDansTexte' },
   CHAMP_MOUV('mouv'),
   CHAMP_SUPPORT(),
   CHAMP_FOCALE('focale', 'Focale prévue')
@@ -1493,12 +1496,16 @@ const CHAMPS_PRISE = () => [
   CHAMP_SUPPORT()
 ];
 const champsDe = () => openType === 'plan' ? CHAMPS_PLAN() : openType === 'prise' ? CHAMPS_PRISE() : [];
+/* Les morceaux d'un choix multiple garde en texte : « Poitrine / Américain ». */
+const morceaux = v => String(v || '').split(/\s*\/\s*/).map(x => x.trim()).filter(Boolean);
 function htmlChamp(p, c){
-  const multi = !!c.multi, v = multi ? (p[c.k] || []) : (p[c.k] || '').trim();
-  let liste = multi ? fusion(c.liste, v) : c.liste.slice();
-  if (!multi && v && !liste.some(x => memeVal(x, v))){ liste.push(v); if (c.trier) c.trier(liste); }
+  const multi = !!c.multi, sep = !!c.sep, v = multi ? (p[c.k] || []) : (p[c.k] || '').trim();
+  const parts = sep ? morceaux(v) : null;
+  // un choix multiple : des tuiles simples (les combinaisons du decoupage se decomposent)
+  let liste = multi ? fusion(c.liste, v) : sep ? fusion(c.liste.filter(x => morceaux(x).length < 2), parts) : c.liste.slice();
+  if (!multi && !sep && v && !liste.some(x => memeVal(x, v))){ liste.push(v); if (c.trier) c.trier(liste); }
   const lu = multi ? v.concat((c.cases || []).filter(x => p[x[0]]).map(x => x[1])).join(', ') : v;
-  const ouvert = champOuvert === c.k, pris = x => multi ? v.some(y => memeVal(y, x)) : memeVal(x, v);
+  const ouvert = champOuvert === c.k, pris = x => multi ? v.some(y => memeVal(y, x)) : sep ? parts.some(y => memeVal(y, x)) : memeVal(x, v);
   return `<div class="champ${ouvert ? ' ouvert' : ''}" data-champ="${c.k}">
     <button type="button" class="champ-tete" onclick="ouvrirChamp('${c.k}')" aria-expanded="${ouvert}">
       <span class="champ-nom">${c.nom}</span><span class="champ-val${lu ? '' : ' vide'}">${lu ? esc(lu) : '—'}</span><i></i>
@@ -1513,7 +1520,7 @@ function htmlChamp(p, c){
              onkeydown="if(event.key==='Enter'){event.preventDefault();poserChamp(this)}">
            <button type="button" class="mini" onclick="poserChamp(this.previousElementSibling)">Ajouter</button></div>`
         : `<button type="button" class="tuile plus" onclick="saisirChamp()"><span>&#65291; Autre</span></button>`}
-      ${multi ? `<button type="button" class="tuile fin" onclick="ouvrirChamp('${c.k}')"><span>Terminé</span></button>` : ''}
+      ${multi || sep ? `<button type="button" class="tuile fin" onclick="ouvrirChamp('${c.k}')"><span>Terminé</span></button>` : ''}
     </div>` : ''}
   </div>`;
 }
@@ -1551,6 +1558,7 @@ function champSuivant(k){
 function choisirChamp(k, val){
   const o = cible(openId), kind = kindDe(openId), c = champsDe().find(x => x.k === k); if (!o || !c) return;
   if (c.multi) patch(kind, o.id, { [k]: avecOuSans(o[k], val) });
+  else if (c.sep) patch(kind, o.id, { [k]: avecOuSans(morceaux(o[k]), val).join(c.sep) });   // la ligne reste ouverte
   else {
     const pose = !memeVal(o[k], val);
     patch(kind, o.id, { [k]: pose ? val : '' });
@@ -1577,7 +1585,7 @@ function saisirChamp(){
 function poserChamp(input){
   const c = champsDe().find(x => x.k === input.dataset.k);
   if (!c || !(input.value || '').trim()){ input.focus(); return; }
-  champSaisie = false; if (!c.multi) champOuvert = champSuivant(c.k);
+  champSaisie = false; if (!c.multi && !c.sep) champOuvert = champSuivant(c.k);
   window[c.autre](input);
 }
 /* Une ligne de saisie sous les capsules ; Entree ou le bouton pose la valeur. */
@@ -1595,6 +1603,15 @@ function ligneSaisie(id, k, el, ph, action){
 /* Ce que « + Autre » suggere de taper, selon le champ. */
 const AIDE_AUTRE = { lieu:'Nom du décor…', cadrage:'Plongée, plan de coupe…', meteo:'Orage, contre-jour…', support:'Tête télécommandée…',
                      mouv:'Zoom, dolly, motion control…', mouvement:'Zoom, dolly, motion control…' };
+/* Une valeur tapee dans un choix multiple : elle s'ajoute aux autres. */
+function poserDansTexte(input){
+  const s = lireSaisie(input); if (!s) return;
+  const c = champsDe().find(x => x.k === s.k);
+  const l = morceaux(s.o[s.k]);
+  if (!l.some(x => memeVal(x, s.val))) l.push(s.val);
+  patch(s.kind, s.id, { [s.k]: l.join(c && c.sep || ' / ') });
+  rouvrirFiche(); renderList();
+}
 function poserValeur(input){
   const s = lireSaisie(input); if (!s) return;
   patch(s.kind, s.id, { [s.k]: s.val });
@@ -1950,9 +1967,13 @@ function calerPrises(racine){
   });
 }
 
+/* Seul le plan que le Moteur vise deplie ses prises ; les autres les replient
+   en une ligne (« 8 prises · 2 OK »), qu'un appui deplie en visant le plan.
+   Un filtre qui trie les prises (a monter, saisie par) les montre partout. */
 function blocPlan(p, seulementRetenues, qui){
   let pr = prisesDe(p.id);
   const total = pr.length;
+  const deplie = seulementRetenues || qui || (planVise() || {}).id === p.id;
   if (seulementRetenues) pr = pr.filter(t => t.retenue);
   if (qui) pr = pr.filter(t => quiDe(t) === qui);
   const el = lisElements(p);
@@ -1983,8 +2004,9 @@ function blocPlan(p, seulementRetenues, qui){
         ${el ? `<div class="pelem">${el}</div>` : ''}
       </div>
     </div>
-    ${htmlPrises(pr)}
-    <button class="addtake" onclick="ajouterPrise('${p.id}')">+ Prise ${total + 1}</button>
+    ${deplie ? htmlPrises(pr) : pr.length ? `<button type="button" class="prises-repliees" onclick="viser('${p.id}')"
+        aria-label="Déplier les prises"><span class="res">${resumePrises(p)}</span><i></i></button>` : ''}
+    <button class="addtake" onclick="viser('${p.id}', true);ajouterPrise('${p.id}')">+ Prise ${total + 1}</button>
   </div>`;
 }
 
@@ -2145,9 +2167,19 @@ function planVise(){
   return (UI.vise && plan(UI.vise)) || (dernierPlan && plan(dernierPlan)) || null;
 }
 /* toucher l'anneau du plan deja vise rend la main au suivi automatique */
-function viser(id){
+/* Viser un plan : le Moteur et + Prise enregistrent dessus, et il deplie ses
+   prises (les autres se replient). Le plan touche reste a sa place a l'ecran,
+   meme si celui du dessus se replie. `garder` : viser sans basculer. */
+function viser(id, garder){
   if (!plan(id)) return;
-  UI.vise = UI.vise === id ? null : id; ecrireUI();
+  const avant = document.querySelector('#l-shoot .plan[data-id="' + id + '"]');
+  const y0 = avant ? avant.getBoundingClientRect().top : null;
+  UI.vise = UI.vise === id && !garder ? null : id; ecrireUI();
+  if (view === 'shoot'){
+    renderList();
+    const apres = document.querySelector('#l-shoot .plan[data-id="' + id + '"]');
+    if (y0 != null && apres) window.scrollBy(0, apres.getBoundingClientRect().top - y0);
+  }
   majFab();
 }
 function majVise(){
@@ -2249,6 +2281,7 @@ function ajouterPrise(planId, ouvrir, extra){
   else { if (p.focale) t.focale = p.focale; if (p.mouv) t.mouvement = p.mouv; if (p.meteo) t.meteo = p.meteo; }
   // le nom de clip suit la numerotation de la camera : AA005 puis AA006, sans rien taper
   if (!t.clip){ const s = clipSuivant(t); if (s) t.clip = s; }
+  { const c = carteDuClip(t.clip); if (c && (!t.carte || FORME_BOBINE.test(String(t.carte).trim()))) t.carte = c; }
   DB.prises.push(t);
   operer({ op:'add', kind:'prise', data: t });
   if (p.etat === 'todo') patch('plan', p.id, { etat:'done' });
@@ -2295,10 +2328,28 @@ function clipSuivant(t){
   if (d) return d[1] + String(+d[2] + 1).padStart(d[2].length, '0') + d[3];
   return '';
 }
+/* La carte se lit dans le nom du clip ARRI : la bobine, avant le « C » du clip
+   (A_0001C0004 -> A_0001, A001C003 -> A001), nom complet du fichier compris.
+   Elle suit le clip tant qu'elle a la forme d'une bobine ; un identifiant tape
+   a la main (1F6K) reste tel quel. */
+const FORME_BOBINE = /^[A-Za-z]{1,2}[_-]?\d{2,5}$/;
+function carteDuClip(clip){
+  const c = String(clip || '').trim().replace(/_\d{6}_\d{6}_[A-Za-z0-9]+(\.\w+)?$/, '');
+  const m = c.match(/^(.+?)[_-]?C\d+/i);
+  return m && FORME_BOBINE.test(m[1]) ? m[1] : '';
+}
+function carteSuitClip(t){
+  const c = t && carteDuClip(t.clip);
+  if (!c || memeVal(t.carte, c)) return;
+  if (String(t.carte || '').trim() && !FORME_BOBINE.test(String(t.carte).trim())) return;
+  patch('prise', t.id, { carte: c });
+  document.querySelectorAll('#sbody [data-k="carte"]').forEach(i => { if (i !== document.activeElement) i.value = c; });
+}
 function appliquerClip(id){
   const t = prise(id); const s = t && clipSuivant(t);
   if (!s) return;
   patch('prise', id, { clip: s });
+  carteSuitClip(t);
   const i = document.querySelector('#sbody input[data-k="clip"]'); if (i) i.value = s;
   const m = document.querySelector('#sbody .clip-ligne .mini'); if (m) m.remove();   // le nom est pose, le bouton n'a plus d'objet
   renderList();
@@ -2320,7 +2371,7 @@ function noteRapide(n){
 /* Ce qu'une section repliee doit dire d'un coup d'oeil : les valeurs qu'elle
    contient, pour verifier sans l'ouvrir que la prise herite des bons reglages. */
 const RESUME_PRISE = {
-  fichier: t => [t.cam, t.carte, t.tcIn && 'TC ' + t.tcIn, t.duree],
+  fichier: t => [t.cam, t.tcIn && 'TC ' + t.tcIn, t.duree],
   releves: t => [t.focale && fleche(t.focale, t.focaleStop), t.diaph, t.focusStart && fleche(t.focusStart, t.focusStop), t.mouvement, t.support],
   image:   t => [t.codec, t.reso, t.fps && t.fps + ' fps', t.ei && 'EI ' + t.ei, t.wb, t.nd && 'ND ' + t.nd, t.lut],
   son:     t => [t.sonRoll, t.sync, t.sonFile]
@@ -2368,8 +2419,36 @@ function voisinePrise(sens){
 }
 
 /* La feuille s'affiche, ses zones de texte prennent leur hauteur, au defilement demande. */
+/* Le bouton Retour du navigateur (le geste retour du telephone) ferme la fiche
+   au lieu de quitter le site ; d'une prise ouverte depuis son plan, il ramene
+   au plan. Chaque fiche ouverte pose une marque dans l'historique : une autre
+   sorte de fiche s'empile, la meme sorte (la prise suivante, aux fleches) prend
+   sa place. Fermer la fiche par sa fleche retire ses marques. */
+const RETOUR = { rejoue: false, ignorer: false };
+function noterFiche(){
+  if (RETOUR.rejoue || !openType) return;
+  const h = history.state, e = { fiche: openType, id: openId || '' };
+  try{
+    if (h && h.fiche){
+      if (h.fiche === e.fiche && h.id === e.id) return;
+      if (h.fiche === e.fiche) history.replaceState(Object.assign(e, { prof: h.prof || 1 }), '');
+      else history.pushState(Object.assign(e, { prof: (h.prof || 1) + 1 }), '');
+    } else history.pushState(Object.assign(e, { prof: 1 }), '');
+  }catch(x){}
+}
+window.addEventListener('popstate', ev => {
+  if (RETOUR.ignorer){ RETOUR.ignorer = false; return; }
+  const st = ev.state;
+  RETOUR.rejoue = true;
+  try{
+    if (st && st.fiche === 'plan' && plan(st.id)) openPlan(st.id);
+    else if (st && st.fiche === 'prise' && prise(st.id)) openPrise(st.id);
+    else if (openType) closeSheet();
+  } finally { RETOUR.rejoue = false; }
+});
 function montrerFiche(y){
   $('sheet').classList.add('on');
+  noterFiche();
   document.querySelectorAll('#sbody textarea.auto').forEach(autoHauteur);
   $('sbody').scrollTop = y || 0;
 }
@@ -2424,12 +2503,19 @@ function openPrise(id, y){
     </div>
 
     <div class="sec">
-      <div class="clip">
-        <div class="clip-ligne"><label for="clip-in">Clip</label>
-          ${sug && sug !== t.clip ? `<button class="mini" onclick="appliquerClip('${t.id}')" title="Reprendre le nom suivant">&#65291;1 <b>${esc(sug)}</b></button>` : ''}
-        </div>
-        <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1"
-          value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C007')}" autocapitalize="characters" autocomplete="off">
+      <div class="clip-duo">
+        <div class="clip-col"><div class="clip">
+          <div class="clip-ligne"><label for="clip-in">Clip</label>
+            ${sug && sug !== t.clip ? `<button class="mini" onclick="appliquerClip('${t.id}')" title="Reprendre le nom suivant">&#65291;1 <b>${esc(sug)}</b></button>` : ''}
+          </div>
+          <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1"
+            value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C007')}" autocapitalize="characters" autocomplete="off">
+        </div></div>
+        <div class="clip-col"><div class="clip">
+          <div class="clip-ligne"><label for="carte-in">Carte</label></div>
+          <input id="carte-in" ${liaison(t, 'carte')} data-refresh="1"
+            value="${esc(t.carte)}" placeholder="${esc(carteDuClip(sug) || 'A_0001')}" autocapitalize="characters" autocomplete="off">
+        </div></div>
       </div>
     </div>
 
@@ -2447,7 +2533,6 @@ function openPrise(id, y){
     ${sectionFiche('fichier', 'Fichier & caméra', t, `
       <div class="specs">
         ${F(t, 'Caméra', 'cam', {ph:'CAM-A', refresh:1, cap:'characters', dl:'dl-camname'})}
-        ${F(t, 'Carte', 'carte', {ph:'A_0001 ou 1F6K', refresh:1, cap:'characters'})}
         ${F(t, 'Modèle', 'camModel', {dl:'dl-cam', ph:'ARRI Alexa 35'})}
         ${F(t, 'Heure', 'heure', {ph:'14:35', refresh:1})}
         ${F(t, 'Durée', 'duree', {ph:'15s', refresh:1})}
@@ -4208,6 +4293,11 @@ function openProd(){
 }
 
 function closeSheet(){
+  // fermee a la main : ses marques quittent l'historique, le Retour suivant quitte le site
+  if (!RETOUR.rejoue && history.state && history.state.fiche){
+    RETOUR.ignorer = true;
+    try{ history.go(-(history.state.prof || 1)); }catch(x){ RETOUR.ignorer = false; }
+  }
   flush(); viderTampon();
   videEntete();
   $('sheet').classList.remove('on');
@@ -5324,7 +5414,8 @@ function decorerFiche(){
   }
   // les lignes a tuiles : la valeur des autres dans l'en-tete, leur initiale sur la tuile
   sb.querySelectorAll('.champ[data-champ]').forEach(c => {
-    const k = c.dataset.champ, a = x => Array.isArray(x) ? x : valRap(x) ? [valRap(x)] : [];
+    const k = c.dataset.champ, def = champsDe().find(d => d.k === k);
+    const a = x => Array.isArray(x) ? x : !valRap(x) ? [] : def && def.sep ? morceaux(x) : [valRap(x)];
     const mien = a(o[k]), porte = (l, v) => l.some(y => memeVal(y, v));
     c.classList.remove('a2-autre', 'a2-accord', 'a2-ecart');
     const avis = j.filter(x => a(x.o[k]).length);

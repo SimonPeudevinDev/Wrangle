@@ -312,7 +312,19 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 - Dans la fiche : résultat (OK, NG, Série, Faux départ, Pick-up), note libre et mots rapides
   (Raccord, Jeu, Cadre…), nom de clip avec suggestion du suivant (bouton ＋1), relevés caméra
   pour le matchmove, réglages image, son.
-- Caméra, carte, optique, réglages : repris automatiquement de la prise précédente.
+- Caméra, carte, optique, réglages : repris automatiquement de la prise précédente. La focale est
+  reprise telle quelle : le départ seul, ou le départ et l'arrivée après un zoom.
+- **La carte, à côté du clip**, se lit dans son nom ARRI : `A_0001C0004` donne `A_0001` (le nom
+  complet du fichier aussi). Elle suit le clip, « +1 » compris ; un identifiant tapé à la main
+  qui n'a pas la forme d'une bobine (`1F6K`) n'est pas touché.
+- **Cadrage et mouvement se choisissent à plusieurs** : on coche les tuiles, puis « Terminé » ;
+  ils se gardent ensemble, « Poitrine / Américain », comme dans le découpage.
+- **Seul le plan que le Moteur vise déplie ses prises** ; les autres les replient en une ligne
+  (« 8 prises · 2 OK »), qu'un appui déplie. Viser un autre plan (son anneau, sa ligne, son
+  « + Prise ») replie le précédent ; le plan touché reste à sa place à l'écran. Les filtres « À
+  monter » et « Saisie par » montrent les prises partout.
+- **Le bouton Retour du navigateur** (le geste retour du téléphone) ferme la fiche ouverte au lieu
+  de quitter le site ; d'une prise ouverte depuis son plan, il ramène au plan.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
 ## Divers
@@ -356,7 +368,7 @@ Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal
 
 ## Vérifier que rien n'est cassé
 
-Vingt-trois scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Vingt-quatre scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -383,6 +395,7 @@ py tests/verif_coupure.py          saisir en zone blanche, fermer l'appli avant 
 py tests/verif_choix_equipe.py     le DIT réunit une personne, plusieurs ou toutes ; « Tous », ce sont ceux qui ont saisi
 py tests/verif_a_deux.py           dans la fiche, ce que les autres ont noté sur la même prise, à reprendre ou confirmer
 py tests/verif_pas_saisie.py       « prise non saisie », et la focale de la prise qui n'est pas celle du plan
+py tests/verif_saisie_plateau.py   focale reprise, carte lue dans le clip, cadrage multiple, prises repliées, bouton Retour
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un

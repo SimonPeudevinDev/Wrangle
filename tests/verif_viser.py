@@ -62,6 +62,8 @@ with Banc(8785, 9385, taille=(1200, 900)) as banc:
       const a = DB.plans[0].id, b = DB.plans[1].id;
       for (let i = 0; i < 7; i++) ajouterPrise(a, false, { clip:'A' + i });
       for (let i = 0; i < 2; i++) ajouterPrise(b, false, { clip:'B' + i });
+      // seul le plan vise deplie ses prises : le filtre « Saisie par » les montre toutes
+      fQui = UI.nom;
       renderShoot();
     """)
     time.sleep(0.5)

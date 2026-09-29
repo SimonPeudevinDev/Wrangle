@@ -1404,3 +1404,19 @@ select option{background:var(--surface);color:var(--txt)}
 .spec.auto > .a2-pt.moi{margin-top:15px}
 /* les elements captes : les miens pleins suffisent, pas de liseré vert quand un autre a coche le meme */
 .el.a2-deux{box-shadow:none!important}
+
+/* Clip et carte cote a cote : le clip en grand, la carte a sa droite */
+.clip-duo{display:flex;align-items:flex-start;gap:18px}
+.clip-col{flex:1 1 0;min-width:0}
+.clip-col:first-child{flex-grow:1.8}
+
+/* Les prises d'un plan que le Moteur ne vise pas : repliees en une ligne */
+.prises-repliees{display:flex;align-items:center;gap:10px;width:100%;margin:10px 0 0;padding:12px 2px;cursor:pointer;
+  background:none;border:none;border-top:1px dotted var(--line2);color:var(--dim);font:500 13px var(--font);text-align:left}
+.prises-repliees .res{flex:1;min-width:0}
+.prises-repliees .res span:not(:last-child)::after{content:" ·";margin-right:5px;color:var(--dim2);font-weight:400}
+.prises-repliees .res .ok{color:var(--ok);font-weight:600}
+.prises-repliees .res .ng{color:var(--ng);font-weight:600}
+.prises-repliees .res .kp{color:var(--acc);font-weight:600}
+.prises-repliees i{width:8px;height:8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin:-4px 6px 0 0}
+.prises-repliees:hover{color:var(--txt)}

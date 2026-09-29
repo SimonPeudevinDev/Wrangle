@@ -75,6 +75,7 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
     r = ops('autre', 'Simon', 'simon', [{'op': 'add', 'kind': 'prise', 'data': {'id': 'x1', 'planId': pid, 'n': 1, 'statut': 'OK', 'par': 'Simon', 'plan': e['db']['plans'][0].get('plan')}}])
     essais.verifier('le serveur prend la prise de l autre appareil', [r['rev'], r['ops'][0]['data']['n']], [2, 1])
     essais.verifier('la page la recoit en quelques secondes', attendre(lambda: banc.js("!!prise('x1') && RESEAU.rev === 2")), True)
+    banc.js('viser(%s, true)' % json.dumps(pid))   # seul le plan vise deplie ses prises
     essais.verifier('la prise est dans la liste', attendre(lambda: banc.js("document.querySelectorAll('.prise[data-id=\"x1\"]').length") == 1), True)
 
     # -- la page ajoute une prise au meme plan, meme numero : le serveur tranche, la page suit
