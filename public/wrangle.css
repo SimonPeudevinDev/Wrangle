@@ -1402,3 +1402,5 @@ select option{background:var(--surface);color:var(--txt)}
 .lead-ligne .viser{flex:none;margin-top:2px}
 .spec > .a2-pt.moi{font-style:normal;margin-left:-4px}
 .spec.auto > .a2-pt.moi{margin-top:15px}
+/* les elements captes : les miens pleins suffisent, pas de liseré vert quand un autre a coche le meme */
+.el.a2-deux{box-shadow:none!important}
