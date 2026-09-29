@@ -109,7 +109,7 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
     essais.verifier('le bloc propose de recuperer les saisies de l equipe', banc.js("document.querySelector('#rapprocher .rsources .btn.p').textContent"), 'Récupérer les saisies de l’équipe')
     banc.js("recupererEspaces()")
     essais.verifier('Alice arrive dans les sources, pas Simon lui-meme', attendre(lambda: banc.js('RAP.sources.map(s => s.nom)') == ['Alice']), True)
-    essais.verifier('et le dit', banc.js("$('toast-msg').textContent"), '1 saisie récupérée')
+    essais.verifier('et le dit', banc.js("$('toast-msg').textContent"), '1 personne réunie')
     r = banc.js('rapprocher(sourcesRap())')
     essais.verifier('le rapprochement compare Simon et Alice', [r['noms'], r['total']['ecarts'] + r['total']['complements'] + r['total']['seuls'] > 0], [['Simon', 'Alice'], True])
 

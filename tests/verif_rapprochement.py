@@ -52,11 +52,18 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
     essais.verifier('les ecarts en avertissement, le reste en gris',
                     [banc.js("document.querySelectorAll('#rapprocher .alert.o').length"), banc.js("document.querySelectorAll('#rapprocher .alert:not(.o)').length")], [2, 5])
 
-    # -- le PDF des ecarts
+    # -- la fiche data wrangling : les ecarts a trancher, une colonne par personne
     banc.js('chargerLogo()'); time.sleep(0.6)
-    pdf = banc.js("Array.from(pdfRapprochement(), b => String.fromCharCode(b)).join('')")
-    essais.verifier('le PDF des ecarts est un PDF', pdf[:8], '%PDF-1.4')
-    essais.verifier('il nomme les sources et l ecart', '(Rapprochement des saisies \xb7 Simon, Alice)' in pdf and 'Simon OK \xb7 Alice NG' in pdf, True)
+    m = banc.js("modeleWrangling('*')")
+    essais.verifier('la fiche data wrangling : une journee, les deux personnes', [len(m), m[0]['noms']], [1, ['Simon', 'Alice']])
+    essais.verifier('dont le statut de la prise 1', [(e['champ'], [v[1] for v in e['valeurs']]) for e in m[0]['ecarts'] if e['champ'] == 'Statut'],
+                    [('Statut', ['OK', 'NG'])])
+    essais.verifier('la prise 3, notee par Alice seule', [(x['qui'], [t['n'] for t in x['prises']]) for x in m[0]['seuls']], [('Alice', ['3'])])
+    pdf = banc.js("Array.from(pdfWrangling('*'), b => String.fromCharCode(b)).join('')")
+    essais.verifier('le PDF est un PDF entier', [pdf[:8], pdf.rstrip().endswith('%%EOF')], ['%PDF-1.4', True])
+    essais.verifier('il nomme les personnes, une colonne chacune, et le champ en ecart',
+                    ['Saisies de Simon, Alice)' in pdf, '(SIMON)' in pdf and '(ALICE)' in pdf, '(Statut)' in pdf], [True, True, True])
+    essais.verifier('une case a cocher par ligne', pdf.count(' l S') > 8, True)
 
     # -- la fusion : Simon fait foi, Alice comble et apporte sa prise 3
     f = banc.js('(() => { const f = fusionRap(sourcesRap()); const p = f.plans[0]; return { etat: p.etat, prises: f.prises.filter(t => t.planId === p.id).map(t => [t.n, t.statut, t.clip, t.carte, t.notes]) }; })()')

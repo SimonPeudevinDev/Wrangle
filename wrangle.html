@@ -168,10 +168,11 @@ const BLANK = {
 };
 const COLL = { plan:'plans', prise:'prises' };
 
-/* La serie d'optiques du tournage : NiSi Cinema Athena Prime. Le decoupage
-   prevoit parfois d'autres focales (24 mm, 70 mm) : le menu ne les propose pas,
-   il n'affiche que la valeur deja notee sur la fiche si elle sort de la serie. */
-const SERIE = ['14 mm', '25 mm', '35 mm', '50 mm', '85 mm', '135 mm'];
+/* La serie d'optiques du tournage : Sigma Classic Prime (partenariat Sigma),
+   sans 85 ni 135 mm. Le decoupage prevoit parfois d'autres focales : le menu ne
+   les propose pas, il n'affiche que la valeur deja notee sur la fiche si elle
+   sort de la serie. */
+const SERIE = ['14 mm', '20 mm', '24 mm', '28 mm', '35 mm', '40 mm', '50 mm', '105 mm'];
 
 /* Elements captes sur le plateau. Les huit premiers sont ceux de la feuille
    de tournage ; les fonds et le mur LED s'y ajoutent car ils changent tout
@@ -543,9 +544,48 @@ const monEspace = () => RESEAU.possible ? espaceDe(UI.nom) : '';
    prenom d'une autre. Celles d'un prenom qu'on quitte restent garees la,
    pour le jour ou l'on y revient. */
 const cleAttente = () => 'fstdw.attente.' + CLIENT + (monEspace() ? '.' + monEspace() : '');
-function lireAttente(){ try{ return JSON.parse(sessionStorage.getItem(cleAttente()) || '[]') || []; }catch(e){ return []; } }
-function ecrireAttente(){ try{ sessionStorage.setItem(cleAttente(), JSON.stringify(RESEAU.attente)); }catch(e){} }
-if (RESEAU.possible) RESEAU.attente = lireAttente();
+/* La memoire d'un onglet meurt avec lui : un telephone qui saisit en zone
+   blanche puis ferme l'appli (ou que le systeme ferme) avant le retour de la
+   4G perdrait ce qui n'est pas parti, la copie locale etant ensuite remplacee
+   par celle du serveur. La file est donc aussi gardee sur l'appareil, datee :
+   un onglet vivant la redate toutes les cinq secondes ; celle qui n'a plus
+   bouge depuis vingt est d'un onglet ferme, et le premier qui s'ouvre sous le
+   meme prenom la reprend et l'envoie. Le serveur reconnait une prise deja
+   recue a son identifiant : un double envoi ne fait pas de doublon. */
+const ATTENTE_ORPHELINE = 20000;
+function lireAttente(){
+  let a = [];
+  try{ a = JSON.parse(sessionStorage.getItem(cleAttente()) || '[]') || []; }catch(e){}
+  const orphelines = [];
+  try{
+    const esp = monEspace(), t = Date.now();
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || k.indexOf('fstdw.attente.') !== 0 || k === cleAttente()) continue;
+      const f = JSON.parse(localStorage.getItem(k) || 'null');
+      if (f && f.espace === esp && f.client !== CLIENT && t - (f.t || 0) > ATTENTE_ORPHELINE && Array.isArray(f.ops))
+        orphelines.push({ k, t: f.t || 0, ops: f.ops });
+    }
+  }catch(e){}
+  if (!orphelines.length) return a;
+  // les plus anciennes d'abord : elles ont ete saisies avant celles de cet onglet
+  orphelines.sort((x, y) => x.t - y.t);
+  orphelines.forEach(o => { try{ localStorage.removeItem(o.k); }catch(e){} });
+  return orphelines.reduce((l, o) => l.concat(o.ops), []).concat(a);
+}
+function ecrireAttente(){
+  try{ sessionStorage.setItem(cleAttente(), JSON.stringify(RESEAU.attente)); }catch(e){}
+  try{
+    if (RESEAU.attente.length)
+      localStorage.setItem(cleAttente(), JSON.stringify({ client: CLIENT, espace: monEspace(), t: Date.now(), ops: RESEAU.attente }));
+    else localStorage.removeItem(cleAttente());
+  }catch(e){}
+}
+if (RESEAU.possible){
+  RESEAU.attente = lireAttente();
+  if (RESEAU.attente.length) ecrireAttente();
+  setInterval(() => { if (RESEAU.attente.length) ecrireAttente(); }, 5000);
+}
 
 /* Modifie des champs d'une fiche : ici tout de suite, chez les autres ensuite. */
 function patch(kind, id, data){
@@ -856,10 +896,10 @@ function changerDePersonne(n){
   const reste = RESEAU.attente.slice();
   if (RESEAU.possible && partant && reste.length)
     poster(API('ops'), JSON.stringify({ client: CLIENT, nom: partant, espace: sonEspace, ops: reste }))
-      .then(r => { if (r.ok) try{ sessionStorage.removeItem(saCle); }catch(e){} }).catch(() => {});
+      .then(r => { if (r.ok) try{ sessionStorage.removeItem(saCle); localStorage.removeItem(saCle); }catch(e){} }).catch(() => {});
   setNom(n);
   DB = load();
-  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipe = false; RAP.tente = false; UI.equipe = false;
+  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipier = []; RAP.equipe = false; RAP.tente = false; UI.equipe = false;
   if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
   // les reponses parties sous l'ancien prenom ne valent plus rien : on change de session
   nouvelleSession(lireAttente());
@@ -899,7 +939,7 @@ function rendreLesPrises(autres){
     if (!oui) return marquerCarnet();
     autres.forEach(qui => rendreA(qui, DB.prises.filter(t => estDe(t, qui))));
     DB.prises = DB.prises.filter(t => !autres.some(x => estDe(t, x)));
-    dernierPlan = null; chrono = null; corbeille = null; RAP.sources = [];
+    dernierPlan = null; chrono = null; corbeille = null; RAP.sources = []; RAP.equipier = [];
     marquerCarnet(); flush();
     if (RESEAU.possible){ nouvelleSession([]); ecrireAttente(); operer({ op:'remplacer', db: DB }); }
     closeSheet(); renderAll();
@@ -928,7 +968,7 @@ function proposerAncienCarnet(a){
     if (!oui) return marquerCarnet();
     DB = normaliser(a.db);
     try{ localStorage.removeItem(KEY); }catch(e){}
-    dernierPlan = null; chrono = null; corbeille = null; RAP.sources = [];
+    dernierPlan = null; chrono = null; corbeille = null; RAP.sources = []; RAP.equipier = [];
     marquerCarnet(); flush();
     if (RESEAU.possible){ nouvelleSession([]); ecrireAttente(); operer({ op:'remplacer', db: DB }); }
     closeSheet(); renderAll();
@@ -1134,7 +1174,7 @@ const LISTES = {
   'dl-shut':  ['180°', '172.8°', '90°', '45°', '1/50'],
   'dl-wb':    ['3200 K', '4300 K', '5600 K', '6500 K'],
   'dl-lut':   ['Rec709', 'LogC3 to Rec709', 'LogC4 to Rec709', 'Show LUT', 'Aucune'],
-  'dl-obj':   ['NiSi Athena Prime', 'Cooke S4', 'Zeiss Supreme Prime', 'ARRI Signature Prime', 'Angénieux Optimo',
+  'dl-obj':   ['Sigma Classic Prime', 'NiSi Athena Prime', 'Cooke S4', 'Zeiss Supreme Prime', 'ARRI Signature Prime', 'Angénieux Optimo',
                'Canon K35', 'Panavision C Series']
 };
 const CHEVRON_BAS = ICO('<path d="M6 9l6 6 6-6"/>', 15, 2.2), CHEVRON_HAUT = ICO('<path d="M6 15l6-6 6 6"/>', 15, 2.2);
@@ -4021,7 +4061,9 @@ function htmlPerimetre(){
     ? 'Ce bilan et ses exports ne portent que sur vos saisies. Pour le journal de toute l’équipe, choisissez « Toute l’équipe ».'
     : RAP.sources.length
       ? 'Saisies réunies : ' + noms.join(', ') + '. Le bilan, le journal DIT, la fiche pour la post et les exports portent sur l’ensemble ; le projet de cet appareil n’est pas modifié.'
-      : 'Personne d’autre n’a encore saisi : le bilan ne porte que sur vos saisies. Actualiser ira revoir.';
+      : RAP.equipier.some(aSaisi)
+        ? 'Personne n’est coché dans « Rapprocher les saisies », plus bas : le bilan ne porte que sur vos saisies.'
+        : 'Personne d’autre n’a encore saisi : le bilan ne porte que sur vos saisies. Actualiser ira revoir.';
   return `<div class="bloc noprint" id="perimetre">
       <div class="choix">
         <button class="btn sm${RAP.equipe ? '' : ' p'}" onclick="voirEquipe(false)">Mes saisies</button>
@@ -4127,23 +4169,23 @@ function renderBilan(perimetre, rapprochement){
 
     <div class="bloc" id="rapprocher">
       <h3>Rapprocher les saisies</h3>
-      <div class="note">Chacun saisit de son côté ; ${RESEAU.possible ? 'le bouton ci-dessous ramène les saisies de toute l’équipe, telles qu’elles sont sur le serveur'
+      <div class="note">Chacun saisit de son côté ; ${RESEAU.possible ? 'le bouton ci-dessous ramène les saisies de l’équipe, telles qu’elles sont sur le serveur ; cochez qui réunir — une personne, plusieurs, ou « Tous », c’est-à-dire tous ceux qui ont saisi'
           : 'déposez ici les sauvegardes JSON des autres (⚙ → Données → Sauvegarde JSON)'}.
         Le rapport montre ce qui ne concorde pas, plan par plan. ${RESEAU.possible
-          ? 'Votre carnet reste le vôtre : pour tout avoir d’un coup, « Toute l’équipe », plus haut, réunit les saisies de chacun pour le bilan et les PDF.'
+          ? 'Ce choix vaut pour tout le rapport : le bilan, les trois PDF et les exports portent sur les personnes cochées. Votre carnet reste le vôtre.'
           : 'La fusion garde tout : vos saisies font foi sur les écarts, les autres comblent les vides et apportent leurs prises en plus.'}</div>
       ${rapprochement}
     </div>
 
     <div class="btns noprint" style="margin-bottom:30px">
       <button class="btn p" onclick="telechargerDIT()">DIT (PDF)</button>
-      <button class="btn p" onclick="imprimerPost()">VFX (PDF)</button>
+      <button class="btn p" onclick="telechargerVFX()">VFX (PDF)</button>
+      <button class="btn p" onclick="telechargerWrangling()">Data wrangling (PDF)</button>
     </div>
-    <div class="note noprint" style="margin:-18px 0 30px">Les deux PDF reprennent le jour choisi en haut.
-      Le DIT se télécharge tout de suite : ce qu’il y a à sauvegarder, les prises retenues pour le montage,
-      puis tous les plans avec leurs prises, et qui a saisi quoi à quelle heure. Le VFX donne, plan par
-      plan, les prises retenues, les éléments captés et les relevés matchmove ; dans sa fenêtre
-      d’impression, choisir « Enregistrer au format PDF ».</div>`;
+    <div class="note noprint" style="margin:-18px 0 30px">Les trois PDF reprennent le jour choisi en haut.
+      Data wrangling d’abord : les écarts entre les saisies de chacun, à corriger avant d’exporter les
+      deux autres. Le DIT : les prises retenues pour le montage. Le VFX : plan par plan, les réglages,
+      le matchmove, les éléments captés et toutes les prises.</div>`;
 }
 
 /* -------------------------------------- Fiche de transmission a la post */
@@ -4324,10 +4366,16 @@ function modeleDIT(j){
     };
     const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
     const ecarts = tournes.reduce((n, b) => n + b.ecarts.length + b.prises.reduce((m, t) => m + t.ecarts.length, 0), 0);
+    /* les ecarts, un par ligne : la prise (ou le plan), le champ, ce que chacun a saisi */
+    const listeEcarts = tournes.flatMap(b =>
+      b.prises.flatMap(t => t.ecarts.map(e => ({ seq: t.seq, plan: t.plan, n: t.n, clip: t.clip, retenue: t.retenue, champ: e.champ, valeurs: e.valeurs })))
+        .concat(b.ecarts.map(e => ({ seq: b.seqNum, plan: b.plan, n: '', clip: '', retenue: false, champ: e.champ, valeurs: e.valeurs }))));
+    /* les wranglers : ceux qui ont saisi des prises ce jour-la, dans l'ordre de leur premiere prise */
+    const saisis = [...new Set(T.flatMap(t => String(t.par || '').split(/\s*,\s*/)).filter(Boolean))];
     return {
-      jour, titre: p.titre || 'Projet sans titre', sauvegarde, ecarts,
-      sous: ['Journal DIT', nomJour(jour), dec, p.date, p.unit, p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler]
-              .filter(Boolean).join(' · '),
+      jour, titre: p.titre || 'Projet sans titre', sauvegarde, ecarts, listeEcarts,
+      sous: ['Journal DIT', nomJour(jour), dec, p.date, p.dit && 'DIT ' + p.dit,
+             saisis.length && 'Wrangler' + plur(saisis.length) + ' ' + saisis.join(', ')].filter(Boolean).join(' · '),
       chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
                  [T.length, 'fichier' + plur(T.length) + ' à sauvegarder'], [gardees.length, 'prises à monter'],
                  [T.filter(t => t.statut === 'OK').length, 'OK'], [T.filter(t => t.statut === 'NG').length, 'NG'],
@@ -4351,7 +4399,7 @@ const PDF_HELV = { ' ':278, '!':278, '"':355, '#':556, '$':556, '%':889, '&':667
   't':278, 'u':556, 'v':500, 'w':722, 'x':500, 'y':500, 'z':500, 'A':667, 'B':667, 'C':722, 'D':722, 'E':667, 'F':611,
   'G':778, 'H':722, 'I':278, 'J':500, 'K':667, 'L':556, 'M':833, 'N':722, 'O':778, 'P':667, 'Q':778, 'R':722, 'S':667,
   'T':611, 'U':722, 'V':667, 'W':944, 'X':667, 'Y':667, 'Z':611, '•':350, '–':556, '—':1000, '…':1000, '«':556, '»':556,
-  '°':400, '€':556, '·':278, 'œ':944, 'Œ':1000 };
+  '°':400, '€':556, '·':278, 'œ':944, 'Œ':1000, '→':584 };
 /* ce que WinAnsi place au-dela du latin-1 */
 const PDF_WINANSI = { '€':128, '‚':130, 'ƒ':131, '„':132, '…':133, '†':134, '‡':135, 'ˆ':136, '‰':137, 'Š':138, '‹':139,
   'Œ':140, 'Ž':142, '‘':145, '’':146, '“':147, '”':148, '•':149, '–':150, '—':151, '˜':152, '™':153, 'š':154, '›':155,
@@ -4391,10 +4439,11 @@ function largeurPdf(s, taille, police){
   }
   return l * taille / 1000 * (police === 'HB' ? 1.05 : 1);
 }
-/* Une chaine PDF : en WinAnsi, parentheses et barres echappees. */
+/* Une chaine PDF : en WinAnsi, parentheses et barres echappees. La fleche,
+   que WinAnsi n'a pas, s'ecrit « > ». */
 function chainePdf(s){
   let out = '';
-  for (const ch of String(s || '')){
+  for (const ch of String(s || '').replace(/→/g, '>')){
     let c = ch.charCodeAt(0);
     if (c > 255) c = PDF_WINANSI[ch] || 63;
     if (c < 32) c = 32;
@@ -4506,7 +4555,7 @@ function nouveauPdf(paysage){
 /* Un tableau : des colonnes [titre, largeur, police], des lignes { v: cellules, fond, gras }.
    Une ligne tient d'un seul tenant ; l'en-tete se repete apres un saut de page. */
 /* Une cellule est un texte, ou { t, couleur, police, puce } : `puce` pose un
-   point de couleur devant le texte. Une cellule { parts: [...] } enchaine
+   point de couleur devant le texte ; { caseVide: true } dessine une case a cocher. Une cellule { parts: [...] } enchaine
    plusieurs textes sur une ligne, chacun avec sa police et sa couleur. */
 /* `suite` : ce qu'on rappelle en tete du tableau quand il continue sur la page d'apres. */
 function tableauPdf(doc, cols, lignes, taille, suite){
@@ -4523,7 +4572,10 @@ function tableauPdf(doc, cols, lignes, taille, suite){
   entete(false);
   lignes.forEach((li, n) => {
     const cel = li.v.map(c => (c && typeof c === 'object') ? c : { t: c });
-    const lg = cols.map((c, i) => cel[i].parts ? [''] : lignesPdf(cel[i].t, c[1] - 8 - (cel[i].puce ? 9 : 0), taille, cel[i].police || c[2] || 'H'));
+    // chaque cellule est mesuree dans la police ou elle sera ecrite : en gras, un texte est plus large
+    const policeDe = (c, i) => { const b = c.police || cols[i][2] || 'H';
+      return b === 'C' || b === 'CB' ? (li.gras ? 'CB' : b) : (li.gras || b === 'HB' ? 'HB' : 'H'); };
+    const lg = cols.map((c, i) => cel[i].parts ? [''] : lignesPdf(cel[i].t, c[1] - 8 - (cel[i].puce ? 9 : 0), taille, policeDe(cel[i], i)));
     const h = Math.max(...lg.map(l => l.length)) * inter + 5;
     if (doc.y - h < PDF_M){ doc.nouvellePage(); entete(true); }
     // une rangee sur deux est teintee ; la prise retenue l'est davantage
@@ -4531,10 +4583,12 @@ function tableauPdf(doc, cols, lignes, taille, suite){
     else if (n % 2) doc.rect(x0, doc.y - h, larg, h, 'creme3');
     let x = x0 + 3;
     lg.forEach((l, i) => {
-      const c = cel[i], base = c.police || cols[i][2] || 'H';
-      const police = base === 'C' ? (li.gras ? 'CB' : 'C') : (li.gras || base === 'HB' ? 'HB' : 'H');
+      const c = cel[i], police = policeDe(c, i);
       let dx = 0;
       if (c.puce && c.t){ doc.disque(x + 2.6, doc.y - taille + 1, 2.1, c.puce); dx = 9; }
+      // une case vide, a cocher au stylo
+      if (c.caseVide){ const y0 = doc.y - taille - 3, k = taille;
+        [[0, 0, k, 0], [k, 0, k, k], [k, k, 0, k], [0, k, 0, 0]].forEach(([a, b, e, f]) => doc.ligne(x + a, y0 + b, x + e, y0 + f, .6, 'filet2')); }
       if (c.parts) c.parts.forEach(p => {
         if (!p.t) return;
         const pol = p.police || police;
@@ -4618,20 +4672,26 @@ function pdfDIT(j){
   const COLONNES = {
     n:      ['Pr.', 22, 'H', t => t.n],
     clip:   ['Clip', 68, 'C', t => t.clip || '—'],
-    ou:     ['Plan · prise', 84, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + ' · pr. ' + t.n],
+    ou:     ['Plan · prise', 84, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + (t.n ? ' · pr. ' + t.n : '')],
     statut: ['Statut', 42, 'H', t => statut(t.statut)],
     ret:    ['Montage', 54, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
     duree:  ['Durée', 34, 'H', t => t.duree],
     carte:  ['Carte', 52, 'H', t => t.carte ? { t: t.carte, police: 'HB', couleur: 'encre' } : { t: '—', couleur: 'tan' }],
     note:   ['Note', 0, 'H', t => t.note],
-    qui:    ['Saisi par', 64, 'H', saisi]
+    qui:    ['Saisi par', 64, 'H', saisi],
+    champ:  ['Écart', 64, 'HB', t => ({ t: t.champ, police: 'HB', couleur: 'ng' })],
+    saisies:['Saisies', 0, 'H', t => ({ parts: t.valeurs.flatMap(([n, v], k) =>
+              [{ t: (k ? '  ·  ' : '') + n + ' ', police: 'HB', couleur: 'encre' }, { t: v, couleur: 'ng' }]) })]
   };
-  const colonnes = (fixes, prises) => {
+  const colonnes = (fixes, prises, taille) => {
     const avec = k => prises.some(t => t[k]);
     const ids = fixes.slice(0, -1)
       .concat(avec('duree') ? ['duree'] : [],
               avec('note') ? ['note'] : [], fixes.slice(-1));
     const cols = ids.map(id => COLONNES[id].slice());
+    // « Saisi par » s'elargit quand trois personnes ont saisi la meme prise
+    const qui = cols.find(c => c[0] === 'Saisi par');
+    if (qui) qui[1] = Math.max(qui[1], ...prises.map(t => largeurPdf(initiales(t.par) + ' · ' + t.heure, taille, 'HB') + 8));
     const reste = L - cols.reduce((a, c) => a + c[1], 0);
     const note = cols.find(c => c[0] === 'Note');
     if (note) note[1] = Math.max(80, reste); else cols[cols.length - 1][1] += Math.max(0, reste);
@@ -4639,18 +4699,13 @@ function pdfDIT(j){
   };
   const rangee = (cols, t, extra) => Object.assign({ v: cols.map(c => c[3](t)) }, extra || {});
 
-  /* Deux parties, dans l'ordre ou le DIT s'en sert : ce que le montage attend,
-     puis chaque plan tourne avec ses prises ; un ecart entre deux saisies se lit
-     en rouge juste sous sa prise. Ni sauvegarde ni reste a tourner : le journal
-     dit ce qui a ete tourne, et rien d'autre. */
-  const dire = e => e.champ + ' : ' + e.valeurs.map(([n, v]) => n + ' ' + v).join(' · ');
-  const ligneEcart = (cols, texte) => ({ v: cols.map((c, k) => k === 0 ? { parts: [{ t: texte, police: 'HB', couleur: 'ng' }] } : ''), ecart: true });
+  /* Deux parties, et rien d'autre : ce que le montage attend, avec tout le
+     compte de la journee en tete ; puis, s'il y en a, les ecarts entre les
+     saisies, une ligne chacun, pour que le DIT sache quoi verifier. */
   jours.forEach((m, i) => {
     if (i) doc.nouvellePage();
-    const toutes = m.tournes.flatMap(b => b.prises);
     // la carte est toujours la : le DIT voit d'un coup d'oeil sur quelle carte est chaque prise
-    const colsM = colonnes(['clip', 'ou', 'statut', 'carte', 'qui'], m.montage);
-    const colsP = colonnes(['n', 'clip', 'statut', 'ret', 'carte', 'qui'], toutes);
+    const colsM = colonnes(['clip', 'ou', 'statut', 'carte', 'qui'], m.montage, 8.5);
     const chiffres = m.chiffres.filter(c => c[1] !== 'à tourner').concat(m.ecarts ? [[m.ecarts, 'écart' + plur(m.ecarts) + ' entre saisies']] : []);
     entetePdf(doc, m.titre, m.sous, chiffres);
 
@@ -4659,35 +4714,13 @@ function pdfDIT(j){
     if (m.montage.length) tableauPdf(doc, colsM, m.montage.map(t => rangee(colsM, t, { gras: true })), 8.5, 'Prises retenues, suite');
     else vide('Aucune prise marquée à monter pour l’instant.');
 
-    // 2. les plans tournes, chacun avec ses prises ; un ecart se lit sous sa prise
-    section('2. Plans tournés — ' + m.tournes.length + ' plan' + plur(m.tournes.length) +
-            (m.ecarts ? ' · ' + m.ecarts + ' écart' + plur(m.ecarts) + ' entre les saisies, en rouge sous la prise' : ''));
-    if (!m.tournes.length) vide('Aucun plan tourné pour l’instant.');
-    m.tournes.forEach(b => {
-      // un plan ne se coupe pas en deux pages, sauf s'il ne tient sur aucune
-      const h = 48 + (b.prises.length ? 16 + b.prises.length * 16 : 12);
-      if (doc.y - Math.min(h, 400) < PDF_M) doc.nouvellePage();
-      doc.y -= 6;
-      const titre = 'Séquence ' + (b.seqNum || '—') + ' · Plan ' + b.plan;
-      doc.texte(PDF_M, doc.y - 13, titre, { taille: 12.5, police: 'HB', couleur: 'encre' });
-      const lb = largeurPdf(b.bilan, 8, 'HB');
-      doc.texte(PDF_M + L - lb, doc.y - 12.5, b.bilan, { taille: 8, police: 'HB', couleur: 'encre' });
-      doc.y -= 17;
-      const sous = [b.titreSeq, b.lieu, b.meta].filter(Boolean).join(' · ');
-      if (sous){ doc.texte(PDF_M, doc.y - 8, lignesPdf(sous, L, 8, 'H')[0], { taille: 8, couleur: 'tan' }); doc.y -= 12; }
-      if (b.desc){ doc.texte(PDF_M, doc.y - 8, lignesPdf(b.desc, L, 8, 'H')[0], { taille: 8, couleur: 'tan' }); doc.y -= 12; }
-      doc.y -= 2;
-      if (b.prises.length){
-        const lignes = [];
-        b.prises.forEach(t => {
-          lignes.push(rangee(colsP, t, { fond: t.retenue, gras: t.retenue }));
-          t.ecarts.forEach(e => lignes.push(ligneEcart(colsP, 'ÉCART prise ' + t.n + ' — ' + dire(e))));
-        });
-        b.ecarts.forEach(e => lignes.push(ligneEcart(colsP, 'ÉCART sur le plan — ' + dire(e))));
-        tableauPdf(doc, colsP, lignes, 8, titre + ', suite');
-      } else { doc.texte(PDF_M, doc.y - 8, 'Marqué tourné, aucune prise enregistrée.', { taille: 8, couleur: 'tan' }); doc.y -= 12; }
-      doc.y -= 10;
-    });
+    // 2. les ecarts entre saisies : la prise, le champ, ce que chacun a saisi
+    if (m.listeEcarts.length){
+      const colsE = ['ou', 'clip', 'ret', 'champ', 'saisies'].map(id => COLONNES[id].slice());
+      colsE[colsE.length - 1][1] = L - colsE.reduce((a, c) => a + c[1], 0);
+      section('2. Écarts entre les saisies — ' + m.listeEcarts.length + ' à vérifier');
+      tableauPdf(doc, colsE, m.listeEcarts.map(e => rangee(colsE, e, { fond: e.retenue })), 8, 'Écarts, suite');
+    }
   });
   return doc.fichier(jours.length ? jours[0].pied : '');
 }
@@ -4696,6 +4729,217 @@ function telechargerDIT(){
   chargerLogo().then(() => avecEquipeAJour(() => {
     surLePerimetre(() => download(fname('journal-DIT' + (j === '*' ? '' : '-' + j), 'pdf'), pdfDIT(j), 'application/pdf'));
     direPerimetre('Journal DIT exporté');
+  }));
+}
+
+/* ------------------------------------------------------------ Fiche VFX */
+/* Pour le compositing : chaque plan tourne, la prise qui fait foi, et tout ce
+   qu'il faut pour la reprendre — camera, optique, releves du matchmove,
+   elements captes, et toutes les prises (des plaques s'y cachent souvent).
+   Les ecarts de saisie n'y sont pas : ils se tranchent avant, sur la fiche
+   data wrangling. Meme charte que le journal DIT, une journee par page. */
+const COMMUNS_VFX = ['Caméra', 'Format', 'Cadence', 'Exposition', 'Couleur', 'Objectif', 'Filtres', 'Diaph'];
+const planVFX = x => !!(x.vfxDesc || x.assets || x.elementsAutre || aElements(x) || (x.tags || []).some(t => t === 'VFX' || t === 'CG'));
+function modeleVFX(j){
+  const jours = j === '*' ? joursConnus().filter(x => plansDuJour(x).length) : [j];
+  const p = DB.prod, d = new Date();
+  const pied = [p.titre || '', 'fiche VFX éditée le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+                ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · ');
+  const garder = l => l.filter(x => x[1]);
+  const ligne = (...v) => v.filter(Boolean).join(' · ');
+  return jours.map(jour => {
+    const P = plansDuJour(jour), T = prisesDuJour(jour);
+    const plans = P.filter(x => prisesDe(x.id).length || x.etat === 'done' || aElements(x)).map(x => {
+      const pr = prisesDe(x.id), gardees = pr.filter(t => t.retenue);
+      // les reglages lus sur la prise qui fait foi ; sans prise retenue, la derniere bonne
+      const ref = gardees[0] || pr.filter(t => t.statut === 'OK').pop() || pr[pr.length - 1] || null;
+      const t = ref || {};
+      return {
+        seq: x.seq || '—', plan: x.plan || '—', vfx: planVFX(x),
+        tags: (x.tags || []).filter(g => g === 'VFX' || g === 'CG'),
+        // ni la description du plan ni le titre de sequence : le comp a le decoupage pour ca
+        meta: [x.lieu, x.intExt, x.momentJour, x.cadrage].filter(Boolean).join(' · '),
+        vfxDesc: x.vfxDesc || '', assets: x.assets || '',
+        elements: elementsCoches(x).map(e => e[1]).concat(x.elementsAutre ? [x.elementsAutre] : []),
+        // toutes les prises du plan ; la retenue fait foi pour les reglages
+        prises: pr.map(g => ({ n: g.n, clip: g.clip || '', carte: g.carte || '', statut: g.statut || '', retenue: !!g.retenue,
+                               duree: g.duree || '', note: g.notes || '', par: g.par || '', heure: g.heure || '' })),
+        ref: ref && !ref.retenue ? { n: ref.n, clip: ref.clip || '' } : null,
+        // tous les reglages de la prise qui fait foi : [colonne, libelle, valeur]
+        champs: ref ? [
+          ['Caméra', 'Caméra', ligne(t.cam, t.camModel)], ['Caméra', 'Format', ligne(t.codec, t.reso)],
+          ['Caméra', 'Cadence', ligne(t.fps && t.fps + ' i/s', t.shutter && 'obturateur ' + t.shutter)],
+          ['Caméra', 'Exposition', ligne(t.ei && 'EI ' + t.ei, t.nd && 'ND ' + t.nd)],
+          ['Caméra', 'Couleur', ligne(t.wb, t.lut && 'LUT ' + t.lut)],
+          ['Optique', 'Objectif', t.objectif], ['Optique', 'Focale', fleche(t.focale, t.focaleStop)], ['Optique', 'Diaph', t.diaph],
+          ['Optique', 'Point', fleche(t.focusStart, t.focusStop)], ['Optique', 'Filtres', t.filtre],
+          // la hauteur dit d'ou elle est mesuree ; la meteo n'a de sens que dehors
+          ['Matchmove', 'Hauteur', ligne(fleche(t.hauteurStart, t.hauteurStop), (t.hauteurStart || t.hauteurStop) && t.mesureDepuis && 'depuis ' + t.mesureDepuis)],
+          ['Matchmove', 'Orientation', relevesDe(t).filter(r => r[0] === 'Orientation').map(r => r[1])[0]],
+          ['Matchmove', 'Mouvement', t.mouvement], ['Matchmove', 'Support', t.support],
+          ['Matchmove', 'Météo', x.intExt !== 'INT' && (t.meteo || x.meteo)]
+        ].filter(c => c[2]) : []
+      };
+    });
+    /* Ce qui ne change pas de la journee — camera, format, objectif, filtres… —
+       s'ecrit une fois en tete ; chaque plan ne garde que ce qui lui est propre.
+       Focale, point et matchmove restent toujours sur le plan. */
+    const avecRef = plans.filter(b => b.champs.length);
+    const communs = avecRef.length < 2 ? [] : avecRef[0].champs.filter(([, k, v]) => COMMUNS_VFX.indexOf(k) >= 0 &&
+      avecRef.every(b => b.champs.some(c => c[1] === k && c[2] === v)));
+    plans.forEach(b => {
+      const propres = b.champs.filter(c => !communs.some(k => k[1] === c[1]));
+      b.groupes = ['Caméra', 'Optique', 'Matchmove'].map(g => [g, propres.filter(c => c[0] === g).map(c => [c[1], c[2]])])
+        .concat(b.elements.length ? [['Éléments captés', b.elements.map(e => ['', e])]] : []).filter(g => g[1].length);
+      delete b.champs;
+    });
+    const gardees = T.filter(t => t.retenue);
+    const cartes = [...new Set(T.map(t => (t.carte || '').trim()).filter(Boolean))];
+    const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
+    return {
+      jour, titre: p.titre || 'Projet sans titre', plans, pied, communs: communs.map(c => [c[1], c[2]]),
+      sous: ['Fiche VFX', nomJour(jour), dec, p.date, p.vfxSuper && 'Superviseur ' + p.vfxSuper, p.vfxStudio,
+             p.dit && 'DIT ' + p.dit].filter(Boolean).join(' · '),
+      chiffres: [[plans.length, 'plans tournés'], [plans.filter(b => b.vfx).length, 'plans VFX'],
+                 [gardees.length, 'prises retenues'], [plans.filter(b => b.elements.length).length, 'plans avec éléments'],
+                 [cartes.length, 'carte' + plur(cartes.length) + (cartes.length && cartes.length <= 6 ? ' · ' + cartes.join(', ') : '')]]
+    };
+  });
+}
+
+/* des colonnes de libelles et de valeurs, cote a cote (trois au moins de large) ;
+   une colonne sans libelles — les elements captes — est une simple liste */
+function grillePdf(doc, groupes, o){
+  o = o || {};
+  const L = doc.largeur - 2 * PDF_M, lc = L / Math.max(3, groupes.length), t = o.taille || 8, inter = t * 1.4;
+  const labs = groupes.map(([, kv]) => kv.some(([k]) => k) ? 58 : 0);
+  const cols = groupes.map(([, kv], i) => kv.map(([k, v]) => [k, lignesPdf(v, lc - labs[i] - 12, t, 'HB')]));
+  const titres = groupes.some(([g]) => g);
+  const h = (titres ? 13 : 4) + Math.max(...cols.map(c => c.reduce((a, [, l]) => a + l.length, 0))) * inter + 4;
+  doc.place(h);
+  if (o.fond) doc.rect(PDF_M, doc.y - h, L, h, o.fond);
+  groupes.forEach(([titre], i) => {
+    const x = PDF_M + i * lc + (o.fond ? 8 : 0);
+    if (i) doc.ligne(x - 8, doc.y - 3, x - 8, doc.y - h + 3, .4, 'filet');
+    if (titre) doc.texte(x, doc.y - 7, titre.toUpperCase(), { taille: 6.3, police: 'HB', couleur: 'tan', esp: .5 });
+    let y = doc.y - (titres ? 13 : 4);
+    cols[i].forEach(([k, l]) => {
+      if (k) doc.texte(x, y - t, k, { taille: t, couleur: 'tan' });
+      l.forEach((s, q) => doc.texte(x + labs[i], y - t - q * inter, s, { taille: t, police: 'HB', couleur: 'encre' }));
+      y -= l.length * inter;
+    });
+  });
+  doc.y -= h;
+}
+
+function pdfVFX(j){
+  const jours = modeleVFX(j), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M;
+  const initiales = par => String(par || '').split(/\s*,\s*/).filter(Boolean).map(n => n.slice(0, 2)).join(', ');
+  /* les prises d'un plan, comme dans le journal : la retenue en gras sur fond creme */
+  const saisi = t => ({ parts: [{ t: initiales(t.par), police: 'HB', couleur: 'encre' }, { t: t.par && t.heure ? ' · ' : '', couleur: 'tan' },
+                                { t: t.heure, couleur: 'tan' }] });
+  const COLS = [
+    ['Pr.', 22, 'H', t => t.n],
+    ['Clip', 66, 'C', t => t.clip || '—'],
+    ['Statut', 38, 'H', t => ({ t: t.statut, police: 'HB', couleur: t.statut === 'OK' ? 'ok' : t.statut === 'NG' ? 'ng' : 'tan' })],
+    ['Montage', 52, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
+    ['Carte', 40, 'H', t => t.carte],
+    ['Durée', 36, 'H', t => t.duree],
+    ['Note', 0, 'H', t => t.note],
+    ['Saisi par', 60, 'H', saisi]
+  ];
+  const colsPrises = l => {
+    const cols = COLS.filter(c => c[0] !== 'Durée' || l.some(t => t.duree)).map(c => c.slice());
+    const qui = cols[cols.length - 1];
+    qui[1] = Math.max(qui[1], ...l.map(t => largeurPdf(initiales(t.par) + ' · ' + t.heure, 8, 'HB') + 10));
+    cols.find(c => c[0] === 'Note')[1] = Math.max(80, L - cols.reduce((a, c) => a + c[1], 0));
+    return cols;
+  };
+  /* une ligne de texte courant, coupee a la largeur ; rend la hauteur prise */
+  const para = (s, o) => {
+    const t = o.taille || 8, lignes = lignesPdf(s, L - (o.retrait || 0), t, o.police || 'H').slice(0, o.max || 99);
+    lignes.forEach((l, k) => doc.texte(PDF_M + (o.retrait || 0), doc.y - t - k * t * 1.35, l, o));
+    doc.y -= lignes.length * t * 1.35 + 3;
+  };
+  /* une page qui continue une journee le rappelle en tete */
+  let suite = '';
+  const pageSuivante = doc.nouvellePage;
+  doc.nouvellePage = () => {
+    pageSuivante();
+    if (!suite) return;
+    doc.texte(PDF_M, doc.y - 8, suite, { taille: 7, police: 'HB', couleur: 'tan', esp: .4 });
+    doc.y -= 14;
+  };
+  jours.forEach((m, i) => {
+    suite = '';
+    if (i) doc.nouvellePage();
+    entetePdf(doc, m.titre, m.sous, m.chiffres);
+    // 1. les reglages de toute la journee, une fois
+    if (m.communs.length){
+      sectionPdf(doc, '1. Réglages communs à tous les plans du jour');
+      const n = Math.ceil(m.communs.length / 3);
+      grillePdf(doc, [0, 1, 2].map(k => ['', m.communs.slice(k * n, k * n + n)]).filter(g => g[1].length), { fond: 'creme3' });
+      doc.y -= 4;
+    }
+    sectionPdf(doc, (m.communs.length ? '2. ' : '') + 'Plan par plan — ' + m.plans.length + ' plan' + plur(m.plans.length) +
+                    ' tourné' + plur(m.plans.length) + ' · ' + m.plans.filter(b => b.vfx).length + ' VFX');
+    suite = ('Fiche VFX · ' + nomJour(m.jour) + ', suite' + (m.communs.length ? ' — réglages communs en tête de journée' : '')).toUpperCase();
+    if (!m.plans.length){ doc.texte(PDF_M, doc.y - 8, 'Aucun plan tourné pour l’instant.', { taille: 8.5, couleur: 'tan' }); doc.y -= 13; }
+    m.plans.forEach(b => {
+      // un plan ne se coupe pas en deux pages, sauf s'il ne tient sur aucune
+      const lignesGrille = Math.max(0, ...b.groupes.map(g => g[1].length));
+      const colsP = b.prises.length ? colsPrises(b.prises) : [], largNote = (colsP.find(c => c[0] === 'Note') || [0, 0])[1];
+      const hPrises = b.prises.reduce((h, t) => h + Math.max(1, lignesPdf(t.note, largNote - 8, 8, t.retenue ? 'HB' : 'H').length) * 11.2 + 5, 0);
+      doc.place(Math.min(560, 50 + (b.vfxDesc || b.assets ? 34 : 0) + (lignesGrille ? 22 + lignesGrille * 11.5 : 0) +
+                              (b.prises.length ? 24 + hPrises : 12)));
+      doc.y -= 10;
+      const titre = 'Séquence ' + b.seq + ' · Plan ' + b.plan;
+      doc.texte(PDF_M, doc.y - 13, titre, { taille: 13, police: 'HB', couleur: 'encre' });
+      // le decor et le cadre a la suite du titre ; les tags VFX / CG a droite
+      if (b.meta) doc.texte(PDF_M + largeurPdf(titre, 13, 'HB') + 10, doc.y - 12.5, b.meta, { taille: 8.5, couleur: 'tan' });
+      let xd = PDF_M + L;
+      b.tags.slice().reverse().forEach(g => {
+        const w = largeurEsp(g, 7, 'HB', .5) + 10;
+        xd -= w;
+        doc.rect(xd, doc.y - 15, w, 12, 'creme2');
+        doc.texte(xd + 5, doc.y - 11.5, g, { taille: 7, police: 'HB', couleur: 'caramel', esp: .5 });
+        xd -= 4;
+      });
+      doc.y -= 20;
+
+      // ce que le plan demande aux VFX, dans un cadre a filet caramel
+      if (b.vfxDesc || b.assets){
+        const lv = b.vfxDesc ? lignesPdf(b.vfxDesc, L - 16, 9, 'HB') : [], la = b.assets ? lignesPdf('Assets : ' + b.assets, L - 16, 8, 'H') : [];
+        const h = 8 + lv.length * 12 + la.length * 11;
+        doc.place(h);
+        doc.rect(PDF_M, doc.y - h, L, h, 'creme3');
+        doc.rect(PDF_M, doc.y - h, 2.5, h, 'caramel');
+        let y = doc.y - 4;
+        lv.forEach(l => { doc.texte(PDF_M + 10, y - 9, l, { taille: 9, police: 'HB', couleur: 'caramel' }); y -= 12; });
+        la.forEach(l => { doc.texte(PDF_M + 10, y - 8.5, l, { taille: 8, couleur: 'brun' }); y -= 11; });
+        doc.y -= h + 5;
+      }
+
+      // les reglages de la prise qui fait foi, puis toutes les prises du plan
+      if (b.ref) para('Aucune prise retenue : réglages de la prise ' + b.ref.n + (b.ref.clip ? ' (' + b.ref.clip + ')' : '') + '.',
+                      { taille: 8, couleur: 'tan' });
+      if (b.groupes.length) grillePdf(doc, b.groupes);
+      else if (b.prises.length) para('Aucun réglage propre à ce plan.', { taille: 8, couleur: 'tan' });
+      if (b.prises.length){
+        doc.y -= 6;
+        tableauPdf(doc, colsP, b.prises.map(t => ({ v: colsP.map(c => c[3](t)), fond: t.retenue, gras: t.retenue })), 8, titre + ', suite');
+      } else para('Aucune prise enregistrée.', { taille: 8, couleur: 'tan' });
+      doc.y -= 6;
+      doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .5, 'filet');
+    });
+  });
+  return doc.fichier(jours.length ? jours[0].pied : '');
+}
+function telechargerVFX(){
+  const j = fJourR;
+  chargerLogo().then(() => avecEquipeAJour(() => {
+    surLePerimetre(() => download(fname('fiche-VFX' + (j === '*' ? '' : '-' + j), 'pdf'), pdfVFX(j), 'application/pdf'));
+    direPerimetre('Fiche VFX exportée');
   }));
 }
 
@@ -4708,23 +4952,43 @@ function recupererEspaces(){
     const autres = (rep.espaces || []).filter(e => e.espace !== monEspace());
     return Promise.all(autres.map(e =>
       fetch(API('etat') + '?espace=' + encodeURIComponent(e.espace), { cache:'no-store' })
-        .then(r => r.json()).then(x => ({ nom: e.nom || e.espace, db: x.db, quand: e.quand }))));
+        .then(r => r.json()).then(x => ({ espace: e.espace, nom: e.nom || e.espace, db: x.db, quand: e.quand }))));
   }).then(liste => {
-    let n = 0;
+    RAP.equipier = [];
     liste.forEach(d => {
       if (!d.db) return;
-      try{
-        const db = normaliser(d.db);
-        RAP.sources = RAP.sources.filter(s => s.nom !== d.nom);
-        RAP.sources.push({ nom: d.nom, db, quand: d.quand });
-        n++;
-      }catch(e){}
+      try{ RAP.equipier.push({ espace: d.espace, nom: d.nom, db: normaliser(d.db), quand: d.quand }); }catch(e){}
     });
+    appliquerChoix();
     RAP.chargement = false;
     renderReport();
-    toast(n ? n + ' saisie' + plur(n) + ' récupérée' + plur(n) : 'Personne d’autre n’a encore saisi');
+    const n = RAP.sources.filter(s => s.espace).length;
+    toast(n ? n + ' personne' + plur(n) + ' réunie' + plur(n)
+            : RAP.equipier.some(aSaisi) ? 'Personne n’est choisi' : 'Personne d’autre n’a encore saisi');
     return n;
   }).catch(() => { RAP.chargement = false; prevenir('Impossible de lire les saisies de l’équipe.', { detail:'Serveur injoignable. Réessayez.' }); return 0; });
+}
+/* Qui reunir : une personne, plusieurs, ou toutes. Le choix est garde sur
+   l'appareil (UI.choixEquipe : les espaces coches ; absent, c'est « Tous »).
+   « Tous », ce sont ceux qui ont saisi au moins une prise : un prenom choisi
+   un jour par erreur, sans rien dedans, ne vient pas encombrer le rapport,
+   mais reste propose, grise, et se coche comme les autres. Le choix vaut pour
+   tout le rapport : bilan, rapprochement, PDF et exports. */
+const aSaisi = e => e.db.prises.length > 0;
+const choisi = e => UI.choixEquipe ? UI.choixEquipe.indexOf(e.espace) >= 0 : aSaisi(e);
+function appliquerChoix(){
+  RAP.sources = RAP.sources.filter(s => !s.espace).concat(RAP.equipier.filter(choisi));
+}
+function basculerChoix(espace){
+  const actuels = RAP.equipier.filter(choisi).map(e => e.espace);
+  const i = actuels.indexOf(espace);
+  if (i >= 0) actuels.splice(i, 1); else actuels.push(espace);
+  UI.choixEquipe = actuels; RAP.equipe = true; UI.equipe = true; ecrireUI();
+  appliquerChoix(); renderReport();
+}
+function choisirTous(){
+  UI.choixEquipe = null; RAP.equipe = true; UI.equipe = true; ecrireUI();
+  appliquerChoix(); renderReport();
 }
 const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + ' ' + hhmm(d); };
 
@@ -4735,7 +4999,7 @@ const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deux
    ce qu'un seul a saisi (une prise chez un seul). La fusion garde tout : la
    premiere source, ce navigateur, fait foi sur les ecarts ; les autres
    comblent les vides et apportent leurs prises en plus. */
-const RAP = { sources: [], equipe: !!UI.equipe, tente: false, chargement: false };   // equipe : le bilan porte sur toute l'equipe
+const RAP = { sources: [], equipier: [], equipe: !!UI.equipe, tente: false, chargement: false };   // equipe : le bilan porte sur l'equipe ; equipier : chacun des autres sur le serveur, choisi ou non
 const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
   ['tcIn', 'TC in'], ['tcOut', 'TC out'], ['duree', 'Durée'], ['heure', 'Heure'], ['notes', 'Note'], ['focale', 'Focale'],
   ['focaleStop', 'Focale arrivée'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
@@ -4891,9 +5155,16 @@ function resumeRap(t){
 }
 function htmlRapprochement(){
   const s = sourcesRap();
-  const puces = s.map((x, i) => `<span class="rsource${x.ici ? ' ici' : ''}">${esc(x.nom)}${
-    x.ici ? ' <em>ce navigateur</em>' : x.quand ? ` <em>${esc(quandDepot(x.quand))}</em>` : ''}${
-    x.ici ? '' : ` <button type="button" onclick="retirerSource(${i - 1})" aria-label="Retirer ${esc(x.nom)}">&times;</button>`}</span>`).join('');
+  // ce navigateur, puis chacun des autres sur le serveur, a cocher ; les
+  // sauvegardes deposees a la main se retirent d'une croix
+  const tous = !UI.choixEquipe;
+  const equipier = RAP.equipier.length ? `<button type="button" class="rsource coche${tous ? ' on' : ''}" onclick="choisirTous()" aria-pressed="${tous}">Tous</button>` +
+    RAP.equipier.map(e => { const on = choisi(e), n = e.db.prises.length;
+      return `<button type="button" class="rsource coche${on ? ' on' : ''}${n ? '' : ' vide'}" onclick="basculerChoix('${esc(e.espace)}')" aria-pressed="${on}">${
+        esc(e.nom)} <em>${n ? n + ' prise' + plur(n) : 'rien saisi'}</em></button>`; }).join('') : '';
+  const puces = `<span class="rsource ici">${esc(s[0].nom)} <em>ce navigateur</em></span>` + equipier +
+    RAP.sources.map((x, i) => x.espace ? '' : `<span class="rsource">${esc(x.nom)}${x.quand ? ` <em>${esc(quandDepot(x.quand))}</em>` : ''}
+      <button type="button" onclick="retirerSource(${i})" aria-label="Retirer ${esc(x.nom)}">&times;</button></span>`).join('');
   let corps = '';
   if (s.length > 1){
     const r = rapprocher(s);
@@ -4902,11 +5173,11 @@ function htmlRapprochement(){
           b.planSeul ? ` <em>seulement chez ${esc(b.planSeul.join(', '))}</em>` : ''}
           ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('')
         : '<div class="alert g"><i>&#10003;</i><div>Rien ne se contredit : les saisies concordent.</div></div>') +
-      `<div class="btns" style="margin-top:14px">
-        ${RESEAU.possible ? '' : `<button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button>`}
-        <button class="btn" onclick="telechargerRapprochement()">Écarts (PDF)</button></div>`;
+      (RESEAU.possible ? '' : `<div class="btns" style="margin-top:14px">
+        <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button></div>`);
   }
-  return `<div class="rsources">${puces}${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="reunirEquipe()">Récupérer les saisies de l’équipe</button>` : ''}
+  return `<div class="rsources">${puces}${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="reunirEquipe()">${
+      RAP.equipier.length ? 'Actualiser' : 'Récupérer les saisies de l’équipe'}</button>` : ''}
     <button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
 }
 function garderFusion(){
@@ -4917,40 +5188,124 @@ function garderFusion(){
   .then(oui => {
     if (!oui) return;
     DB = normaliser(fusionRap(s));
-    dernierPlan = null; chrono = null; RAP.sources = [];
+    dernierPlan = null; chrono = null; RAP.sources = []; RAP.equipier = [];
     marquerCarnet();   // ce carnet porte les saisies des autres, c'est voulu : ne rien demander
     operer({ op:'remplacer', db: DB });
     flush(); renderAll(); toast('Projet fusionné');
   });
 }
-/* le journal des ecarts en PDF, pour le relire ou le faire circuler */
-function pdfRapprochement(){
-  const s = sourcesRap(), r = rapprocher(s), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M, p = DB.prod, d = new Date();
-  entetePdf(doc, p.titre || 'Projet sans titre', 'Rapprochement des saisies · ' + s.map(x => x.nom).join(', '),
-            [[r.total.ecarts, 'écart' + plur(r.total.ecarts)], [r.total.complements, 'complément' + plur(r.total.complements)],
-             [r.total.seuls, 'prise' + plur(r.total.seuls) + ' chez un seul'], [s.length, 'saisies rapprochées']]);
-  const ligne = (texte, couleur, gras) => {
-    lignesPdf(texte, L - 12, 8.5, gras ? 'HB' : 'H').forEach(l => {
-      doc.place(13); doc.texte(PDF_M + 12, doc.y - 9, l, { taille: 8.5, police: gras ? 'HB' : 'H', couleur }); doc.y -= 12.5;
+/* ------------------------------------------------ Fiche data wrangling */
+/* Les ecarts entre saisies, a trancher avant d'exporter le journal DIT et la
+   fiche VFX : une journee par page, un ecart par ligne, une colonne par
+   personne et une case a cocher quand la saisie fautive est corrigee dans
+   l'app. Puis les prises qu'une seule personne a notees : un oubli chez les
+   autres, ou une prise en trop. Ce qu'un seul a rempli n'y est pas : la
+   fusion le reprend d'elle-meme, ce n'est pas un desaccord. */
+function modeleWrangling(j){
+  const s = sourcesRap(), r = rapprocher(s), p = DB.prod, d = new Date();
+  // le plan et les prises de chacun, par cle : pour le jour, le clip et « retenue »
+  const planDe = new Map(), prisesDe_ = new Map();
+  s.forEach(src => {
+    const parId = new Map(src.db.plans.map(x => [x.id, x]));
+    src.db.plans.forEach(x => { if (!planDe.has(clePlan(x))) planDe.set(clePlan(x), x); });
+    src.db.prises.forEach(t => {
+      const x = parId.get(t.planId); if (!x) return;
+      const k = clePlan(x) + '|' + String(t.n || '');
+      prisesDe_.set(k, (prisesDe_.get(k) || []).concat([Object.assign({ qui: src.nom }, t)]));
     });
-  };
-  const bloc = (qui, c) => {
-    c.ecarts.forEach(e => ligne((qui ? qui + ' · ' : '') + e.champ + ' : ' + e.valeurs.map(([n, v]) => n + ' ' + v).join(' · '), 'encre', true));
-    c.complements.forEach(e => ligne((qui ? qui + ' · ' : '') + e.champ + ' « ' + e.valeur + ' » seulement chez ' + e.par.join(', '), 'tan'));
-    if (c.seuls) ligne(qui + ' seulement chez ' + c.seuls.join(', '), 'tan');
-  };
-  if (!r.plans.length){ sectionPdf(doc, 'Rien ne se contredit'); ligne('Les saisies concordent.', 'tan'); }
-  r.plans.forEach(b => {
-    sectionPdf(doc, 'Séquence ' + (b.seq || '—') + ' · Plan ' + (b.plan || '—') + (b.planSeul ? ' · seulement chez ' + b.planSeul.join(', ') : ''));
-    bloc('', b.plan_);
-    b.prises.forEach(t => bloc('Prise ' + t.n, t));
-    doc.y -= 4;
   });
-  return doc.fichier([p.titre || '', 'rapprochement édité le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
-                      ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · '));
+  const jourDe = b => (planDe.get((b.seq || '') + '|' + (b.plan || '')) || {}).jour || '';
+  // ce qui compte, comme pour la fusion : ni l'heure, ni les timecodes, ni la duree, ni les notes (elles s'ajoutent)
+  const compte = e => CHAMPS_ECART.some(c => c[1] === e.champ) || ['État', 'Éléments captés', 'Autre élément', 'Description VFX'].indexOf(e.champ) >= 0;
+  const lesPrises = (b, n) => prisesDe_.get((b.seq || '') + '|' + (b.plan || '') + '|' + n) || [];
+  const jours = j === '*' ? joursConnus().filter(x => r.plans.some(b => jourDe(b) === x)) : [j];
+  const pied = [p.titre || '', 'fiche data wrangling éditée le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+                ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · ');
+  return (jours.length ? jours : ['*']).map(jour => {
+    const P = r.plans.filter(b => jour === '*' || jourDe(b) === jour);
+    const ecarts = [], seuls = [];
+    P.forEach(b => {
+      b.plan_.ecarts.filter(compte).forEach(e => ecarts.push({ seq: b.seq, plan: b.plan, n: '', clip: '', retenue: false, champ: e.champ, valeurs: e.valeurs }));
+      b.prises.forEach(t => {
+        const l = lesPrises(b, t.n), clip = (l.find(x => x.clip) || {}).clip || '', retenue = l.some(x => x.retenue);
+        t.ecarts.filter(compte).forEach(e => ecarts.push({ seq: b.seq, plan: b.plan, n: t.n, clip, retenue, champ: e.champ, valeurs: e.valeurs }));
+      });
+      // les prises d'un plan notees par une seule personne, regroupees par personne
+      const parQui = new Map();
+      b.prises.filter(t => t.seuls && t.seuls.length === 1 && s.length > 1).forEach(t => {
+        const qui = t.seuls[0], x = lesPrises(b, t.n)[0] || {};
+        parQui.set(qui, (parQui.get(qui) || []).concat([{ n: t.n, clip: x.clip || '', statut: x.statut || '', retenue: !!x.retenue }]));
+      });
+      parQui.forEach((l, qui) => seuls.push({ seq: b.seq, plan: b.plan, qui, prises: l }));
+    });
+    // les personnes du jour : celles qui ont une prise sur un plan de ce jour-la, dans l'ordre des saisies
+    const noms = s.filter(src => src.db.prises.some(t => {
+      const x = src.db.plans.find(y => y.id === t.planId);
+      return x && (jour === '*' || x.jour === jour);
+    })).map(src => src.nom);
+    return {
+      jour, titre: p.titre || 'Projet sans titre', pied, ecarts, seuls, noms,
+      sous: ['Data wrangling', jour === '*' ? 'Tout le tournage' : nomJour(jour), noms.length ? 'Saisies de ' + noms.join(', ') : '']
+              .filter(Boolean).join(' · '),
+      chiffres: [[ecarts.length, 'écart' + plur(ecarts.length) + ' à trancher'],
+                 [ecarts.filter(e => e.retenue).length, 'sur des prises retenues'],
+                 [seuls.reduce((a, x) => a + x.prises.length, 0), 'prises notées par une seule personne'],
+                 [noms.length, 'personne' + plur(noms.length) + ' ont saisi']]
+    };
+  });
 }
-function telechargerRapprochement(){
-  chargerLogo().then(() => download(fname('rapprochement', 'pdf'), pdfRapprochement(), 'application/pdf'));
+function pdfWrangling(j){
+  const jours = modeleWrangling(j), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M;
+  const ou = x => [x.seq, x.plan].filter(Boolean).join(' · ') + (x.n ? ' · pr. ' + x.n : '');
+  const vide = t => { doc.texte(PDF_M, doc.y - 8, t, { taille: 8.5, couleur: 'tan' }); doc.y -= 13; };
+  jours.forEach((m, i) => {
+    if (i) doc.nouvellePage();
+    entetePdf(doc, m.titre, m.sous, m.chiffres);
+    doc.y -= 4;
+    doc.texte(PDF_M, doc.y - 8, 'À trancher avant d’exporter le journal DIT et la fiche VFX : corriger la saisie fautive dans l’app, puis cocher la case.',
+              { taille: 8, couleur: 'tan' });
+    doc.y -= 12;
+
+    // 1. les ecarts : une colonne par personne, sa valeur en rouge
+    sectionPdf(doc, '1. Écarts à trancher — ' + m.ecarts.length);
+    if (m.ecarts.length){
+      const noms = m.noms.filter(n => m.ecarts.some(e => e.valeurs.some(([q]) => q === n)));
+      const fixes = [['', 18, 'H', () => ({ caseVide: true })], ['Plan · prise', 82, 'H', e => ou(e)], ['Clip', 66, 'C', e => e.clip || '—'],
+                     ['Montage', 52, 'H', e => e.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
+                     ['Champ', 62, 'HB', e => ({ t: e.champ, police: 'HB', couleur: 'encre' })]];
+      const reste = (L - fixes.reduce((a, c) => a + c[1], 0)) / Math.max(1, noms.length);
+      const cols = fixes.concat(noms.map(n => [n, reste, 'H', e => {
+        const v = (e.valeurs.find(([q]) => q === n) || [])[1];
+        return v ? { t: v, police: 'HB', couleur: 'ng' } : { t: '—', couleur: 'tan' };
+      }]));
+      tableauPdf(doc, cols, m.ecarts.map(e => ({ v: cols.map(c => c[3](e)), fond: e.retenue })), 8.5, 'Écarts à trancher, suite');
+    } else vide('Aucun écart : les saisies de la journée concordent.');
+
+    // 2. les prises qu'une seule personne a notees
+    sectionPdf(doc, '2. Prises notées par une seule personne — ' + m.seuls.reduce((a, x) => a + x.prises.length, 0));
+    if (m.seuls.length){
+      const cols = [['', 18, 'H', () => ({ caseVide: true })], ['Plan', 62, 'H', x => ou(x)],
+                    ['Seulement chez', 84, 'HB', x => ({ t: x.qui, police: 'HB', couleur: 'encre' })],
+                    ['Prises', 0, 'H', x => x.prises.map(t => 'pr. ' + t.n + (t.clip ? ' ' + t.clip : '') + (t.statut ? ' ' + t.statut : '') +
+                                                               (t.retenue ? ' (retenue)' : '')).join(' · ')]];
+      cols[3][1] = L - cols.reduce((a, c) => a + c[1], 0);
+      tableauPdf(doc, cols, m.seuls.map(x => ({ v: cols.map(c => c[3](x)), fond: x.prises.some(t => t.retenue) })), 8.5, 'Prises notées par une seule personne, suite');
+      doc.y -= 4;
+      doc.texte(PDF_M, doc.y - 8, 'Un oubli chez les autres, ou une prise en trop : à vérifier avec la personne.', { taille: 7.5, couleur: 'tan' });
+      doc.y -= 12;
+    } else vide('Toutes les prises ont été notées par au moins deux personnes.');
+  });
+  return doc.fichier(jours.length ? jours[0].pied : '');
+}
+/* On va chercher les saisies de chacun avant de fabriquer la fiche : le
+   rapprochement porte toujours sur tout ce que l'equipe a saisi. */
+function telechargerWrangling(){
+  const j = fJourR;
+  chargerLogo().then(() => (RESEAU.possible ? recupererEspaces() : Promise.resolve())).then(() => {
+    if (sourcesRap().length < 2) return prevenir('Personne d’autre n’a encore saisi.', { detail:'La fiche data wrangling compare les saisies de plusieurs personnes.' });
+    download(fname('data-wrangling' + (j === '*' ? '' : '-' + j), 'pdf'), pdfWrangling(j), 'application/pdf');
+    toast('Fiche data wrangling exportée : ' + sourcesRap().map(x => x.nom).join(', '));
+  });
 }
 
 /* ------------------------------------------------- Journal DIT par mail */
@@ -5018,8 +5373,7 @@ function envoyerJournalMail(auto, creneau){
       nom: fname('journal-DIT' + (jour === '*' ? '' : '-' + jour), 'pdf'),
       sujet: titre + ' — journal DIT ' + quoi + ' · ' + dateFr + ' ' + hhmm(d),
       texte: 'Journal DIT ' + quoi + ', édité le ' + dateFr + ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : '') + '.\n' +
-             'En pièce jointe : ce qu’il y a à sauvegarder, les prises retenues pour le montage, ' +
-             'les plans tournés et ce qui reste à tourner.\n\nEnvoyé par Wrangle.',
+             'En pièce jointe : les prises retenues pour le montage et les écarts entre les saisies.\n\nEnvoyé par Wrangle.',
       pdf: base64De(pdfDIT(jour)) })))
     .then(r => r.json())
     .then(rep => {

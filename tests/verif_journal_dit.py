@@ -19,7 +19,7 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     ids = banc.js('DB.plans.slice(0, 4).map(p => p.id)')
     banc.js("""
       ajouterPrise(%s, false, { clip:'A001C001', carte:'A001', statut:'NG', notes:'faux départ', par:'Alice', heure:'09:12' });
-      ajouterPrise(%s, false, { clip:'A001C002', carte:'A001', statut:'OK', retenue:true, tcIn:'10:22:31:04',
+      ajouterPrise(%s, false, { clip:'A001C002', carte:'A001', statut:'OK', retenue:true, notes:'la bonne (enfin)', tcIn:'10:22:31:04',
                                 tcOut:'10:23:02:12', duree:'31s', par:'Bob', heure:'09:15' });
       ajouterPrise(%s, false, { clip:'A001C003', carte:'A001', statut:'OK', par:'Alice', heure:'09:40' });
       patch('plan', %s, { etat:'drop' });
@@ -50,6 +50,10 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('une journee seule : un seul journal', len(banc.js('modeleDIT(%s)' % json.dumps(j))), 1)
 
     essais.verifier('le projet en titre, le journal en sous-titre', [m['titre'], m['sous'].startswith('Journal DIT · Jour 1')], ['Foresight', True])
+    essais.verifier('les wranglers : ceux qui ont saisi, sans « Main unit »', [m['sous'].endswith(' · Wranglers Alice, Bob'), 'Main unit' in m['sous']], [True, False])
+    banc.js("Object.assign(DB.prod, { unit: 'Main unit', dit: 'Alex', wrangler: 'Quelqu un' })")
+    essais.verifier('le DIT regle dans la fiche Journee ; ni l equipe ni le wrangler regle',
+                    banc.js("modeleDIT(%s)[0].sous" % json.dumps(j)).split(' · ')[-2:], ['DIT Alex', 'Wranglers Alice, Bob'])
 
     # -- le PDF : un vrai fichier, lisible sans compression, avec le logo trace
     banc.js('chargerLogo()'); time.sleep(0.8)
@@ -64,18 +68,16 @@ with Banc(8792, 9392, taille=(1100, 900)) as banc:
     essais.verifier('les objets sont numerotes d un trait',
                     [int(x) for x in re.findall(r'(?m)^(\d+) 0 obj', pdf)] == list(range(1, pdf.count(' 0 obj') + 1)), True)
     essais.verifier('le clip retenu s y lit', '(A001C002)' in pdf, True)
-    essais.verifier('les accents passent en WinAnsi', '(S\xe9quence 06 \xb7 Plan' in pdf and '2. PLANS TOURN\xc9S' in pdf, True)
-    essais.verifier('plus de sauvegarde ni de reste a tourner : le montage, puis les plans tournes',
-                    ['SAUVEGARDER :' not in pdf, 'RESTE \xc0 TOURNER' not in pdf, 0 < pdf.find('1. POUR LE MONTAGE') < pdf.find('2. PLANS TOURN')], [True, True, True])
-    essais.verifier('le montage vient avant les plans tournes', 0 < pdf.find('(A001C002)') < pdf.find('2. PLANS TOURN'), True)
-    essais.verifier('la prise retenue est en gras sur fond creme', '/CB 8 Tf' in pdf and ' re f' in pdf, True)
+    essais.verifier('les accents passent en WinAnsi', '(PLANS TOURN\xc9S' in pdf and '1. POUR LE MONTAGE \x97 1 PRISE RETENUE' in pdf, True)
+    essais.verifier('le montage, et rien d autre : ni sauvegarde, ni reste a tourner, ni plans tournes',
+                    ['SAUVEGARDER :' not in pdf, 'RESTE \xc0 TOURNER' not in pdf, '2. PLANS TOURN' not in pdf, '(A001C001)' in pdf], [True, True, True, False])
+    essais.verifier('sans ecart, pas de partie ecarts', '\xc9CARTS ENTRE LES SAISIES' in pdf, False)
+    essais.verifier('les prises retenues sont en gras', '/CB 8.5 Tf' in pdf, True)
     essais.verifier('la page est droite', '/MediaBox [0 0 595.28 841.89]' in pdf, True)
     essais.verifier('pas de timecode au journal : personne ne le saisit au plateau', '(10:22:31:04)' in pdf or '(TC IN' in pdf, False)
-    essais.verifier('la journee 2, sans prise, le dit', 'Aucun plan tourn\xe9 pour l' in pdf, True)
-    essais.verifier('le plan annonce son bilan', '(2 prises \xb7 1 OK \xb7 1 NG \xb7 1 retenue)' in pdf, True)
-    essais.verifier('qui a saisi (deux lettres), et quand, dans le PDF', bool(re.search(r'/HB 8 Tf[^\n]*\(Bo\) Tj', pdf)) and '(09:15)' in pdf, True)
-    essais.verifier('les notes a parentheses sont echappees', banc.js(
-        "Array.from(pdfDIT('*'), b => String.fromCharCode(b)).join('').indexOf('(faux d\\xe9part)') > 0"), True)
+    essais.verifier('la journee 2, sans prise, le dit', 'Aucune prise marqu\xe9e \xe0 monter' in pdf, True)
+    essais.verifier('qui a saisi (deux lettres), et quand, dans le PDF', bool(re.search(r'/HB 8.5 Tf[^\n]*\(Bo\) Tj', pdf)) and '(09:15)' in pdf, True)
+    essais.verifier('les notes a parentheses sont echappees', '(la bonne \\(enfin\\))' in pdf, True)
 
     # -- le bouton du rapport telecharge
     banc.js("""document.querySelector('nav button[data-v="report"]').click()"""); time.sleep(0.4)

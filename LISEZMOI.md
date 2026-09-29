@@ -12,13 +12,19 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
   profil décide de ce qu'on voit : ses prises à soi, rien d'autre, tant qu'on ne change pas de profil
   (⚙ → Journée, ou l'écran d'entrée). Ses saisies sont rangées sur le serveur sous son prénom et le
   suivent sur tous ses appareils. Hors réseau, on continue à saisir, tout repart au retour (la
-  pastille dit « hors ligne »).
+  pastille dit « hors ligne ») — même si l'appli a été fermée entre-temps : ce qui n'est pas
+  parti est gardé sur le téléphone et envoyé à la réouverture.
 - **Le DIT réunit tout d'un bouton** : Rapport → « Toute l'équipe ». La page va chercher les saisies
   de chacun sur le serveur et les réunit à celles d'ici : le bilan, le journal DIT (PDF), la fiche
   pour la post (PDF), la feuille de montage, l'ALE et le JSON portent alors sur l'ensemble, et les
   fichiers exportés s'appellent `…_equipe`. Le projet de cet appareil n'est pas modifié ;
   « Actualiser » va revoir ; « Mes saisies » revient à son propre bilan. Il n'y a pas de rôle DIT :
   c'est le bouton qui fait le DIT.
+- **Qui réunir** : sous « Rapprocher les saisies », chaque personne présente sur le serveur a sa
+  pastille, avec son nombre de prises ; on coche une personne, plusieurs, ou « Tous ». « Tous », ce
+  sont ceux qui ont saisi au moins une prise : un prénom choisi un jour sans rien saisir reste
+  proposé, grisé, sans encombrer le rapport. Le choix vaut pour tout le rapport (bilan, les trois
+  PDF, exports) et reste sur l'appareil.
 - **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
   (par une personne, jour par jour) et le serveur la reporte chez tout le monde ; chacun garde sa
   copie de ce qu'il note dessus (états, éléments captés). Quand deux personnes ont noté des choses
@@ -156,9 +162,10 @@ Ensuite `sudo wrangle-maj` met à jour et relance. Le journal par mail y marche 
 deux personnes ont rempli la même prise (même plan, même numéro), elle ne fait qu'une ligne, aux
 deux noms : celles d'ici font foi, les autres comblent les vides, les notes s'ajoutent. Ce qui
 compte et diffère — statut, à monter, focale, clip, carte, réglages… — est noté comme **écart** sur
-la prise, et le journal DIT (PDF) le signale en rouge juste sous la prise, avec un compte en tête de
+la prise, et le journal DIT (PDF) le liste, une ligne par écart, avec un compte en tête de
 journée. Le journal tient en deux parties, une journée par page : les prises retenues pour le
-montage, puis chaque plan tourné avec ses prises. L'heure, les timecodes et la durée ne comptent pas : un chrono oublié ou quelques secondes
+montage, sous l'en-tête qui compte la journée (le DIT réglé dans la fiche Journée ; les wranglers,
+ceux qui ont saisi), puis les écarts entre les saisies, s'il y en a. L'heure, les timecodes et la durée ne comptent pas : un chrono oublié ou quelques secondes
 d'écart ne sont pas un désaccord. Pour voir ces écarts en détail, ou pour en faire son projet :
 « Rapprocher les saisies », juste en dessous dans le Rapport.
 
@@ -169,8 +176,14 @@ plan : un **écart** quand deux personnes ont écrit des valeurs différentes (s
 timecodes, notes, réglages…), un **complément** quand une seule a rempli un champ, une **prise chez
 un seul** quand une seule l'a saisie. « Garder la fusion comme projet » garde tout : les saisies de
 ce navigateur font foi sur les écarts, les autres comblent les vides et apportent leurs prises en
-plus. « Écarts (PDF) » sort le même rapport en PDF. Chaque fichier est nommé d'après qui a saisi ses
-prises.
+plus. Chaque fichier est nommé d'après qui a saisi ses prises.
+
+**La fiche data wrangling** (Rapport → **Data wrangling (PDF)**, à côté du DIT et du VFX) est faite pour trancher avant d'exporter le journal DIT et la fiche VFX. Elle va
+chercher les saisies de chacun, puis donne une journée par page : les **écarts à trancher**, un par
+ligne, avec une colonne par personne et une case à cocher quand la saisie fautive est corrigée dans
+l'app ; puis les **prises notées par une seule personne** (un oubli chez les autres, ou une prise en
+trop). Comme pour la fusion, seuls comptent les désaccords réels : ni l'heure, ni les timecodes, ni la
+durée, ni les notes (elles s'ajoutent), ni ce qu'une seule personne a rempli.
 
 **Chacun ses saisies.** Partout, la copie locale du projet est rangée sous le prénom choisi à
 l'entrée : passer de Simon à Romain sur le même téléphone (à l'entrée, ou ⚙ → Journée) change de
@@ -286,24 +299,29 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 
 ## Ce qu'on transmet à la post
 
-Onglet **Rapport** → **Fiche pour la post (PDF)**. Elle reprend le jour choisi dans la rangée du
-haut (`Tout` = tout le tournage) et se lit en trois temps :
+Onglet **Rapport** → **VFX (PDF)**. La fiche est écrite par la page, dans la charte du journal
+DIT, et se télécharge directement. Elle reprend le jour choisi dans la rangée du haut (`Tout` = une
+journée par page) : en tête, le compte de la journée (plans tournés, plans VFX, prises retenues,
+plans avec éléments, cartes) ; puis chaque plan tourné, avec ce qu'il faut au compositing :
 
-1. **Pour le montage** : la liste des prises ★, dans l'ordre du tournage — clip, séquence, plan,
-   durée, carte, note.
-2. **Pour les VFX**, plan par plan : ce que le DT demandait, la prise qui
-   fait foi avec son optique et ses réglages image, les **éléments captés** (HDRI, charte, boule
-   chrome, fond vert…) et les **relevés matchmove** (point de map, hauteur, mesuré depuis, pan /
-   tilt / roll). Les autres prises sont rappelées en une ligne, pour retrouver un plan B.
-3. **Médias** : sur quelle carte sont les rushes, combien de copies, checksum vérifié ou non.
+- ce que le DT demande (description VFX, assets, tags VFX / CG), dans un encadré ;
+- les réglages de la prise qui fait foi : ce que tous les plans du jour partagent (caméra, format,
+  cadence, exposition, couleur, objectif, diaph, filtres) s'écrit une fois en tête de journée ; chaque
+  plan garde le sien — **optique** (focale, point…), **matchmove** (hauteur et d'où elle est mesurée,
+  pan / tilt / roll, mouvement, support, météo en extérieur) et **éléments captés** (HDRI, charte,
+  boule chrome, cleanplate, lidar…) ;
+- toutes les prises du plan, comme dans le journal : la retenue en gras sur fond crème, le statut en
+  couleur, la carte, la durée, la note (une plaque ou un plan B s'y cache souvent) et qui l'a saisie.
+
+Les écarts de saisie n'y figurent pas : ils se tranchent avant, sur la fiche data wrangling.
 
 Les plans sans prise ni élément ne sont pas imprimés : la fiche ne contient que ce qui a été tourné.
-Dans la fenêtre d'impression, choisir « Enregistrer au format PDF ».
+Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal.
 - Port différent : `py serveur.py 9000`.
 
 ## Vérifier que rien n'est cassé
 
-Dix-huit scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Vingt et un scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -317,14 +335,17 @@ py tests/verif_barre_jours.py      la rangée des jours, calée sur trois sur t�
 py tests/verif_enchainement.py     les lignes de la fiche s'ouvrent l'une après l'autre
 py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
-py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues pour le montage, puis plans tournés avec leurs prises et leurs écarts
+py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues pour le montage, puis écarts entre saisies
+py tests/verif_fiche_vfx.py        la fiche VFX en PDF : par jour, chaque plan tourné avec ce qu'il faut au compositing
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_plans_par_jour.py   préparer jour par jour : nombre de plans, jour de plus ou de moins, distribution cochée
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
 py tests/verif_mail.py             le journal DIT par mail, à la main et à l'heure dite
-py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, et les fusionner
+py tests/verif_rapprochement.py    rapprocher les saisies de plusieurs personnes, la fiche data wrangling, et la fusion
 py tests/verif_personnes.py         chacun ses saisies sur le site, et à qui revient le carnet d'avant
 py tests/verif_interroger.py       la page en mode php, comme chez l'hébergeur : elle interroge au lieu d'écouter
+py tests/verif_coupure.py          saisir en zone blanche, fermer l'appli avant le retour du réseau : rien ne se perd
+py tests/verif_choix_equipe.py     le DIT réunit une personne, plusieurs ou toutes ; « Tous », ce sont ceux qui ont saisi
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un

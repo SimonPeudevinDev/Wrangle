@@ -1146,6 +1146,13 @@ select option{background:var(--surface);color:var(--txt)}
 .rsource em{font-style:normal;font-weight:500;font-size:12px;color:var(--dim2)}
 .rsource button{width:28px;height:28px;border:none;border-radius:50%;background:none;color:var(--dim);font-size:18px;cursor:pointer}
 .rsource button:hover{background:var(--surface2);color:var(--txt)}
+/* qui reunir : une capsule par personne, cochee (pleine) ou non (en creux) */
+.rsource.coche{padding:0 14px;background:none;color:var(--dim);cursor:pointer}
+.rsource.coche::before{content:'';width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor;box-sizing:border-box}
+.rsource.coche.on{background:var(--surface2);border-color:var(--txt);color:var(--txt)}
+.rsource.coche.on::before{background:var(--acc);border-color:var(--acc)}
+.rsource.coche.vide:not(.on){opacity:.55}
+.rsource.coche:hover{border-color:var(--dim)}
 .rresume{margin:12px 0 4px;font:700 14px var(--font-titre);color:var(--txt)}
 .rplan{margin-top:14px}
 .rplan > b{display:block;font:700 15px var(--font-titre);color:var(--txt);padding-bottom:4px;border-bottom:1px solid var(--line)}
