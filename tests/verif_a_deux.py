@@ -76,9 +76,16 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
                     banc.js("(() => { const c = document.querySelector('.champ[data-champ=\"meteo\"]'); return [c.className.split(' ').find(x => x.indexOf('a2-') === 0), c.querySelector('.a2-pts').textContent]; })()"),
                     ['a2-autre', 'RSoleil'])
 
+    # dans la liste : la meme prise chez Romain, un autre clip -> l'ecart s'y lit
+    banc.js("patch('prise', openId, { clip: 'A_0001C009' }); renderList()")
+    ligne = lambda: banc.js("(() => { const r = document.querySelector('.prise[data-id=\"' + openId + '\"] .accord'); return r ? r.className + ' | ' + r.textContent.replace(/\\s+/g, ' ').trim() : ''; })()")
+    essais.verifier('la liste : un autre clip chez Romain, signale', ligne(), 'accord non | ⚠ RA_0001C001')
+    banc.js("patch('prise', openId, { clip: '' }); renderList()")
     # Simon confirme : il reprend le clip, marque NG, touche Raccord
     banc.js("document.querySelector('#sbody [data-k=\"clip\"]').closest('.spec, .clip').nextElementSibling.querySelector('button').click()")
     essais.verifier('un appui reprend son clip', [banc.js("prise(openId).clip"), spec(banc, 'clip')], ['A_0001C001', 'a2-accord'])
+    banc.js("renderList()")
+    essais.verifier('la liste : meme clip chez Romain, coche verte', ligne(), 'accord oui | ✓ R')
     banc.js("marquer(openId, 'NG'); noteRapide('Raccord')")
     essais.verifier('NG choisi a deux : entoure de vert', bulle(banc, '#seg-statut button[data-st="NG"]'), 'a2-deux R')
     essais.verifier('Raccord choisi a deux', bulle(banc, '.chips-notes button[data-n="Raccord"]'), 'a2-deux R')

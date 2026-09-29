@@ -964,6 +964,7 @@ function majMarqueurs(){
 
 function setNom(v){
   UI.nom = (v || '').trim(); ecrireUI();
+  if (typeof majOnglets === 'function') try{ majOnglets(); }catch(e){}
   majPresence(); envoyerPresence();
 }
 /* Un bouton par personne, celui en cours en or. Sert a l'arrivee comme dans
@@ -1158,9 +1159,15 @@ function propagerLocal(p){
   prisesDe(p.id).forEach(t => { t.jour = p.jour || ''; t.plan = p.plan; t.seq = p.seq; });
 }
 
+/* Une sequence sur deux chiffres : « 3 » devient « 03 », comme le decoupage. */
+const seqPropre = v => /^\s*\d\s*$/.test(String(v || '')) ? '0' + String(v).trim() : String(v || '').trim();
 function live(el){
   const id = el.dataset.o, k = el.dataset.k, kind = kindDe(id);
   if (!kind) return;
+  // la sequence se complete quand on quitte le champ (pas a chaque frappe : « 1 » puis « 12 »)
+  if (kind === 'plan' && k === 'seq' && !(typeof event !== 'undefined' && event && event.type === 'input')){
+    const v = seqPropre(el.value); if (v !== el.value) el.value = v;
+  }
   patch(kind, id, { [k]: el.type === 'checkbox' ? el.checked : el.value });
   if (kind === 'prise' && k === 'clip') carteSuitClip(cible(id));
   if (kind === 'plan' && ['jour', 'plan', 'seq'].indexOf(k) >= 0) propager(cible(id));
@@ -1258,14 +1265,18 @@ const LISTES = {
   'dl-lieu':    () => fusion(DB.prod.decors || [], connus(DB.plans, 'lieu')),
   'dl-cadrage': () => fusion(['Très gros plan', 'Gros plan', 'Poitrine', 'Épaules', 'Taille', 'Américain', 'Moyen',
                               'Italien', 'Large', 'Ensemble'], connus(DB.plans, 'cadrage')),
-  'dl-seq':     () => connus(DB.plans, 'seq'),
+  // les sequences sur deux chiffres (« 3 » est « 03 »), dans l'ordre
+  'dl-seq':     () => fusion([], connus(DB.plans, 'seq').map(seqPropre))
+                        .sort((a, b) => (parseInt(a, 10) || 999) - (parseInt(b, 10) || 999) || a.localeCompare(b)),
   'dl-camname': () => fusion(['CAM-A', 'CAM-B', 'CAM-C'], connus(DB.prises, 'cam')),
   'dl-focale': () => focales(),
   'dl-jour': () => {
-    const l = new Set(['J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7'].concat(joursConnus().filter(Boolean)));
+    // les cinq jours du tournage, et ceux que le decoupage connait deja ; CG s'il sert
+    const connusJ = joursConnus().filter(Boolean);
+    const l = new Set(['J1', 'J2', 'J3', 'J4', 'J5'].concat(connusJ));
     l.delete('CG');
     const num = j => parseInt(numJour(j), 10) || 0;
-    return [...l].sort((a, b) => num(a) - num(b)).concat(['CG']);
+    return [...l].sort((a, b) => num(a) - num(b)).concat(connusJ.indexOf('CG') >= 0 ? ['CG'] : []);
   },
   'dl-cam':   ['ARRI Alexa 35', 'ARRI Alexa Mini LF', 'ARRI Alexa 265', 'RED V-Raptor', 'RED Komodo',
                'Sony Venice 2', 'Sony Burano', 'Blackmagic URSA 17K'],
@@ -2010,6 +2021,32 @@ function blocPlan(p, seulementRetenues, qui){
   </div>`;
 }
 
+/* Sur la meme prise (meme plan, meme numero), les autres ont-ils note le meme
+   clip et la meme focale ? [{ a, diff }] : diff dit ce qui differe chez lui. */
+function accordPrise(t){
+  try{ if (!AUTRES.liste.length || t.pasSaisie) return null; }catch(e){ return null; }
+  const p = plan(t.planId); if (!p) return null;
+  const avis = [];
+  AUTRES.liste.forEach(a => {
+    const q = a.db.plans.find(x => x.id === p.id) || ((p.seq || p.plan) ? a.db.plans.find(x => clePlan(x) === clePlan(p)) : null);
+    const x = q && a.db.prises.find(y => y.planId === q.id && y.n === t.n && !y.pasSaisie);
+    if (!x) return;
+    const diff = [];
+    if (valRap(x.clip) && valRap(t.clip) && !memeVal(x.clip, t.clip)) diff.push(valRap(x.clip));
+    const fa = fleche(t.focale, t.focaleStop), fb = fleche(x.focale, x.focaleStop);
+    if (fa && fb && !memeVal(fa, fb)) diff.push(fb);
+    if (valRap(x.clip) || fb) avis.push({ a, diff });
+  });
+  return avis.length ? avis : null;
+}
+function htmlAccord(t){
+  const acc = accordPrise(t); if (!acc) return '';
+  const pt = a => `<i class="a2-pt" style="--c:${a.coul}">${esc(initiale(a.nom))}</i>`;
+  const non = acc.filter(v => v.diff.length), oui = acc.filter(v => !v.diff.length);
+  return (non.length ? `<span class="accord non" title="Pas la même saisie : ${esc(non.map(v => v.a.nom + ' ' + v.diff.join(' · ')).join(', '))}">&#9888; ${
+            non.map(v => pt(v.a) + esc(v.diff.join(' · '))).join(' ')}</span>` : '') +
+         (oui.length ? `<span class="accord oui" title="Même clip et même focale chez ${esc(oui.map(v => v.a.nom).join(', '))}">&#10003; ${oui.map(v => pt(v.a)).join('')}</span>` : '');
+}
 function ligne(t, sansActions){
   const map = fleche(t.focusStart, t.focusStop), haut = fleche(t.hauteurStart, t.hauteurStop);
   const ptr = [fleche(t.panStart, t.panStop), fleche(t.tiltStart, t.tiltStop), fleche(t.rollStart, t.rollStop)].filter(Boolean).join(' / ');
@@ -2025,7 +2062,8 @@ function ligne(t, sansActions){
     t.tcIn && `<span>${esc(t.tcIn)}</span>`,
     t.heure && `<span>${esc(t.heure)}</span>`,
     enCours ? `<span style="color:var(--ng);font-weight:700">&#9679; ça tourne</span>` : t.duree && `<span>${esc(t.duree)}</span>`,
-    t.par && `<span>${esc(t.par)}</span>`
+    t.par && `<span>${esc(t.par)}</span>`,
+    htmlAccord(t)
   ].filter(Boolean).join('');
   const rel = [
     map && `<span><b>Map</b> ${esc(map)}</span>`,
@@ -5328,11 +5366,11 @@ function majAutres(force){
       const la = new Set(autres.map(e => e.espace));
       AUTRES.liste = [...garde.values()].filter(a => la.has(a.espace)).sort((a, b) => a.nom.localeCompare(b.nom));
       AUTRES.liste.forEach(a => { a.coul = couleurDe(a.nom); });
-      if (changes.length) decorerFiche();
+      if (changes.length){ decorerFiche(); if (view === 'shoot') renderListBientot(); }
     });
   }).catch(() => {}).then(() => { AUTRES.encours = false; });
 }
-setInterval(() => { if (ficheA2() && !document.hidden) majAutres(); }, 15000);
+setInterval(() => { if ((ficheA2() || view === 'shoot') && !document.hidden) majAutres(); }, 15000);
 
 /* La meme prise, ou le meme plan, chez chacun des autres : [{ a, o }]. */
 function jumelles(o){
@@ -6270,6 +6308,15 @@ function reprendrePlace(){
 }
 
 /* Le logo ramene en haut de la page Tournage, d'ou que l'on vienne. */
+/* La preparation (le decoupage) n'est qu'a Simon : les autres ne voient pas
+   l'onglet, et y etaient-ils, ils reviennent au tournage. */
+const PREPARATEURS = ['Simon'];
+function prepare(){ return PREPARATEURS.indexOf((UI.nom || '').trim()) >= 0; }
+function majOnglets(){
+  const b = document.querySelector('nav button[data-v="prep"]');
+  if (b) b.hidden = !prepare();
+  if (view === 'prep' && !prepare()){ const t = document.querySelector('nav button[data-v="shoot"]'); if (t && t.onclick) t.click(); }
+}
 function accueil(){
   if (openType) closeSheet();
   if (view !== 'shoot') document.querySelector('nav button[data-v="shoot"]').click();
@@ -6277,6 +6324,7 @@ function accueil(){
 }
 
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  if (b.dataset.v === 'prep' && !prepare()) return;
   // le menu reste atteignable une fiche ouverte : on la referme d abord
   if (openType) closeSheet();
   view = b.dataset.v;
@@ -6286,6 +6334,8 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   majFab();
   window.scrollTo(0, 0);
 });
+majOnglets();
+setTimeout(() => majAutres(true), 1500);   // le controle des prises, dans la liste, sans attendre quinze secondes
 
 document.addEventListener('keydown', e => {
   if (DLG.resoudre) return;   // une boite de dialogue a la main

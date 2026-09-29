@@ -73,6 +73,26 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + p0.id + '\"] .viser').click()"); time.sleep(0.3)
     essais.verifier('l anneau du Moteur fait de meme', [deplie('p0.id'), deplie('p1.id')], [[True, False], [False, True]])
 
+    # -- les sequences sur deux chiffres, les cinq jours du tournage
+    banc.js("patch('plan', p1.id, { seq: '3' })")
+    essais.verifier('le menu des sequences : deux chiffres, dans l ordre',
+                    banc.js("(() => { const l = LISTES['dl-seq'](); return [l.indexOf('3'), l.indexOf('03') >= 0, l.slice().sort((a, b) => parseInt(a, 10) - parseInt(b, 10)).join() === l.join()]; })()"),
+                    [-1, True, True])
+    banc.js("openPlan(p1.id)"); time.sleep(0.2)
+    banc.js("(() => { const i = document.querySelector('#sbody input[data-k=\"seq\"]'); i.value = '4'; i.dispatchEvent(new Event('change')); })()")
+    essais.verifier('une sequence tapee « 4 » devient « 04 » en quittant le champ', banc.js("plan(p1.id).seq"), '04')
+    banc.js("closeSheet()"); time.sleep(0.6)
+    essais.verifier('le menu des jours : J1 a J5, sans J6, J7 ni CG', banc.js("LISTES['dl-jour']()"), ['J1', 'J2', 'J3', 'J4', 'J5'])
+
+    # -- la preparation est a Simon
+    essais.verifier('Simon voit la preparation', banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), False)
+    banc.js("document.querySelector('nav button[data-v=\"prep\"]').click(); changerDePersonne('Romain')"); time.sleep(0.4)
+    essais.verifier('Romain ne la voit pas, et revient au tournage', [banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), banc.js("view")], [True, 'shoot'])
+    banc.js("document.querySelector('nav button[data-v=\"prep\"]').click()")
+    essais.verifier('et ne peut pas y aller', banc.js("view"), 'shoot')
+    banc.js("changerDePersonne('Simon')"); time.sleep(0.4)
+    essais.verifier('Simon la retrouve', banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), False)
+
     # -- le bouton Retour du navigateur ferme la fiche, il ne quitte pas le site
     etat = lambda: banc.js("[openType, openType === 'plan' ? plan(openId).plan : openType === 'prise' ? prise(openId).n : null, $('sheet').classList.contains('on')]")
     retour = lambda: (banc.js("history.back()"), time.sleep(0.6))
