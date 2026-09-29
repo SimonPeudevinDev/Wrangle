@@ -1401,3 +1401,5 @@ select option{background:var(--surface);color:var(--txt)}
 .lead-ligne{display:flex;align-items:flex-start;gap:14px}
 .lead-ligne .lead{flex:1;min-width:0}
 .lead-ligne .viser{flex:none;margin-top:2px}
+.spec > .a2-pt.moi{font-style:normal;margin-left:-4px}
+.spec.auto > .a2-pt.moi{margin-top:15px}

@@ -39,8 +39,9 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
 - **La fiche d'un plan** : les éléments captés sont à chacun. On coche les siens sans toucher à
   ceux des autres ; ceux de Romain portent son rond, contour à sa couleur, et une case cochée à
   deux s'entoure de vert, comme dans la fiche d'une prise. La description VFX, la note et
-  « Autre » sont aussi à chacun : on écrit la sienne, celles des autres (et celle du découpage) se
-  lisent dessous, en italique, avec leur prénom. La liste, les filtres, les PDF et les exports
+  « Autre » sont aussi à chacun : on écrit la sienne (son rond à côté), celles des autres se lisent
+  dessous, en italique, avec leur rond et leur prénom ; un texte d'avant, sans auteur connu (celui
+  du découpage, ou tapé quand le champ était commun), s'y lit sous « Commun ». La liste, les filtres, les PDF et les exports
   prennent les éléments et les textes de tous. Une pastille dit qui a changé l'état. L'anneau du
   Moteur est à côté de la description.
 - **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
@@ -303,8 +304,10 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 - **La focale qui n'est pas celle du plan** : le plan prévoit 14 mm, la prise dit 35 mm — la
   ligne de la prise la montre en orange avec ⚠, et la fiche le dit en tête. « 14 » vaut « 14 mm » ;
   un zoom prévu (« 18-35 ») accepte tout ce qui tombe dedans ; départ et arrivée comptent.
-- **Prise non saisie** (à côté de « Supprimer la prise »), quand on n'a pas eu le temps de la
-  noter : la prise reste, marquée « non saisie » dans la liste. Elle sort de « À compléter », et quand l'équipe est réunie ce sont
+- **Saisie différée** (à côté de « Supprimer la prise ») : on la remplira plus tard. La prise
+  reste dans « À compléter », marquée « saisie différée », tant qu'on ne retire pas la marque.
+- **Prise non saisie**, quand on n'a pas eu le temps de la noter (les deux marques s'excluent) :
+  la prise reste, marquée « non saisie » dans la liste. Elle sort de « À compléter », et quand l'équipe est réunie ce sont
   les saisies des autres qui comptent pour elle : ce que la page a repris de la prise d'avant ne
   fait pas de faux écart. Un second appui retire la marque.
 - Dans la fiche : résultat (OK, NG, Série, Faux départ, Pick-up), note libre et mots rapides
@@ -317,7 +320,9 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 
 - ☼ / ☾ en haut : thème clair pour le plein soleil, sombre pour la nuit.
 - La pastille en haut porte le prénom de qui saisit sur cet appareil ; son point dit l'état du
-  réseau, et elle ajoute « hors ligne » ou « local » quand il n'y a pas de serveur au bout.
+  réseau et le nombre de personnes connectées (une personne sur deux onglets, ou un navigateur
+  relancé, ne compte qu'une fois ; un onglet fermé sort aussitôt de la liste), et elle ajoute
+  « hors ligne » ou « local » quand il n'y a pas de serveur au bout.
 - Rapport → « Toute l'équipe » / « Mes saisies » : sur quoi portent le bilan et tous les exports.
 - Le logo : `public/wrangle-logo.svg` (signe + mot), avec son original en image à côté.
   Le signe est aussi dans la page, en haut à gauche et en icône d'onglet. Il prend la couleur

@@ -343,6 +343,23 @@ function noter_presence($client, $nom = null, $actif = null) {
     }
 }
 
+function oublier_presence($client) {
+    preparer();
+    $v = fopen(DONNEES . '/presence.verrou', 'c');
+    if ($v) {
+        flock($v, LOCK_EX);
+    }
+    $liste = lire_json(DONNEES . '/presence.json');
+    if (is_object($liste) && isset($liste->$client)) {
+        unset($liste->$client);
+        ecrire_json(DONNEES . '/presence.json', $liste);
+    }
+    if ($v) {
+        flock($v, LOCK_UN);
+        fclose($v);
+    }
+}
+
 function liste_presence() {
     $liste = lire_json(DONNEES . '/presence.json');
     $sortie = [];

@@ -911,9 +911,18 @@ function couleurDe(nom){
 }
 const autres = () => RESEAU.presence.filter(x => x.client !== CLIENT);
 
+/* Les connectes, une ligne par personne : un meme prenom sur deux onglets ou
+   deux appareils (ou un navigateur relance, dont l'ancien onglet n'a pas encore
+   expire) ne compte qu'une fois ; cet appareil d'abord. */
+function personnesConnectees(){
+  const vus = new Map();
+  RESEAU.presence.slice().sort((a, b) => (a.client === CLIENT ? 0 : 1) - (b.client === CLIENT ? 0 : 1))
+    .forEach(x => { const k = x.nom ? 'n:' + x.nom : 'c:' + x.client; if (!vus.has(k)) vus.set(k, x); });
+  return [...vus.values()];
+}
 function majPresence(){
   const b = $('pres');
-  const n = RESEAU.presence.length;
+  const gens = personnesConnectees(), n = gens.length;
   b.className = 'pill ' + RESEAU.etat;
   // le prenom de qui saisit sur cet appareil ; le point dit l'etat du reseau,
   // et porte le nombre de connectes quand ils sont plusieurs : la pastille
@@ -926,7 +935,7 @@ function majPresence(){
   const point = b.querySelector('i');
   if (RESEAU.etat === 'ok' && n > 1) point.dataset.n = n; else delete point.dataset.n;
   b.title = RESEAU.etat === 'local' ? 'Page ouverte en local : un seul appareil'
-          : (n > 1 ? n + ' en ligne : ' : '') + RESEAU.presence.map(x => x.nom || 'sans nom').join(', ');
+          : (n > 1 ? n + ' en ligne : ' : '') + gens.map(x => x.nom || 'sans nom').join(', ');
   majMarqueurs();
   const e = $('equipe');
   if (e) e.innerHTML = htmlListeEquipe();
@@ -935,12 +944,16 @@ function majPresence(){
 /* L'initiale de la personne qui a une prise ou un plan ouvert, dans la liste. */
 function majMarqueurs(){
   document.querySelectorAll('.qui').forEach(e => e.remove());
+  const poses = new Set();
   autres().forEach(x => {
     // actif : « prise:id » ou « plan:id » (la fiche ouverte), puis « ;vise:id » (le plan du Moteur)
     const f = (x.actif || '').split(';').find(a => a && a.indexOf('vise:') !== 0);
     if (!f) return;
     const i = f.indexOf(':');
     const type = f.slice(0, i), id = f.slice(i + 1);
+    const cle = (x.nom || x.client) + '|' + f;
+    if (poses.has(cle)) return;   // la meme personne sur deux onglets : un seul rond
+    poses.add(cle);
     const sel = type === 'prise' ? `.prise[data-id="${id}"] .trow` : `.plan[data-id="${id}"] .pnum`;
     document.querySelectorAll(sel).forEach(el => el.insertAdjacentHTML('beforeend',
       `<span class="qui" title="${esc(x.nom || 'appareil')}">${esc(initiale(x.nom))}</span>`));
@@ -1690,8 +1703,9 @@ function razFiltres(){
    plan dit tourne sans aucune prise n'a laisse aucune trace : ce sont les deux
    trous qu'il faut boucher avant de rendre la journee. Ce sont aussi les
    alertes du rapport, atteignables ici directement depuis la liste. */
-// une prise marquee « non saisie » n'est pas a completer : ce sont les saisies des autres qui comptent
-const priseIncomplete = t => !t.pasSaisie && (!String(t.clip || '').trim() || !String(t.carte || '').trim());
+// une prise marquee « non saisie » n'est pas a completer : ce sont les saisies des autres qui comptent ;
+// une « saisie differee » l'est toujours, jusqu'a ce qu'on retire la marque
+const priseIncomplete = t => !t.pasSaisie && (!!t.differee || !String(t.clip || '').trim() || !String(t.carte || '').trim());
 /* La focale de la prise n'est pas celle que le plan prevoit : rend la focale
    prevue, sinon ''. « 14 mm » et « 14 » sont la meme ; un zoom prevu
    (« 18-35 zoom ») accepte tout ce qui tombe dedans. Depart et arrivee comptent. */
@@ -2008,7 +2022,7 @@ function ligne(t, sansActions){
         ${t.notes ? `<span class="tnote" title="${esc(t.notes)}">${esc(t.notes)}</span>` : ''}
         ${t.statut && t.statut !== 'OK' && t.statut !== 'NG'
           ? `<span class="tstat">${esc(t.statut)}</span>` : ''}
-        ${t.pasSaisie ? `<span class="tstat pas">non saisie</span>` : ''}
+        ${t.pasSaisie ? `<span class="tstat pas">non saisie</span>` : t.differee ? `<span class="tstat pas">saisie différée</span>` : ''}
       </div>
       ${meta || rel ? `<div class="tmeta">${meta}${rel}</div>` : ''}
     </div>
@@ -2480,6 +2494,7 @@ function openPrise(id, y){
     <div class="sec btns">
       <button class="btn d" onclick="delPrise()">Supprimer la prise</button>
       <button class="btn${t.pasSaisie ? ' on' : ''}" id="btn-pas-saisie" onclick="basculerPasSaisie()">${t.pasSaisie ? '&#10003; ' : ''}Prise non saisie</button>
+      <button class="btn${t.differee ? ' on' : ''}" id="btn-differee" onclick="basculerDifferee()">${t.differee ? '&#10003; ' : ''}Saisie différée</button>
     </div>`;
 
   const f = $('sfoot');
@@ -2523,11 +2538,24 @@ function majBoutonsPrise(){
    pas de faux ecart. Un second appui retire la marque. */
 function basculerPasSaisie(){
   const t = prise(openId); if (!t) return;
-  patch('prise', t.id, { pasSaisie: !t.pasSaisie });
-  const b = $('btn-pas-saisie');
-  if (b){ b.classList.toggle('on', !!t.pasSaisie); b.innerHTML = (t.pasSaisie ? '&#10003; ' : '') + 'Prise non saisie'; }
-  majAlertesPrise(); renderList();
+  patch('prise', t.id, t.pasSaisie ? { pasSaisie: false } : { pasSaisie: true, differee: false });
+  majMarquesPrise();
   toast(t.pasSaisie ? 'Prise ' + t.n + ' non saisie : les saisies des autres font foi' : 'Prise ' + t.n + ' : marque retirée');
+}
+/* « Saisie differee » : on la remplira plus tard. Elle reste dans « A completer »,
+   marquee, tant qu'on ne retire pas la marque. Les deux marques s'excluent. */
+function basculerDifferee(){
+  const t = prise(openId); if (!t) return;
+  patch('prise', t.id, t.differee ? { differee: false } : { differee: true, pasSaisie: false });
+  majMarquesPrise();
+  toast(t.differee ? 'Prise ' + t.n + ' : saisie différée, à compléter' : 'Prise ' + t.n + ' : marque retirée');
+}
+function majMarquesPrise(){
+  const t = prise(openId); if (!t) return;
+  [['btn-pas-saisie', t.pasSaisie, 'Prise non saisie'], ['btn-differee', t.differee, 'Saisie différée']].forEach(([id, on, txt]) => {
+    const b = $(id); if (b){ b.classList.toggle('on', !!on); b.innerHTML = (on ? '&#10003; ' : '') + txt; }
+  });
+  majAlertesPrise(); renderList();
 }
 /* En tete de la fiche d'une prise : ce qui cloche, a voir sans ouvrir les sections. */
 function majAlertesPrise(){
@@ -2536,7 +2564,8 @@ function majAlertesPrise(){
   const f = focaleHorsPlan(t);
   b.innerHTML = [
     f && `<div class="alert o fiche-alerte"><i>&#9888;</i><div>Focale <b>${esc(fleche(t.focale, t.focaleStop))}</b> : le plan prévoit <b>${esc(f)}</b>.</div></div>`,
-    t.pasSaisie && `<div class="alert fiche-alerte"><i></i><div>Prise non saisie : les saisies des autres font foi.</div></div>`
+    t.pasSaisie && `<div class="alert fiche-alerte"><i></i><div>Prise non saisie : les saisies des autres font foi.</div></div>`,
+    t.differee && `<div class="alert fiche-alerte"><i></i><div>Saisie différée : à compléter plus tard.</div></div>`
   ].filter(Boolean).join('');
 }
 
@@ -4035,19 +4064,22 @@ function renderPicker(){
 function htmlListeEquipe(){
   if (RESEAU.etat === 'coupe')
     return `<div class="alert o"><i>&#9888;</i><div>Serveur injoignable. Les saisies sont gardées sur cet appareil et repartiront dès le retour du réseau.</div></div>`;
-  const l = RESEAU.presence.slice().sort((a, b) =>
+  const l = personnesConnectees().sort((a, b) =>
     (a.client === CLIENT ? 0 : 1) - (b.client === CLIENT ? 0 : 1) || (a.nom || '').localeCompare(b.nom || ''));
   if (!l.length) return '<div style="color:var(--dim2);font-size:13.5px">Connexion en cours…</div>';
   return l.map(x => `<div class="ligne"><span><b style="color:var(--txt)">${esc(x.nom || 'Sans nom')}</b>` +
     (x.client === CLIENT ? ' <small>(cet appareil)</small>' : '') + ouEst(x) + `</span></div>`).join('');
 }
 function ouEst(x){
-  if (!x.actif) return '';
-  const i = x.actif.indexOf(':');
-  const type = x.actif.slice(0, i), o = cible(x.actif.slice(i + 1));
-  if (!o) return '';
-  const txt = type === 'prise' ? 'prise ' + o.n + ' · plan ' + (o.plan || '?') : 'plan ' + (o.plan || 'sans n°');
-  return ` <small>— sur ${esc(txt)}</small>`;
+  const parts = (x.actif || '').split(';').filter(Boolean);
+  const f = parts.find(a => a.indexOf('vise:') !== 0), v = parts.find(a => a.indexOf('vise:') === 0);
+  if (f){
+    const i = f.indexOf(':');
+    const type = f.slice(0, i), o = cible(f.slice(i + 1));
+    if (o) return ` <small>— sur ${esc(type === 'prise' ? 'prise ' + o.n + ' · plan ' + (o.plan || '?') : 'plan ' + (o.plan || 'sans n°'))}</small>`;
+  }
+  const pv = v && plan(v.slice(5));
+  return pv ? ` <small>— Moteur sur le plan ${esc(pv.plan || 'sans n°')}</small>` : '';
 }
 function htmlEquipe(){
   const moi = `<div class="specs"><div class="spec col"><label>Votre nom</label>
@@ -5317,9 +5349,16 @@ function decorerPlan(sb, p){
     .map(n => ({ a: personneA2(n), el: elementsDe(p, n, false) }));
   sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!mes[b.dataset.el], autres.filter(x => x.el[b.dataset.el]).map(x => x.a)));
   sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
+  // mon texte a moi porte aussi mon rond, des qu'il est rempli : on voit qui a ecrit quoi
+  sb.querySelectorAll('.spec > .a2-pt.moi').forEach(x => x.remove());
+  if (UI.nom) sb.querySelectorAll('.spec [data-k*="@"]').forEach(el => {
+    const lab = el.closest('.spec').querySelector('label');
+    if (lab && String(el.value || '').trim())
+      lab.insertAdjacentHTML('afterend', `<i class="a2-pt moi" style="--c:${couleurDe(UI.nom.trim())}" title="${esc(UI.nom)}">${esc(initiale(UI.nom))}</i>`);
+  });
   sb.querySelectorAll('.textes-autres[data-texte]').forEach(d => {
     d.innerHTML = textesDe(p, d.dataset.texte).filter(([n]) => n !== (UI.nom || '').trim()).map(([n, v]) =>
-      `<div class="texte-autre">${n ? pastilleA2(personneA2(n)) : ''}<b>${esc(n || 'Découpage')}</b><i>${esc(v)}</i></div>`).join('');
+      `<div class="texte-autre">${n ? pastilleA2(personneA2(n)) : ''}<b>${esc(n || 'Commun')}</b><i>${esc(v)}</i></div>`).join('');
   });
 }
 /* Reprendre ce qu'un autre a note : sa valeur devient la mienne (une note s'ajoute a la mienne). */
@@ -6180,7 +6219,13 @@ function envoyerBalise(){
     navigator.sendBeacon(API('ops'), new Blob([corpsOps(RESEAU.attente)], { type:'text/plain' }));
   }catch(e){}
 }
-window.addEventListener('pagehide', () => { flush(); envoyerBalise(); });
+window.addEventListener('pagehide', e => {
+  flush(); envoyerBalise();
+  // l'onglet part (et ne reste pas en memoire pour un retour arriere) : il sort des connectes
+  if (!e.persisted && RESEAU.possible && navigator.sendBeacon)
+    try{ navigator.sendBeacon(API('presence'), new Blob([JSON.stringify({ client: CLIENT, quitte: true, espace: monEspace() || undefined })], { type:'text/plain' })); }catch(x){}
+});
+window.addEventListener('pageshow', e => { if (e.persisted) envoyerPresence(); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden){ flush(); envoyerBalise(); }
   else if (RESEAU.possible && RESEAU.src && RESEAU.src.readyState === 2) connecter();

@@ -118,6 +118,10 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
                     banc.js("[...document.querySelectorAll('.textes-autres[data-texte=\"notesClient\"] .texte-autre')].map(d => d.querySelector('b').textContent + ' | ' + d.querySelector('i').textContent)"),
                     ['Romain | Reflets sur la vitre'])
     banc.js("const n = document.querySelector('#sbody textarea[data-k=\"notesClient@Simon\"]'); n.value = 'Pluie annoncee'; live(n)")
+    essais.verifier('ma note porte mon rond, a cote de l etiquette',
+                    banc.js("(document.querySelector('#sbody textarea[data-k=\"notesClient@Simon\"]').closest('.spec').querySelector('.a2-pt.moi') || {}).textContent"), 'S')
+    essais.verifier('ma description, vide : pas de rond',
+                    banc.js("!!document.querySelector('#sbody [data-k=\"vfxDesc@Simon\"]').closest('.spec').querySelector('.a2-pt.moi')"), False)
     essais.verifier('la mienne est rangee sous mon prenom, la sienne reste', [banc.js("plan(openId)['notesClient@Simon']"), banc.js("plan(openId)['notesClient@Romain']")], ['Pluie annoncee', 'Reflets sur la vitre'])
     essais.verifier('les PDF et exports lisent les deux', banc.js("texteDe(plan(openId), 'notesClient')"), 'Romain : Reflets sur la vitre · Simon : Pluie annoncee')
 
@@ -138,6 +142,16 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     api('presence.php', {'client': 'romain1', 'nom': 'Romain', 'actif': '', 'espace': 'romain'})
     essais.verifier('Romain passe a autre chose : son rond s en va',
                     patienter(lambda: banc.js("document.querySelectorAll('.viser .a2-pt').length") == 0, tours=40), True)
+
+    # -- la presence : Romain sur deux onglets (un navigateur relance) ne compte qu'une fois
+    for c in ('romain-ancien', 'romain-neuf'):
+        api('presence.php', {'client': c, 'nom': 'Romain', 'actif': 'plan:' + pid2, 'espace': 'romain'})
+    essais.verifier('deux onglets de Romain : un seul rond sur le plan',
+                    patienter(lambda: banc.js("document.querySelectorAll('.plan[data-id=\"%s\"] .pnum .qui').length" % pid2) == 1, tours=40), True)
+    essais.verifier('et le compte dit des personnes, pas des onglets', banc.js("personnesConnectees().map(x => x.nom).filter(Boolean).sort()"), ['Romain', 'Simon'])
+    api('presence.php', {'client': 'romain-ancien', 'quitte': True, 'espace': 'romain'})
+    essais.verifier('un onglet ferme sort de la liste tout de suite',
+                    [x['client'] for x in api('depuis.php?rev=0&client=x&espace=simon')['presence'] if x['client'].startswith('romain-')], ['romain-neuf'])
 
     import base64
     banc.js("openPrise(DB.prises.find(t => t.n === 1).id)"); time.sleep(0.5)

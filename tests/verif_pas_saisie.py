@@ -46,9 +46,18 @@ with Banc(8787, 9387, taille=(420, 900)) as banc:
 
     # -- prise non saisie
     essais.verifier('avant : la prise 2, sans clip ni carte, est a completer', banc.js("priseIncomplete(t2)"), True)
-    essais.verifier('le bouton est a cote de Supprimer la prise',
+    essais.verifier('les boutons sont a cote de Supprimer la prise',
                     banc.js("[...document.querySelectorAll('#sbody .sec.btns button')].map(b => b.textContent.trim())"),
-                    ['Supprimer la prise', 'Prise non saisie'])
+                    ['Supprimer la prise', 'Prise non saisie', 'Saisie différée'])
+    # -- saisie differee : a completer plus tard, meme avec un clip et une carte
+    banc.js("openPrise(t1.id); basculerDifferee()")
+    essais.verifier('saisie differee : marquee, et a completer malgre son clip et sa carte',
+                    [banc.js("t1.differee"), banc.js("priseIncomplete(t1)"), banc.js("$('btn-differee').textContent.trim()"),
+                     banc.js("(document.querySelector('.prise[data-id=\"' + t1.id + '\"] .tstat.pas') || {}).textContent")],
+                    [True, True, '✓ Saisie différée', 'saisie différée'])
+    banc.js("basculerPasSaisie()")
+    essais.verifier('les deux marques s excluent', [banc.js("t1.differee"), banc.js("t1.pasSaisie")], [False, True])
+    banc.js("basculerPasSaisie(); openPrise(t2.id)")
     banc.js("basculerPasSaisie()")
     essais.verifier('un appui : la prise est marquee', [banc.js("t2.pasSaisie"), banc.js("$('btn-pas-saisie').textContent.trim()")], [True, '✓ Prise non saisie'])
     essais.verifier('la fiche le dit', 'Prise non saisie : les saisies des autres font foi' in banc.js("document.querySelector('#alertes-prise').textContent"), True)

@@ -1097,6 +1097,11 @@ class Requete(BaseHTTPRequestHandler):
             client = str(corps.get('client') or '')[:40]
             if not client:
                 return self._json(400, {'erreur': 'client attendu'})
+            if corps.get('quitte'):          # l'onglet est ferme : il sort de la liste
+                with verrou:
+                    presence.pop(client, None)
+                diffuser(message_presence())
+                return self._json(200, {'ok': True})
             noter_presence(client, nom=corps.get('nom'), actif=corps.get('actif'),
                            espace=slug(corps.get('espace') or '') or 'commun')
             diffuser(message_presence())
