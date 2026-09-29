@@ -131,7 +131,7 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
       RESEAU.rev = 0; interrogerBientot();   // la reponse portera le projet entier de Simon
     """)
     time.sleep(0.4)
-    banc.js("choisirNom(3)")                 # Victoire, pendant que la reponse de Simon est en route
+    banc.js("choisirNom(2)")                 # Victoire, pendant que la reponse de Simon est en route
     time.sleep(4.0)
     essais.verifier('la reponse de Simon n atterrit pas chez Victoire', [banc.js('UI.nom'), banc.js('DB.prises.length')], ['Victoire', 0])
     essais.verifier('et son espace ne recoit que son decoupage', [x for x in api('espaces.php')['espaces'] if x['espace'] == 'victoire'][0]['prises'], 0)
@@ -143,7 +143,7 @@ with Banc(PORT, 9374, taille=(1200, 900)) as banc:
     # -- changer de personne avec une saisie pas encore partie : elle part sous le prenom de celui qui quitte
     banc.js("RESEAU.envoi = true; ajouterPrise(DB.plans[3].id, false, { clip:'TARD1' })")   # l'envoi est bloque : l'operation reste en attente
     essais.verifier('l operation reste en attente', banc.js('RESEAU.attente.length') >= 1, True)
-    banc.js("choisirNom(4)"); time.sleep(2.5)                                                # Marie prend l'appareil
+    banc.js("choisirNom(3)"); time.sleep(2.5)                                                # Marie prend l'appareil
     banc.js("RESEAU.envoi = false")
     essais.verifier('la derniere saisie de Simon arrive dans l espace de Simon', sorted(t.get('clip') or '' for t in etat('simon')['db']['prises']), ['', 'TARD1'])
     essais.verifier('et pas dans celui de Marie', len((etat('marie')['db'] or {'prises': []})['prises']), 0)

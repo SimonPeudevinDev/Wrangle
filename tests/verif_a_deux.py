@@ -57,7 +57,9 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
             {'op': 'add', 'kind': 'prise', 'data': {'id': 'r1', 'planId': pid, 'n': 1, 'par': 'Romain', 'clip': 'A_0001C001',
                                                      'carte': 'A_0001', 'diaph': 'T4', 'statut': 'NG', 'notes': 'Raccord',
                                                      'meteo': 'Soleil', 'heure': '09:12'}},
-            {'op': 'patch', 'kind': 'plan', 'id': pid, 'data': {'elements': {'hdri': True}}}])
+            # comme la page : l'element coche, et qui l'a coche ; puis sa note a lui sur le plan
+            {'op': 'patch', 'kind': 'plan', 'id': pid, 'data': {'elements': {'hdri': True}, 'auteurs': {'el:hdri': 'Romain'},
+                                                                 'notesClient@Romain': 'Reflets sur la vitre'}}])
 
     # Simon a sa propre prise 1 sur ce plan : meme carte, un autre diaph, pas de clip
     banc.js("var t = ajouterPrise(%s); patch('prise', t.id, {carte:'A_0001', diaph:'T2.8', heure:'09:13'}); openPrise(t.id)" % json.dumps(pid))
@@ -93,8 +95,19 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
 
     # le plan : son element capte
     banc.js("openPlan(%s)" % json.dumps(pid))
-    # les elements captes sont au decoupage : coche par Romain, le HDRI est deja chez Simon
-    essais.verifier('fiche du plan : son HDRI, deja chez Simon, marque a deux', bulle(banc, '.el[data-el="hdri"]'), 'a2-deux R')
+    # le plan est partage : le HDRI coche par Romain est chez Simon aussi, avec sa pastille a lui seul
+    essais.verifier('fiche du plan : le HDRI porte la pastille de Romain, qui l a coche', bulle(banc, '.el[data-el="hdri"]'), 'a2-lui R')
+    banc.js("toggleElement('chart')")
+    essais.verifier('la charte, cochee par Simon lui-meme : pas de pastille', [banc.js("plan(openId).auteurs['el:chart']"), bulle(banc, '.el[data-el="chart"]')], ['Simon', ''])
+    essais.verifier('les elements que personne n a coches : rien', banc.js("document.querySelectorAll('#sbody .el:not(.on) .a2-pt').length"), 0)
+    essais.verifier('pas de bandeau sur un plan : il n y a rien a comparer', banc.js("!!document.querySelector('#sbody .a2-tete')"), False)
+    # la note du plan est a chacun : celle de Romain en italique sous la sienne
+    essais.verifier('sa note a lui, en italique sous la mienne',
+                    banc.js("[...document.querySelectorAll('.textes-autres[data-texte=\"notesClient\"] .texte-autre')].map(d => d.querySelector('b').textContent + ' | ' + d.querySelector('i').textContent)"),
+                    ['Romain | Reflets sur la vitre'])
+    banc.js("const n = document.querySelector('#sbody textarea[data-k=\"notesClient@Simon\"]'); n.value = 'Pluie annoncee'; live(n)")
+    essais.verifier('la mienne est rangee sous mon prenom, la sienne reste', [banc.js("plan(openId)['notesClient@Simon']"), banc.js("plan(openId)['notesClient@Romain']")], ['Pluie annoncee', 'Reflets sur la vitre'])
+    essais.verifier('les PDF et exports lisent les deux', banc.js("texteDe(plan(openId), 'notesClient')"), 'Romain : Reflets sur la vitre · Simon : Pluie annoncee')
 
     # une prise que Romain n'a pas : rien a montrer
     banc.js("var u = ajouterPrise(%s); openPrise(u.id)" % json.dumps(pid))

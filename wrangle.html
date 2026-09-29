@@ -206,6 +206,20 @@ const hhmm = d => deuxCh(d.getHours()) + ':' + deuxCh(d.getMinutes());
 const maintenant = () => hhmm(new Date());
 const plur = n => n > 1 ? 's' : '';
 const fleche = (a, b) => [a, b].filter(Boolean).join(' → ');
+/* La description VFX et la note d'un plan sont a chacun : on ecrit la sienne,
+   rangee sous son prenom (notesClient@Romain), et on lit celles des autres. Le
+   plan etant partage, toutes voyagent ensemble ; celle du decoupage (sans
+   prenom) reste en tete. textesDe : [[prenom ou '', texte]]. */
+const TEXTES_A_CHACUN = ['vfxDesc', 'notesClient'];
+const cleTexte = k => UI.nom ? k + '@' + UI.nom.trim() : k;
+function textesDe(p, k){
+  const out = [];
+  if (!p) return out;
+  if (String(p[k] || '').trim()) out.push(['', String(p[k]).trim()]);
+  Object.keys(p).forEach(c => { if (c.indexOf(k + '@') === 0 && String(p[c] || '').trim()) out.push([c.slice(k.length + 1), String(p[c]).trim()]); });
+  return out;
+}
+const texteDe = (p, k) => textesDe(p, k).map(([n, v]) => n ? n + ' : ' + v : v).join(' · ');
 const ICO = (d, t, w) => `<svg viewBox="0 0 24 24" width="${t}" height="${t}" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 
 /* Les anciens supports ranges dans le mouvement (lu par normaliser, donc declare ici,
@@ -243,7 +257,7 @@ const PLAN_NEUF = () => ({
 
 /* L'equipe du plateau : un bouton par prenom au premier lancement. Changer
    cette liste suffit a changer les choix proposes. */
-const EQUIPE = ['Romain', 'Simon', 'Tom', 'Victoire', 'Marie', 'Georges', 'Alex'];
+const EQUIPE = ['Romain', 'Simon', 'Victoire', 'Marie', 'Georges', 'Alex'];
 
 function lireUI(){
   let u = {};
@@ -591,6 +605,7 @@ if (RESEAU.possible){
 function patch(kind, id, data){
   const o = kind === 'prod' ? DB.prod : cible(id);
   if (!o) return;
+  if (kind === 'plan') data = avecAuteurs(o, data);
   Object.assign(o, data);
   save();
   if (!RESEAU.possible) return;
@@ -598,6 +613,29 @@ function patch(kind, id, data){
   const t = RESEAU.tampon[k] || (RESEAU.tampon[k] = { op:'patch', kind, id: kind === 'prod' ? undefined : id, data:{} });
   Object.assign(t.data, data);
   clearTimeout(RESEAU.tTampon); RESEAU.tTampon = setTimeout(viderTampon, 250);
+}
+/* Qui a pose quoi sur un plan. Le plan est partage : ce qu'un seul coche
+   arrive chez tout le monde ; la fiche ne montre la pastille que de celui qui
+   l'a coche ou change (p.auteurs : { 'el:hdri': 'Romain', etat: 'Simon' }). */
+const AUTEURS_SUIVIS = ['etat', 'meteo', 'elementsAutre'];
+function avecAuteurs(o, data){
+  if (!UI.nom || 'auteurs' in data) return data;
+  const au = Object.assign({}, o.auteurs || {});
+  let change = false;
+  Object.keys(data).forEach(k => {
+    if (k === 'elements'){
+      const av = o.elements || {}, ap = data.elements || {};
+      new Set(Object.keys(av).concat(Object.keys(ap))).forEach(e => {
+        if (!!av[e] === !!ap[e]) return;
+        if (ap[e]) au['el:' + e] = UI.nom; else delete au['el:' + e];
+        change = true;
+      });
+    } else if (AUTEURS_SUIVIS.indexOf(k) >= 0){
+      const v = data[k]; if (v != null && v !== false && String(v).trim()) au[k] = UI.nom; else delete au[k];
+      change = true;
+    }
+  });
+  return change ? Object.assign({}, data, { auteurs: au }) : data;
 }
 function viderTampon(){
   clearTimeout(RESEAU.tTampon); RESEAU.tTampon = null;
@@ -1602,7 +1640,21 @@ function razFiltres(){
    plan dit tourne sans aucune prise n'a laisse aucune trace : ce sont les deux
    trous qu'il faut boucher avant de rendre la journee. Ce sont aussi les
    alertes du rapport, atteignables ici directement depuis la liste. */
-const priseIncomplete = t => !String(t.clip || '').trim() || !String(t.carte || '').trim();
+// une prise marquee « non saisie » n'est pas a completer : ce sont les saisies des autres qui comptent
+const priseIncomplete = t => !t.pasSaisie && (!String(t.clip || '').trim() || !String(t.carte || '').trim());
+/* La focale de la prise n'est pas celle que le plan prevoit : rend la focale
+   prevue, sinon ''. « 14 mm » et « 14 » sont la meme ; un zoom prevu
+   (« 18-35 zoom ») accepte tout ce qui tombe dedans. Depart et arrivee comptent. */
+const nombresDe = s => (String(s || '').replace(/,/g, '.').match(/\d+(\.\d+)?/g) || []).map(Number);
+function focaleHorsPlan(t){
+  const p = t && plan(t.planId);
+  if (!p || !String(p.focale || '').trim() || !String(t.focale || '').trim()) return '';
+  const prevue = nombresDe(p.focale); if (!prevue.length) return '';
+  const zoom = prevue.length > 1 && /[-–]|à/.test(p.focale);
+  const bon = v => { const n = nombresDe(v)[0]; if (n == null) return true;
+    return zoom ? n >= Math.min(prevue[0], prevue[1]) && n <= Math.max(prevue[0], prevue[1]) : n === prevue[0]; };
+  return [t.focale, t.focaleStop].filter(x => String(x || '').trim()).every(bon) ? '' : p.focale.trim();
+}
 /* Qui a saisi la prise : le prenom note dessus. */
 const quiDe = t => (t.par || '').trim();
 
@@ -1686,7 +1738,7 @@ function renderShoot(){
   /* La recherche porte sur le plan, sa sequence et toutes ses prises. */
   const corr = p => {
     if (!q) return true;
-    return [p.plan, p.desc, p.lieu, p.cadrage, p.mouv, p.assets, p.vfxDesc, p.seqTitre, p.seq, p.jour]
+    return [p.plan, p.desc, p.lieu, p.cadrage, p.mouv, p.assets, texteDe(p, 'vfxDesc'), p.seqTitre, p.seq, p.jour]
       .concat(p.tags || [], prisesDe(p.id).map(t => [t.clip, t.carte, t.cam, t.notes, t.tcIn, t.par].join(' ')))
       .join(' ').toLowerCase().indexOf(q) >= 0;
   };
@@ -1881,7 +1933,9 @@ function ligne(t, sansActions){
   const meta = [
     t.cam && `<span>${esc(t.cam)}</span>`,
     t.carte && `<span>${esc(t.carte)}</span>`,
-    t.focale && `<span>${esc(fleche(t.focale, t.focaleStop))}</span>`,
+    t.focale && (focaleHorsPlan(t)
+      ? `<span class="hors" title="Le plan prévoit ${esc(focaleHorsPlan(t))}">&#9888; ${esc(fleche(t.focale, t.focaleStop))}</span>`
+      : `<span>${esc(fleche(t.focale, t.focaleStop))}</span>`),
     t.diaph && `<span>${esc(t.diaph)}</span>`,
     t.fps && `<span>${esc(t.fps)}&#8239;i/s</span>`,
     t.tcIn && `<span>${esc(t.tcIn)}</span>`,
@@ -1904,6 +1958,7 @@ function ligne(t, sansActions){
         ${t.notes ? `<span class="tnote" title="${esc(t.notes)}">${esc(t.notes)}</span>` : ''}
         ${t.statut && t.statut !== 'OK' && t.statut !== 'NG'
           ? `<span class="tstat">${esc(t.statut)}</span>` : ''}
+        ${t.pasSaisie ? `<span class="tstat pas">non saisie</span>` : ''}
       </div>
       ${meta || rel ? `<div class="tmeta">${meta}${rel}</div>` : ''}
     </div>
@@ -2276,6 +2331,7 @@ function openPrise(id, y){
       </span>
       <i></i>
     </a>` : ''}
+    <div id="alertes-prise"></div>
 
     <div class="sec">
       <h3>Résultat</h3>
@@ -2357,6 +2413,7 @@ function openPrise(id, y){
 
     <div class="sec btns">
       <button class="btn d" onclick="delPrise()">Supprimer la prise</button>
+      <button class="btn${t.pasSaisie ? ' on' : ''}" id="btn-pas-saisie" onclick="basculerPasSaisie()">${t.pasSaisie ? '&#10003; ' : ''}Prise non saisie</button>
     </div>`;
 
   const f = $('sfoot');
@@ -2392,6 +2449,29 @@ function majBoutonsPrise(){
   document.querySelectorAll('.chips-notes button').forEach(b => b.classList.toggle('on', aNote(t, b.dataset.n)));
   majResumes(); majNavPrise(); majChoix();
   decorerFiche();
+}
+
+/* « Prise non saisie » (pas eu le temps de la noter) : la prise reste, marquee. Elle sort de « A
+   completer », et quand le DIT reunit l'equipe ce sont les saisies des autres
+   qui comptent pour elle ; ce que la page a repris de la prise d'avant ne fait
+   pas de faux ecart. Un second appui retire la marque. */
+function basculerPasSaisie(){
+  const t = prise(openId); if (!t) return;
+  patch('prise', t.id, { pasSaisie: !t.pasSaisie });
+  const b = $('btn-pas-saisie');
+  if (b){ b.classList.toggle('on', !!t.pasSaisie); b.innerHTML = (t.pasSaisie ? '&#10003; ' : '') + 'Prise non saisie'; }
+  majAlertesPrise(); renderList();
+  toast(t.pasSaisie ? 'Prise ' + t.n + ' non saisie : les saisies des autres font foi' : 'Prise ' + t.n + ' : marque retirée');
+}
+/* En tete de la fiche d'une prise : ce qui cloche, a voir sans ouvrir les sections. */
+function majAlertesPrise(){
+  const b = $('alertes-prise'), t = openType === 'prise' && prise(openId);
+  if (!b || !t) return;
+  const f = focaleHorsPlan(t);
+  b.innerHTML = [
+    f && `<div class="alert o fiche-alerte"><i>&#9888;</i><div>Focale <b>${esc(fleche(t.focale, t.focaleStop))}</b> : le plan prévoit <b>${esc(f)}</b>.</div></div>`,
+    t.pasSaisie && `<div class="alert fiche-alerte"><i></i><div>Prise non saisie : les saisies des autres font foi.</div></div>`
+  ].filter(Boolean).join('');
 }
 
 function delPrise(){
@@ -2518,7 +2598,7 @@ const court = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); retur
 const RESUME_PLAN = {
   ppassages: p => { const n = (String(p.passages || '').match(/^\d+\/\d+ /gm) || []).length;
                     return [n > 1 ? n + ' passages' : '', court(p.passages, 60)]; },
-  pvfx:      p => [court(p.vfxDesc, 40), court(p.notesClient, 40)],
+  pvfx:      p => [court(texteDe(p, 'vfxDesc'), 40), court(texteDe(p, 'notesClient'), 40)],
   pcroquis:  p => [aTraits(p) ? 'Un croquis' : '', fondDecor(lieuFond(p)) ? 'sur le plan « ' + lieuFond(p) + ' »' : ''],
   pcontexte: p => [p.lieu, p.intExt, p.momentJour, p.meteo, (p.acteurs || []).join(', '), p.figu && 'Figuration', p.cadrage, p.mouv, p.support, p.focale, p.duree],
   preperes:  p => [p.jour && nomJour(p.jour), p.plan && 'Plan ' + p.plan, p.seq && 'Séq ' + p.seq]
@@ -3366,8 +3446,10 @@ function openPlan(id, y){
 
     ${sectionFiche('pvfx', 'Détail VFX', p, `
       <div class="specs">
-        ${F(p, 'Description', 'vfxDesc', {auto:1, ph:'À fabriquer, à effacer, ce qui bouge dans le cadre…'})}
-        ${F(p, 'Note', 'notesClient', {auto:1, heure:1, ph:'À savoir sur ce plan…'})}
+        ${F(p, 'Description', cleTexte('vfxDesc'), {auto:1, ph:'À fabriquer, à effacer, ce qui bouge dans le cadre…'})}
+        <div class="textes-autres" data-texte="vfxDesc"></div>
+        ${F(p, 'Note', cleTexte('notesClient'), {auto:1, heure:1, ph:'À savoir sur ce plan…'})}
+        <div class="textes-autres" data-texte="notesClient"></div>
       </div>`)}
 
     ${sectionFiche('pcroquis', 'Croquis du set', p, htmlCroquis(p))}
@@ -4261,7 +4343,7 @@ function htmlPost(j){
           <div class="pmet">${[nomJour(x.jour || ''), 'Séq ' + (x.seq || ''), x.lieu, x.cadrage, x.mouv]
             .filter(Boolean).map(esc).join(' · ')}</div>
           ${x.assets ? `<div class="pmet">Découpage VFX : ${esc(x.assets)}</div>` : ''}
-          ${x.vfxDesc ? `<div class="pmet">${esc(x.vfxDesc)}</div>` : ''}
+          ${texteDe(x, 'vfxDesc') ? `<div class="pmet">${esc(texteDe(x, 'vfxDesc'))}</div>` : ''}
         </div>
       </div>
       ${keep.length ? keep.map(t => `<div class="pgarde">
@@ -4746,7 +4828,7 @@ function telechargerDIT(){
    Les ecarts de saisie n'y sont pas : ils se tranchent avant, sur la fiche
    data wrangling. Meme charte que le journal DIT, une journee par page. */
 const COMMUNS_VFX = ['Caméra', 'Format', 'Cadence', 'Exposition', 'Couleur', 'Objectif', 'Filtres', 'Diaph'];
-const planVFX = x => !!(x.vfxDesc || x.assets || x.elementsAutre || aElements(x) || (x.tags || []).some(t => t === 'VFX' || t === 'CG'));
+const planVFX = x => !!(texteDe(x, 'vfxDesc') || x.assets || x.elementsAutre || aElements(x) || (x.tags || []).some(t => t === 'VFX' || t === 'CG'));
 function modeleVFX(j){
   const jours = j === '*' ? joursConnus().filter(x => plansDuJour(x).length) : [j];
   const p = DB.prod, d = new Date();
@@ -4766,7 +4848,7 @@ function modeleVFX(j){
         tags: (x.tags || []).filter(g => g === 'VFX' || g === 'CG'),
         // ni la description du plan ni le titre de sequence : le comp a le decoupage pour ca
         meta: [x.lieu, x.intExt, x.momentJour, x.cadrage].filter(Boolean).join(' · '),
-        vfxDesc: x.vfxDesc || '', assets: x.assets || '',
+        vfxDesc: texteDe(x, 'vfxDesc'), assets: x.assets || '',
         elements: elementsCoches(x).map(e => e[1]).concat(x.elementsAutre ? [x.elementsAutre] : []),
         // toutes les prises du plan ; la retenue fait foi pour les reglages
         prises: pr.map(g => ({ n: g.n, clip: g.clip || '', carte: g.carte || '', statut: g.statut || '', retenue: !!g.retenue,
@@ -5052,7 +5134,7 @@ function jumelles(o){
   AUTRES.liste.forEach(a => {
     const q = a.db.plans.find(x => x.id === p.id) || ((p.seq || p.plan) ? a.db.plans.find(x => clePlan(x) === clePlan(p)) : null);
     if (!q) return;
-    const x = openType === 'prise' ? a.db.prises.find(t => t.planId === q.id && t.n === o.n) : q;
+    const x = openType === 'prise' ? a.db.prises.find(t => t.planId === q.id && t.n === o.n && !t.pasSaisie) : q;
     if (x) out.push({ a, o: x });
   });
   return out;
@@ -5097,7 +5179,9 @@ function decorerBulle(b, moi, qui){
 function decorerFiche(){
   const sb = $('sbody');
   if (!sb || !ficheA2()) return;
+  majAlertesPrise();
   const o = cible(openId); if (!o) return;
+  if (openType === 'plan') return decorerPlan(sb, o);
   const j = jumelles(o);
   sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
   // en tete : qui a aussi note cette prise
@@ -5136,6 +5220,22 @@ function decorerFiche(){
     c.querySelectorAll('.tuile[data-f]').forEach(b => decorerBulle(b, porte(mien, b.dataset.f), avis.filter(x => porte(a(x.o[k]), b.dataset.f)).map(x => x.a)));
   });
 }
+/* La fiche d'un plan : le plan est partage, il n'y a rien a comparer. Une
+   pastille dit seulement qui a coche un element ou change l'etat (s'il n'est
+   pas soi), et les descriptions et notes des autres se lisent en italique. */
+const personneA2 = nom => AUTRES.liste.find(a => a.nom === nom)
+  || { nom, coul: COULEURS_AUTRES[Math.max(0, EQUIPE.indexOf(nom)) % COULEURS_AUTRES.length] };
+function decorerPlan(sb, p){
+  sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
+  const t = sb.querySelector('.a2-tete'); if (t) t.remove();
+  const au = p.auteurs || {}, de = cle => au[cle] && au[cle] !== UI.nom ? [personneA2(au[cle])] : [];
+  sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, false, (p.elements || {})[b.dataset.el] ? de('el:' + b.dataset.el) : []));
+  sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
+  sb.querySelectorAll('.textes-autres[data-texte]').forEach(d => {
+    d.innerHTML = textesDe(p, d.dataset.texte).filter(([n]) => n !== (UI.nom || '').trim()).map(([n, v]) =>
+      `<div class="texte-autre">${n ? pastilleA2(personneA2(n)) : ''}<b>${esc(n || 'Découpage')}</b><i>${esc(v)}</i></div>`).join('');
+  });
+}
 /* Reprendre ce qu'un autre a note : sa valeur devient la mienne (une note s'ajoute a la mienne). */
 function reprendreAutre(espace, cles){
   const o = cible(openId), kind = kindDe(openId); if (!o || !kind) return;
@@ -5171,11 +5271,35 @@ const RAP_PLAN = [['etat', 'État'], ['elements', 'Éléments captés'], ['eleme
 const valRap = v => v === true ? 'oui' : v === false || v == null ? '' : Array.isArray(v) ? v.join(', ') : String(v).trim();
 const clePlan = p => (p.seq || '') + '|' + (p.plan || '');
 const champPlan = (p, k) => k === 'etat' ? (ETATS[p.etat] || valRap(p.etat))
-  : k === 'elements' ? Object.keys(p.elements || {}).filter(x => p.elements[x]).sort().join(', ') : valRap(p[k]);
+  : k === 'elements' ? Object.keys(p.elements || {}).filter(x => p.elements[x]).sort().join(', ')
+  : TEXTES_A_CHACUN.indexOf(k) >= 0 ? texteDe(p, k) : valRap(p[k]);
 /* les saisies a rapprocher : celles de ce navigateur d'abord, puis les fichiers deposes */
 const sourcesRap = () => [{ nom: UI.nom || 'Ce navigateur', db: DB, ici: true }].concat(RAP.sources);
 
+/* Une prise marquee « non saisie » s'efface devant celle d'un
+   autre, au meme plan et au meme numero : elle ne compare rien, ne comble rien,
+   et sa personne la connait (s.pas) : ce n'est pas une prise « chez un seul ».
+   Seule a exister, elle reste. */
+function sansPasSaisies(sources){
+  const saisies = new Set();
+  sources.forEach(s => s.db.prises.forEach(t => {
+    const p = t.pasSaisie ? null : s.db.plans.find(x => x.id === t.planId);
+    if (p) saisies.add(clePlan(p) + '#' + t.n);
+  }));
+  return sources.map(s => {
+    const reste = s.db.prises.filter(t => {
+      if (!t.pasSaisie) return true;
+      const p = s.db.plans.find(x => x.id === t.planId);
+      return !(p && saisies.has(clePlan(p) + '#' + t.n));
+    });
+    if (reste.length === s.db.prises.length) return s;
+    const pas = new Set(s.db.prises.filter(t => reste.indexOf(t) < 0)
+      .map(t => clePlan(s.db.plans.find(x => x.id === t.planId)) + '#' + t.n));
+    return Object.assign({}, s, { pas, db: Object.assign({}, s.db, { prises: reste }) });
+  });
+}
 function rapprocher(sources){
+  sources = sansPasSaisies(sources);
   const plans = new Map();   // cle -> { seq, plan, versions: Map(nom -> plan), prises: Map(n -> Map(nom -> prise)) }
   sources.forEach(s => {
     s.db.plans.forEach(p => {
@@ -5211,7 +5335,8 @@ function rapprocher(sources){
                      planSeul: e.versions.size < sources.length ? [...e.versions.keys()] : null };
       [...e.prises.entries()].sort((a, b) => (+a[0] || 0) - (+b[0] || 0)).forEach(([n, versions]) => {
         const r = comparer(versions, RAP_PRISE, (t, k) => valRap(t[k]));
-        const seuls = versions.size < sources.length ? [...versions.keys()] : null;
+        const connue = versions.size + sources.filter(s => s.pas && s.pas.has(c + '#' + n)).length;
+        const seuls = connue < sources.length ? [...versions.keys()] : null;
         total.ecarts += r.ecarts.length; total.complements += r.complements.length; if (seuls) total.seuls++;
         if (r.ecarts.length || r.complements.length || seuls) bloc.prises.push(Object.assign({ n, seuls }, r));
       });
@@ -5238,6 +5363,7 @@ function noterEcart(o, champ, nomA, a, nomB, b){
   if (!e.valeurs.some(([n]) => n === nomB)) e.valeurs.push([nomB, b]);
 }
 function fusionRap(sources){
+  sources = sansPasSaisies(sources);
   const base = structuredClone(sources[0].db), nomBase = sources[0].nom || '';
   const parCle = new Map(base.plans.map(p => [clePlan(p), p]));
   const combler = (b, o, sauf) => Object.keys(o).forEach(k => {
@@ -5741,7 +5867,7 @@ function exportCSVDe(kind){
         t.panStart, t.panStop, t.tiltStart, t.tiltStop, t.rollStart, t.rollStop, t.mouvement, t.support,
         t.codec, t.reso, t.fps, t.shutter, t.ei, t.wb, t.nd, t.lut, t.objectif, t.filtre,
         t.sonRoll, t.sync, t.sonFile, t.notes,
-        listeElements(p), p ? p.vfxDesc : '', p ? p.desc : '', p ? p.intExt : '', p ? p.momentJour : '',
+        listeElements(p), p ? texteDe(p, 'vfxDesc') : '', p ? p.desc : '', p ? p.intExt : '', p ? p.momentJour : '',
         t.par];
     });
   } else {
@@ -5752,9 +5878,9 @@ function exportCSVDe(kind){
       const pr = prisesDe(p.id);
       return [p.jour ? nomJour(p.jour) : '', p.seq, p.seqTitre, p.plan, ETATS[p.etat], p.desc, p.passages || '', p.lieu,
         p.intExt, p.momentJour, p.meteo, (p.acteurs || []).join(', '), p.figu ? 'oui' : '', p.cadrage, p.mouv, p.support, p.focale, p.duree, (p.tags || []).join(' '), p.assets,
-        p.previz === false ? 'non' : 'oui', listeElements(p), p.vfxDesc, pr.length,
+        p.previz === false ? 'non' : 'oui', listeElements(p), texteDe(p, 'vfxDesc'), pr.length,
         pr.filter(t => t.retenue).map(t => t.clip || 'prise ' + t.n).join(' | '),
-        p.notesClient];
+        texteDe(p, 'notesClient')];
     });
   }
   if (!rows.length) return toast(kind === 'montage' ? 'Aucune prise marquée à monter' : 'Rien à exporter');

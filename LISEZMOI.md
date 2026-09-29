@@ -29,10 +29,15 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
   les autres ont saisi sur la même prise — même plan, même numéro. Chaque ligne porte une barre :
   à la couleur de l'autre quand lui seul l'a remplie, verte quand on a noté la même chose, rouge
   quand on diffère ; sa valeur est dessous, un appui la reprend (une note s'ajoute à la sienne).
-  Sur les bulles (résultat, étoile, notes rapides, éléments captés, état, météo, focale…), un rond
-  à son initiale ; toucher la même bulle la confirme, elle s'entoure de vert. L'heure, les
-  timecodes et la durée ne comptent pas. La fiche relit les saisies des autres toutes les quinze
-  secondes, seulement celles qui ont changé.
+  Sur les bulles (résultat, étoile, notes rapides, météo, focale…), un rond à son initiale ;
+  toucher la même bulle la confirme, elle s'entoure de vert. L'heure, les timecodes et la durée
+  ne comptent pas. La fiche relit les saisies des autres toutes les quinze secondes, seulement
+  celles qui ont changé.
+- **La fiche d'un plan** : le plan est partagé, ce qu'un seul y coche arrive chez tout le monde.
+  Une pastille dit seulement qui a coché un élément capté ou changé l'état (quand ce n'est pas
+  soi). La description VFX et la note sont à chacun : on écrit la sienne, celles des autres (et
+  celle du découpage) se lisent dessous, en italique, avec leur prénom ; les PDF et les exports
+  les reprennent toutes.
 - **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
   (par une personne, jour par jour) et le serveur la reporte chez tout le monde ; chacun garde sa
   copie de ce qu'il note dessus (états, éléments captés). Quand deux personnes ont noté des choses
@@ -117,6 +122,12 @@ allumé. Dans chaque espace : le projet, le journal, une sauvegarde horodatée t
 part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans `api/donnees/mail.json`
 (`{"expediteur": "journal@foresight-movie.com"}`). `py tests/verif_ovh.py` parle au site publié
 pour vérifier que tout répond, dans deux espaces d'essai vidés à la fin (il faut le réseau).
+
+**Retirer un prénom.** On l'enlève d'`EQUIPE`, en tête du script de la page, puis on retire son
+espace : un appel `ops.php` avec `{ op: 'remplacer', db: { plans: [], prises: [], retire: true } }`
+pour cet espace. Il sort de la liste du DIT, et le serveur ne lui recopie plus le découpage. Si
+un appareil reprend un jour ce prénom, il repart sur le découpage de l'équipe, comme un nouveau
+venu. Tom a été retiré ainsi le 29/09/2026, et les espaces d'essai aussi.
 
 Pas de mot de passe, c'est un choix : le site est privé, seule l'équipe en connaît l'adresse. Les
 espaces séparent les saisies, ils ne les protègent pas — qui connaît l'adresse du site peut lire
@@ -284,6 +295,13 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   Il devient **■ Coupez** : la durée est enregistrée. Le chrono est aussi accessible dans la fiche de la prise.
 - **+ Prise** (petit bouton) ou « + Prise N » sous chaque plan : ajoute une prise sans chrono.
 - Dans la liste : ★ (à monter), OK, NG sans ouvrir la fiche.
+- **La focale qui n'est pas celle du plan** : le plan prévoit 14 mm, la prise dit 35 mm — la
+  ligne de la prise la montre en orange avec ⚠, et la fiche le dit en tête. « 14 » vaut « 14 mm » ;
+  un zoom prévu (« 18-35 ») accepte tout ce qui tombe dedans ; départ et arrivée comptent.
+- **Prise non saisie** (à côté de « Supprimer la prise »), quand on n'a pas eu le temps de la
+  noter : la prise reste, marquée « non saisie » dans la liste. Elle sort de « À compléter », et quand l'équipe est réunie ce sont
+  les saisies des autres qui comptent pour elle : ce que la page a repris de la prise d'avant ne
+  fait pas de faux écart. Un second appui retire la marque.
 - Dans la fiche : résultat (OK, NG, Série, Faux départ, Pick-up), note libre et mots rapides
   (Raccord, Jeu, Cadre…), nom de clip avec suggestion du suivant (bouton ＋1), relevés caméra
   pour le matchmove, réglages image, son.
@@ -329,7 +347,7 @@ Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal
 
 ## Vérifier que rien n'est cassé
 
-Vingt-deux scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Vingt-trois scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -355,6 +373,7 @@ py tests/verif_interroger.py       la page en mode php, comme chez l'hébergeur 
 py tests/verif_coupure.py          saisir en zone blanche, fermer l'appli avant le retour du réseau : rien ne se perd
 py tests/verif_choix_equipe.py     le DIT réunit une personne, plusieurs ou toutes ; « Tous », ce sont ceux qui ont saisi
 py tests/verif_a_deux.py           dans la fiche, ce que les autres ont noté sur la même prise, à reprendre ou confirmer
+py tests/verif_pas_saisie.py       « prise non saisie », et la focale de la prise qui n'est pas celle du plan
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un

@@ -693,9 +693,12 @@ def accueillir(op, esp):
 
 
 def propager(source, faites, avant, client):
-    """Les opérations communes, appliquées à chaque autre espace qui a un projet."""
+    """Les opérations communes, appliquées à chaque autre espace qui a un projet.
+    Un espace retiré exprès (projet vide marqué « retire ») ne reçoit plus rien ;
+    l'arrivée d'un appareil sous ce prénom (siVide) lui redonne le découpage."""
     with verrou:
-        autres = [e for e in espaces.values() if e is not source and e['db'] and e['slug'] != 'commun']
+        autres = [e for e in espaces.values() if e is not source and e['db'] and not e['db'].get('retire')
+                  and e['slug'] != 'commun']
     for e in autres:
         with verrou:
             # une à une : la suivante se traduit sur le projet déjà changé par la

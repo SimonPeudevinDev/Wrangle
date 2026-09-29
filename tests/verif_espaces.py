@@ -150,6 +150,17 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     avant_vide = (len(cles('simon')), len(cles('romain')))
     api('ops', {'client': 'tel-tom', 'nom': 'Tom', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': {'prod': {}, 'optiques': [], 'plans': [], 'prises': []}}]})
     essais.verifier('vider son espace ne touche pas aux autres, et il reste servi, vide', [etat('tom')['db']['plans'], (len(cles('simon')), len(cles('romain')))], [[], avant_vide])
+    # -- un espace retire (un prenom qui n'est plus de l'equipe) ne recoit plus le decoupage
+    retire = {'prod': {}, 'optiques': [], 'plans': [], 'prises': [], 'retire': True}
+    api('ops', {'client': 'dit', 'nom': '', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': retire}]})
+    ops('simon2', 'Simon', 'simon', [{'op': 'add', 'kind': 'plan', 'data': {'id': 'retrait-essai', 'seq': '98', 'plan': 'R', 'jour': 'J1', 'elements': {}}, 'apres': ''}])
+    essais.verifier('un plan ajoute arrive chez Romain, pas dans l espace retire de Tom',
+                    [('98', 'R') in cles('romain'), etat('tom')['db']['plans']], [True, []])
+    ops('simon2', 'Simon', 'simon', [{'op': 'del', 'kind': 'plan', 'id': 'retrait-essai'}])
+    api('ops', {'client': 'tel-tom', 'nom': 'Tom', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': tom, 'siVide': True}]})
+    essais.verifier('qu un appareil reprenne ce prenom : il retrouve le decoupage, la marque s efface',
+                    [len(cles('tom')) == len(cles('simon')), 'retire' in etat('tom')['db']], [True, False])
+    api('ops', {'client': 'dit', 'nom': '', 'espace': 'tom', 'ops': [{'op': 'remplacer', 'db': retire}]})
 
     # -- le DIT reunit tout : les espaces des autres, pas le sien
     esp = api('espaces')['espaces']

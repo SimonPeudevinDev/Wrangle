@@ -1374,3 +1374,22 @@ select option{background:var(--surface);color:var(--txt)}
 .champ.a2-ecart>.champ-tete{box-shadow:inset 3px 0 0 var(--ng)}
 .champ-val .a2-pts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;margin-left:10px;vertical-align:middle}
 .champ-val .a2-pts em{font-style:normal;font-weight:500;font-size:13px;color:var(--dim);margin-right:6px}
+
+/* La prise : la focale qui n'est pas celle du plan, et la prise pas saisie */
+.tmeta span.hors{color:var(--tag-orange);font-weight:700}
+.tstat.pas{color:var(--dim);font-style:italic;font-weight:600;letter-spacing:0;text-transform:none}
+.tstat+.tstat.pas{margin-left:8px}
+#alertes-prise:empty{display:none}
+#alertes-prise{padding:12px 20px 0}
+#alertes-prise .fiche-alerte{margin:0 0 8px}
+#alertes-prise .fiche-alerte{padding:10px 12px;border:1px solid var(--line2);border-radius:var(--r)}
+#alertes-prise .fiche-alerte.o{border-color:var(--tag-orange)}
+#alertes-prise .fiche-alerte.o i{background:var(--tag-orange)}
+
+/* Les descriptions et notes des autres, sous la sienne, en italique */
+.textes-autres:empty{display:none}
+.textes-autres{padding:2px 0 12px}
+.texte-autre{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:14px;line-height:1.45;color:var(--dim)}
+.texte-autre .a2-pt{align-self:center}
+.texte-autre b{flex:none;font-size:12px;font-weight:700;color:var(--txt)}
+.texte-autre i{white-space:pre-wrap}

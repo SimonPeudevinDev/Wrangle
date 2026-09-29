@@ -545,7 +545,10 @@ function donneur_decoupage($sauf) {
     return null;
 }
 
-// les operations communes, appliquees a chaque autre espace qui a un projet
+// les operations communes, appliquees a chaque autre espace qui a un projet ;
+// un espace retire expres (un prenom qui n'est plus de l'equipe, un essai :
+// projet vide marque « retire ») ne recoit plus rien. Qu'un appareil reprenne
+// ce prenom, son arrivee (siVide) lui redonne le decoupage et efface la marque.
 function propager($source, $faites, $avant, $client) {
     global $ESPACE;
     $origine = $ESPACE;
@@ -557,7 +560,7 @@ function propager($source, $faites, $avant, $client) {
         choisir_espace($s);
         verrouiller();
         $db = lire_projet();
-        if ($db) {
+        if ($db && empty($db->retire)) {
             // une a une : la suivante se traduit sur le projet deja change par la
             // precedente (un plan ajoute apres un plan qu'on vient d'ajouter)
             $res = [];
