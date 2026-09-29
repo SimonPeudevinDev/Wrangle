@@ -113,6 +113,20 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     banc.js("var u = ajouterPrise(%s); openPrise(u.id)" % json.dumps(pid))
     essais.verifier('prise 2, que Romain n a pas : rien', [banc.js("!!document.querySelector('#sbody .a2-tete:not([hidden])')"), banc.js("document.querySelectorAll('#sbody .a2-row, #sbody .a2-pt').length")], [False, 0])
 
+    # -- le Moteur : Romain vise un plan, son rond apparait sur l'anneau de ce plan chez Simon
+    banc.js("closeSheet()")
+    pid2 = db['plans'][1]['id']
+    api('presence.php', {'client': 'romain1', 'nom': 'Romain', 'actif': 'vise:' + pid2, 'espace': 'romain'})
+    essais.verifier('Romain vise le plan 2 : son rond sur l anneau du Moteur',
+                    patienter(lambda: banc.js("[...document.querySelectorAll('.viser[data-vise=\"%s\"] .a2-pt')].map(x => x.textContent).join()" % pid2) == 'R', tours=40), True)
+    essais.verifier('et sur aucun autre plan', banc.js("document.querySelectorAll('.viser .a2-pt').length"), 1)
+    banc.js("viser(%s)" % json.dumps(pid2))
+    essais.verifier('Simon vise a son tour : le serveur le sait',
+                    patienter(lambda: any(x['nom'] == 'Simon' and ('vise:' + pid2) in x['actif'] for x in api('depuis.php?rev=0&client=x&espace=simon')['presence']), tours=40), True)
+    api('presence.php', {'client': 'romain1', 'nom': 'Romain', 'actif': '', 'espace': 'romain'})
+    essais.verifier('Romain passe a autre chose : son rond s en va',
+                    patienter(lambda: banc.js("document.querySelectorAll('.viser .a2-pt').length") == 0, tours=40), True)
+
     import base64
     banc.js("openPrise(DB.prises.find(t => t.n === 1).id)"); time.sleep(0.5)
     if os.environ.get('CAPTURE'):

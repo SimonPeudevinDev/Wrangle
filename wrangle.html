@@ -858,11 +858,22 @@ function envoyerPresence(){
   if (!RESEAU.possible) return;
   clearTimeout(RESEAU.tPresence);
   RESEAU.tPresence = setTimeout(() => {
-    const actif = openType === 'prise' || openType === 'plan' ? openType + ':' + openId : '';
+    const v = planVise();
+    RESEAU.viseEnvoye = v ? v.id : '';
+    const actif = [openType === 'prise' || openType === 'plan' ? openType + ':' + openId : '',
+                   v ? 'vise:' + v.id : ''].filter(Boolean).join(';');
     poster(API('presence'), JSON.stringify({ client: CLIENT, nom: UI.nom, actif, espace: monEspace() || undefined })).catch(() => {});
   }, 300);
 }
 const initiale = n => ((n || '').trim().charAt(0) || '?').toUpperCase();
+/* La couleur d'une personne, la meme sur tous les appareils : sa place dans
+   l'equipe (un prenom hors de la liste prend une couleur tiree de ses lettres). */
+function couleurDe(nom){
+  const pal = ['var(--tag-bleu)', '#b48ad6', 'var(--tag-orange)', '#5fb3b3', 'var(--tag-rouge)', '#c9a27a'];
+  let i = EQUIPE.indexOf(nom);
+  if (i < 0) i = [...String(nom || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  return pal[i % pal.length];
+}
 const autres = () => RESEAU.presence.filter(x => x.client !== CLIENT);
 
 function majPresence(){
@@ -889,13 +900,17 @@ function majPresence(){
 /* L'initiale de la personne qui a une prise ou un plan ouvert, dans la liste. */
 function majMarqueurs(){
   document.querySelectorAll('.qui').forEach(e => e.remove());
-  autres().filter(x => x.actif).forEach(x => {
-    const i = x.actif.indexOf(':');
-    const type = x.actif.slice(0, i), id = x.actif.slice(i + 1);
+  autres().forEach(x => {
+    // actif : « prise:id » ou « plan:id » (la fiche ouverte), puis « ;vise:id » (le plan du Moteur)
+    const f = (x.actif || '').split(';').find(a => a && a.indexOf('vise:') !== 0);
+    if (!f) return;
+    const i = f.indexOf(':');
+    const type = f.slice(0, i), id = f.slice(i + 1);
     const sel = type === 'prise' ? `.prise[data-id="${id}"] .trow` : `.plan[data-id="${id}"] .pnum`;
     document.querySelectorAll(sel).forEach(el => el.insertAdjacentHTML('beforeend',
       `<span class="qui" title="${esc(x.nom || 'appareil')}">${esc(initiale(x.nom))}</span>`));
   });
+  majVise();
 }
 
 function setNom(v){
@@ -2091,6 +2106,22 @@ function viser(id){
 function majVise(){
   const v = planVise(), id = v ? v.id : null;
   document.querySelectorAll('.viser').forEach(b => b.classList.toggle('on', b.dataset.vise === id));
+  // le plan vise a change : les autres le sauront a la prochaine presence
+  if (RESEAU.possible && (id || '') !== (RESEAU.viseEnvoye || '')){ RESEAU.viseEnvoye = id || ''; envoyerPresence(); }
+  // qui d'autre tourne ce plan : sa pastille sur l'anneau (en <b>/<i> : l'anneau cache ses <span>)
+  document.querySelectorAll('.viser .a2-pts').forEach(x => x.remove());
+  const qui = {};
+  autres().forEach(x => {
+    if (!x.nom || x.nom === UI.nom) return;
+    (x.actif || '').split(';').forEach(a => {
+      if (a.indexOf('vise:') !== 0) return;
+      const l = qui[a.slice(5)] = qui[a.slice(5)] || [];
+      if (l.indexOf(x.nom) < 0) l.push(x.nom);
+    });
+  });
+  Object.keys(qui).forEach(pid => document.querySelectorAll('.viser[data-vise="' + pid + '"]').forEach(b =>
+    b.insertAdjacentHTML('beforeend', '<b class="a2-pts">' + qui[pid].map(n =>
+      `<i class="a2-pt" style="--c:${couleurDe(n)}" title="${esc(n)} tourne ce plan">${esc(initiale(n))}</i>`).join('') + '</b>')));
 }
 
 function fabAction(){ if (chrono) couper(); else moteur(); }
@@ -5092,7 +5123,6 @@ const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deux
    sont relus toutes les quinze secondes tant qu'une fiche est ouverte, et
    seulement ceux qui ont change (la revision de chaque espace). */
 const AUTRES = { liste: [], revs: {}, t: 0, encours: false };
-const COULEURS_AUTRES = ['var(--tag-bleu)', '#b48ad6', 'var(--tag-orange)', '#5fb3b3', 'var(--tag-rouge)', '#c9a27a'];
 // l'heure, les timecodes et la duree ne sont pas des desaccords ; le reste de la liste est a chacun ou au decoupage
 const A2_IGNORE = ['par', 'heure', 'tcIn', 'tcOut', 'duree', 'n', 'jour', 'plan', 'seq', 'seqTitre', 'lieu', 'desc'];
 // les textes libres s'ajoutent au sien au lieu de le remplacer
@@ -5118,7 +5148,7 @@ function majAutres(force){
       });
       const la = new Set(autres.map(e => e.espace));
       AUTRES.liste = [...garde.values()].filter(a => la.has(a.espace)).sort((a, b) => a.nom.localeCompare(b.nom));
-      AUTRES.liste.forEach((a, i) => { a.coul = COULEURS_AUTRES[i % COULEURS_AUTRES.length]; });
+      AUTRES.liste.forEach(a => { a.coul = couleurDe(a.nom); });
       if (changes.length) decorerFiche();
     });
   }).catch(() => {}).then(() => { AUTRES.encours = false; });
@@ -5224,7 +5254,7 @@ function decorerFiche(){
    pastille dit seulement qui a coche un element ou change l'etat (s'il n'est
    pas soi), et les descriptions et notes des autres se lisent en italique. */
 const personneA2 = nom => AUTRES.liste.find(a => a.nom === nom)
-  || { nom, coul: COULEURS_AUTRES[Math.max(0, EQUIPE.indexOf(nom)) % COULEURS_AUTRES.length] };
+  || { nom, coul: couleurDe(nom) };
 function decorerPlan(sb, p){
   sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
   const t = sb.querySelector('.a2-tete'); if (t) t.remove();

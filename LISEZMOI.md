@@ -33,6 +33,9 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
   toucher la même bulle la confirme, elle s'entoure de vert. L'heure, les timecodes et la durée
   ne comptent pas. La fiche relit les saisies des autres toutes les quinze secondes, seulement
   celles qui ont changé.
+- **Qui tourne quoi** : quand quelqu'un vise un plan pour le Moteur (l'anneau rouge de la carte),
+  son rond à initiale apparaît sur l'anneau de ce plan chez tous les autres. Chaque personne a
+  sa couleur, la même sur tous les appareils : sa place dans la liste de l'équipe.
 - **La fiche d'un plan** : le plan est partagé, ce qu'un seul y coche arrive chez tout le monde.
   Une pastille dit seulement qui a coché un élément capté ou changé l'état (quand ce n'est pas
   soi). La description VFX et la note sont à chacun : on écrit la sienne, celles des autres (et

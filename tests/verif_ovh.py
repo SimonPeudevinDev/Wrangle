@@ -53,7 +53,8 @@ def cles(db):
 # le projet qu'un telephone neuf enverrait : son propre decoupage, seme a part
 PROPRE = {'prod': {'titre': 'Essai'}, 'optiques': [], 'prises': [],
           'plans': [{'id': 'pA', 'plan': '01', 'seq': '01', 'jour': 'J1'}, {'id': 'pB', 'plan': '02', 'seq': '01', 'jour': 'J1'}]}
-VIDE = {'prod': {}, 'optiques': [], 'plans': [], 'prises': []}
+# a la fin, les espaces d'essai sont retires : ils ne recoivent plus le decoupage de l'equipe
+VIDE = {'prod': {}, 'optiques': [], 'plans': [], 'prises': [], 'retire': True}
 
 essais = Essais(largeur=64)
 statut, e = api('etat.php?espace=essai-a')

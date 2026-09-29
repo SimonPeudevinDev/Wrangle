@@ -1393,3 +1393,7 @@ select option{background:var(--surface);color:var(--txt)}
 .texte-autre .a2-pt{align-self:center}
 .texte-autre b{flex:none;font-size:12px;font-weight:700;color:var(--txt)}
 .texte-autre i{white-space:pre-wrap}
+
+/* L'anneau du Moteur : qui d'autre tourne ce plan */
+.viser .a2-pts{position:absolute;top:-7px;right:-9px;display:flex;gap:2px;pointer-events:none}
+.viser .a2-pt{width:18px;height:18px;font-size:9.5px;font-style:normal;box-shadow:0 0 0 2px var(--bg)}
