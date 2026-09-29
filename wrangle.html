@@ -2156,7 +2156,6 @@ function majVise(){
   // le plan vise a change : les autres le sauront a la prochaine presence
   if (RESEAU.possible && (id || '') !== (RESEAU.viseEnvoye || '')){ RESEAU.viseEnvoye = id || ''; envoyerPresence(); }
   // qui d'autre tourne ce plan : sa pastille sur l'anneau (en <b>/<i> : l'anneau cache ses <span>)
-  document.querySelectorAll('.viser .a2-pts').forEach(x => x.remove());
   const qui = {};
   autres().forEach(x => {
     if (!x.nom || x.nom === UI.nom) return;
@@ -2166,9 +2165,15 @@ function majVise(){
       if (l.indexOf(x.nom) < 0) l.push(x.nom);
     });
   });
-  Object.keys(qui).forEach(pid => document.querySelectorAll('.viser[data-vise="' + pid + '"]').forEach(b =>
-    b.insertAdjacentHTML('beforeend', '<b class="a2-pts">' + qui[pid].map(n =>
-      `<i class="a2-pt" style="--c:${couleurDe(n)}" title="${esc(n)} tourne ce plan">${esc(initiale(n))}</i>`).join('') + '</b>')));
+  // un anneau ne change que si ses ronds changent : appele souvent, il ne doit pas clignoter
+  document.querySelectorAll('.viser[data-vise]').forEach(b => {
+    const l = qui[b.dataset.vise] || [], sig = l.join('|');
+    const d = b.querySelector('.a2-pts');
+    if ((d ? d.dataset.qui : '') === sig) return;
+    if (d) d.remove();
+    if (sig) b.insertAdjacentHTML('beforeend', `<b class="a2-pts" data-qui="${esc(sig)}">` + l.map(n =>
+      `<i class="a2-pt" style="--c:${couleurDe(n)}" title="${esc(n)} tourne ce plan">${esc(initiale(n))}</i>`).join('') + '</b>');
+  });
 }
 
 function fabAction(){ if (chrono) couper(); else moteur(); }
@@ -3583,6 +3588,7 @@ function openPlan(id, y){
   dessinerApercu(p);
   envoyerPresence();
   decorerFiche(); majAutres();
+  majVise();   // l'anneau a cote de la description porte tout de suite le rond de qui vise ce plan
 }
 
 function majBoutonsPlan(){
@@ -5296,7 +5302,8 @@ function decorerFiche(){
   const o = cible(openId); if (!o) return;
   if (openType === 'plan') return decorerPlan(sb, o);
   const j = jumelles(o);
-  sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
+  // le rond de l'anneau du Moteur est a majVise : on n'y touche pas, il clignoterait
+  sb.querySelectorAll('.a2-pts').forEach(x => { if (!x.closest('.viser')) x.remove(); });
   // en tete : qui a aussi note cette prise
   const tete = sb.querySelector('.a2-tete');
   const texte = j.length ? `<div class="a2-tete">${j.map(x => pastilleA2(x.a)).join('')}
@@ -5339,7 +5346,7 @@ function decorerFiche(){
 const personneA2 = nom => AUTRES.liste.find(a => a.nom === nom)
   || { nom, coul: couleurDe(nom) };
 function decorerPlan(sb, p){
-  sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
+  sb.querySelectorAll('.a2-pts').forEach(x => { if (!x.closest('.viser')) x.remove(); });
   const t = sb.querySelector('.a2-tete'); if (t) t.remove();
   const au = p.auteurs || {}, de = cle => au[cle] && au[cle] !== UI.nom ? [personneA2(au[cle])] : [];
   // les elements sont a chacun : ceux des autres portent leur rond ; coches a deux, entoures de vert

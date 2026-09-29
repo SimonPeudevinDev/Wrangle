@@ -136,6 +136,13 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     essais.verifier('Romain vise le plan 2 : son rond sur l anneau du Moteur',
                     patienter(lambda: banc.js("[...document.querySelectorAll('.viser[data-vise=\"%s\"] .a2-pt')].map(x => x.textContent).join()" % pid2) == 'R', tours=40), True)
     essais.verifier('et sur aucun autre plan', banc.js("document.querySelectorAll('.viser .a2-pt').length"), 1)
+    # la fiche du plan ouverte, les saisies de Romain arrivent : le rond de l'anneau ne clignote pas
+    banc.js("openPlan(%s); window.__rond = document.querySelector('#sbody .viser .a2-pt')" % json.dumps(pid2))
+    essais.verifier('dans la fiche du plan aussi, a cote de la description', banc.js("!!window.__rond"), True)
+    banc.js("majFicheEnPlace(); decorerFiche(); majVise(); rafraichirDoux()")
+    essais.verifier('la fiche se met a jour : le meme rond, jamais efface puis repose',
+                    banc.js("document.querySelector('#sbody .viser .a2-pt') === window.__rond && document.body.contains(window.__rond)"), True)
+    banc.js("closeSheet()")
     banc.js("viser(%s)" % json.dumps(pid2))
     essais.verifier('Simon vise a son tour : le serveur le sait',
                     patienter(lambda: any(x['nom'] == 'Simon' and ('vise:' + pid2) in x['actif'] for x in api('depuis.php?rev=0&client=x&espace=simon')['presence']), tours=40), True)
