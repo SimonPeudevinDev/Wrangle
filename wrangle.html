@@ -1170,6 +1170,7 @@ function live(el){
   }
   patch(kind, id, { [k]: el.type === 'checkbox' ? el.checked : el.value });
   if (kind === 'prise' && k === 'clip') carteSuitClip(cible(id));
+  if (kind === 'prise' && k === 'carte') clipSuitCarte(cible(id));
   if (kind === 'plan' && ['jour', 'plan', 'seq'].indexOf(k) >= 0) propager(cible(id));
   if (kind === 'plan' && ['seqTitre', 'lieu', 'seq'].indexOf(k) >= 0) titrerSequence(cible(id), k);
   if (openType === kind){ majResumes(); decorerFiche(); }
@@ -2383,6 +2384,17 @@ function carteSuitClip(t){
   patch('prise', t.id, { carte: c });
   document.querySelectorAll('#sbody [data-k="carte"]').forEach(i => { if (i !== document.activeElement) i.value = c; });
 }
+/* L'inverse : la carte changee a la main (A_0002) reecrit la bobine du clip
+   (A_0001C0004 -> A_0002C0004). Seulement une carte en forme de bobine, et un
+   clip dont on sait lire la bobine. */
+function clipSuitCarte(t){
+  if (!t) return;
+  const carte = String(t.carte || '').trim(), ancienne = carteDuClip(t.clip);
+  if (!ancienne || !FORME_BOBINE.test(carte) || memeVal(carte, ancienne)) return;
+  const clip = carte + String(t.clip).trim().slice(ancienne.length);
+  patch('prise', t.id, { clip });
+  const i = $('clip-in'); if (i && i !== document.activeElement && i.dataset.o === t.id) i.value = clip;
+}
 function appliquerClip(id){
   const t = prise(id); const s = t && clipSuivant(t);
   if (!s) return;
@@ -2543,9 +2555,7 @@ function openPrise(id, y){
     <div class="sec">
       <div class="clip-duo">
         <div class="clip-col"><div class="clip">
-          <div class="clip-ligne"><label for="clip-in">Clip</label>
-            ${sug && sug !== t.clip ? `<button class="mini" onclick="appliquerClip('${t.id}')" title="Reprendre le nom suivant">&#65291;1 <b>${esc(sug)}</b></button>` : ''}
-          </div>
+          <div class="clip-ligne"><label for="clip-in">Clip</label></div>
           <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1"
             value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C007')}" autocapitalize="characters" autocomplete="off">
         </div></div>

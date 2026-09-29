@@ -73,7 +73,9 @@
 [hidden]{display:none!important}
 /* la place de la barre de defilement est reservee, qu elle soit la ou non :
    filtrer la liste ne fait plus glisser le contenu de sa largeur */
-html{-webkit-text-size-adjust:100%;color-scheme:dark;scrollbar-gutter:stable}
+html{-webkit-text-size-adjust:100%;color-scheme:dark;scrollbar-gutter:stable;
+  /* les barres de defilement dans les teintes du site (heritees par toute la page) */
+  scrollbar-color:rgba(var(--gris),.32) transparent}
 body{
   margin:0;background:var(--bg);color:var(--txt);
   font:15px/1.5 var(--font);
@@ -1350,11 +1352,11 @@ select option{background:var(--surface);color:var(--txt)}
 .a2-tete b{color:var(--txt);font-weight:700}
 .a2-pt{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;flex:none;
   background:var(--c);color:#1a1210;font:800 10.5px/1 var(--font);letter-spacing:0}
-.spec.a2-autre,.spec.a2-accord,.spec.a2-ecart,.clip.a2-autre,.clip.a2-accord,.clip.a2-ecart{padding-left:12px;box-shadow:inset 3px 0 0 var(--c)}
+.spec.a2-autre,.spec.a2-accord,.spec.a2-ecart,.clip.a2-autre,.clip.a2-accord,.clip.a2-ecart{margin-left:-12px;padding-left:12px;box-shadow:inset 3px 0 0 var(--c)}
 .spec.a2-accord,.clip.a2-accord{--c:var(--ok)!important}
 .spec.a2-ecart,.clip.a2-ecart{box-shadow:inset 3px 0 0 var(--ng)}
 .clip.a2-autre,.clip.a2-ecart{padding-bottom:10px}
-.a2-row{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px 12px;box-shadow:inset 3px 0 0 var(--c)}
+.a2-row{display:flex;flex-wrap:wrap;gap:6px;margin-left:-12px;padding:0 0 12px 12px;box-shadow:inset 3px 0 0 var(--c)}
 .a2-row.a2-ecart{box-shadow:inset 3px 0 0 var(--ng)}
 .a2-val{display:inline-flex;align-items:center;gap:7px;max-width:100%;height:32px;padding:0 12px 0 5px;cursor:pointer;
   border:1.5px solid var(--c);border-radius:var(--rp);background:none;color:var(--txt);font:600 13px var(--font)}
@@ -1367,7 +1369,7 @@ select option{background:var(--surface);color:var(--txt)}
 .a2-lui .a2-pts,.a2-deux .a2-pts{position:absolute;top:-8px;right:-6px;display:flex;gap:2px;pointer-events:none}
 .a2-lui .a2-pt,.a2-deux .a2-pt{width:18px;height:18px;font-size:9.5px;box-shadow:0 0 0 2px var(--bg)}
 /* les lignes a tuiles : la barre sur l'en-tete, la valeur de l'autre a cote de la sienne */
-.champ.a2-autre>.champ-tete,.champ.a2-accord>.champ-tete,.champ.a2-ecart>.champ-tete{box-shadow:inset 3px 0 0 var(--c);padding-left:12px}
+.champ.a2-autre>.champ-tete,.champ.a2-accord>.champ-tete,.champ.a2-ecart>.champ-tete{box-shadow:inset 3px 0 0 var(--c);margin-left:-12px;padding-left:12px;width:calc(100% + 12px)}
 .champ.a2-accord>.champ-tete{box-shadow:inset 3px 0 0 var(--ok)}
 .champ.a2-ecart>.champ-tete{box-shadow:inset 3px 0 0 var(--ng)}
 .champ-val .a2-pts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;margin-left:10px;vertical-align:middle}
@@ -1427,3 +1429,10 @@ select option{background:var(--surface);color:var(--txt)}
 .tmeta .accord.oui{color:var(--ok);font-weight:700}
 .tmeta .accord.non{color:var(--tag-orange);font-weight:700}
 .tmeta .accord .a2-pt{display:inline-grid;width:16px;height:16px;font-size:9px;font-style:normal;vertical-align:-3px;margin:0 3px 0 1px}
+
+/* Les barres de defilement des navigateurs qui ne lisent pas scrollbar-color */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(var(--gris),.32);border-radius:10px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(var(--gris),.5)}
+::-webkit-scrollbar-button{display:none;width:0;height:0}

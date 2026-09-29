@@ -70,6 +70,8 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     essais.verifier('carte : la meme, barre verte, rien dessous', spec(banc, 'carte'), 'a2-accord')
     essais.verifier('diaph : un ecart, barre rouge et sa valeur', spec(banc, 'diaph'), 'a2-ecart | R T4 reprendre')
     essais.verifier('heure : ce n est pas un desaccord', spec(banc, 'heure'), '')
+    essais.verifier('la barre est dans la marge : l etiquette du diaph s aligne sur les autres',
+                    banc.js("(() => { const x = k => Math.round(document.querySelector('#sbody [data-k=\"' + k + '\"]').closest('.spec').querySelector('label').getBoundingClientRect().left); return x('diaph') - x('mesureDepuis'); })()"), 0)
     essais.verifier('resultat : son NG porte son initiale', bulle(banc, '#seg-statut button[data-st="NG"]'), 'a2-lui R')
     essais.verifier('note rapide : sa bulle Raccord aussi', bulle(banc, '.chips-notes button[data-n="Raccord"]'), 'a2-lui R')
     essais.verifier('meteo : sa valeur dans l en-tete de la ligne',

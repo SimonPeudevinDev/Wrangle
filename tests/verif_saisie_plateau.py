@@ -45,6 +45,9 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     # le +1 part du dernier clip note sur une autre prise : B_0002C0012 -> B_0002C0013
     banc.js("patch('prise', t2.id, { clip: 'B_0002C0012' }); patch('prise', t3.id, { carte: 'A_0009' }); appliquerClip(t3.id)")
     essais.verifier('le +1 du clip suit, la carte avec', [banc.js("t3.clip"), banc.js("t3.carte")], ['B_0002C0013', 'B_0002'])
+    essais.verifier('plus de bouton +1 a cote du clip', banc.js("!!document.querySelector('#sbody .clip-ligne .mini')"), False)
+    banc.js("(() => { const c = $('carte-in'); c.value = 'C_0003'; live(c); })()")
+    essais.verifier('changer la carte reecrit la bobine du clip', [banc.js("t3.clip"), banc.js("$('clip-in').value")], ['C_0003C0013', 'C_0003C0013'])
     banc.js("closeSheet()")
 
     # -- cadrage et mouvement a plusieurs
