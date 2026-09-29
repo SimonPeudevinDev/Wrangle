@@ -1338,3 +1338,39 @@ select option{background:var(--surface);color:var(--txt)}
 }
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 :focus-visible{outline:2px solid rgba(var(--acc-rgb),.8);outline-offset:2px}
+
+/* =========================================================================
+   Ce que les autres ont note sur la meme prise, ou le meme plan
+   Une barre a gauche de la ligne : a la couleur de l'autre quand lui seul l'a
+   remplie, verte quand on a ecrit la meme chose, rouge quand on differe. Sa
+   valeur dessous, qui se reprend d'un appui. Sur les bulles, un rond a son
+   initiale ; choisie a deux, la bulle s'entoure de vert.
+   ========================================================================= */
+.a2-tete{display:flex;align-items:center;gap:8px;margin:12px 20px 0;padding:8px 12px;
+  border-radius:var(--r);background:var(--surface2);font-size:13px;color:var(--dim);line-height:1.35}
+.a2-tete b{color:var(--txt);font-weight:700}
+.a2-pt{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;flex:none;
+  background:var(--c);color:#1a1210;font:800 10.5px/1 var(--font);letter-spacing:0}
+.spec.a2-autre,.spec.a2-accord,.spec.a2-ecart,.clip.a2-autre,.clip.a2-accord,.clip.a2-ecart{padding-left:12px;box-shadow:inset 3px 0 0 var(--c)}
+.spec.a2-accord,.clip.a2-accord{--c:var(--ok)!important}
+.spec.a2-ecart,.clip.a2-ecart{box-shadow:inset 3px 0 0 var(--ng)}
+.clip.a2-autre,.clip.a2-ecart{padding-bottom:10px}
+.a2-row{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px 12px;box-shadow:inset 3px 0 0 var(--c)}
+.a2-row.a2-ecart{box-shadow:inset 3px 0 0 var(--ng)}
+.a2-val{display:inline-flex;align-items:center;gap:7px;max-width:100%;height:32px;padding:0 12px 0 5px;cursor:pointer;
+  border:1.5px solid var(--c);border-radius:var(--rp);background:none;color:var(--txt);font:600 13px var(--font)}
+.a2-val span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.a2-val b{font-weight:500;font-size:11.5px;color:var(--dim2);flex:none}
+.a2-val:hover{background:var(--surface2)}
+/* les bulles : un rond par personne dans le coin, la bordure a la couleur de l'autre */
+.a2-lui,.a2-deux{position:relative}
+.a2-lui:not(.on){border-color:var(--c)!important;border-width:1.5px}
+.a2-deux{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ok)!important}
+.a2-lui .a2-pts,.a2-deux .a2-pts{position:absolute;top:-8px;right:-6px;display:flex;gap:2px;pointer-events:none}
+.a2-lui .a2-pt,.a2-deux .a2-pt{width:18px;height:18px;font-size:9.5px;box-shadow:0 0 0 2px var(--bg)}
+/* les lignes a tuiles : la barre sur l'en-tete, la valeur de l'autre a cote de la sienne */
+.champ.a2-autre>.champ-tete,.champ.a2-accord>.champ-tete,.champ.a2-ecart>.champ-tete{box-shadow:inset 3px 0 0 var(--c);padding-left:12px}
+.champ.a2-accord>.champ-tete{box-shadow:inset 3px 0 0 var(--ok)}
+.champ.a2-ecart>.champ-tete{box-shadow:inset 3px 0 0 var(--ng)}
+.champ-val .a2-pts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;margin-left:10px;vertical-align:middle}
+.champ-val .a2-pts em{font-style:normal;font-weight:500;font-size:13px;color:var(--dim);margin-right:6px}

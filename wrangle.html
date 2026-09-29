@@ -899,7 +899,7 @@ function changerDePersonne(n){
       .then(r => { if (r.ok) try{ sessionStorage.removeItem(saCle); localStorage.removeItem(saCle); }catch(e){} }).catch(() => {});
   setNom(n);
   DB = load();
-  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipier = []; RAP.equipe = false; RAP.tente = false; UI.equipe = false;
+  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipier = []; oublierAutres(); RAP.equipe = false; RAP.tente = false; UI.equipe = false;
   if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
   // les reponses parties sous l'ancien prenom ne valent plus rien : on change de session
   nouvelleSession(lireAttente());
@@ -1062,7 +1062,7 @@ function live(el){
   patch(kind, id, { [k]: el.type === 'checkbox' ? el.checked : el.value });
   if (kind === 'plan' && ['jour', 'plan', 'seq'].indexOf(k) >= 0) propager(cible(id));
   if (kind === 'plan' && ['seqTitre', 'lieu', 'seq'].indexOf(k) >= 0) titrerSequence(cible(id), k);
-  if (openType === kind) majResumes();
+  if (openType === kind){ majResumes(); decorerFiche(); }
   if (!el.dataset.refresh) return;
   // a la frappe, la liste attend une pause ; un choix ou une sortie de champ l'actualise tout de suite
   if (typeof event !== 'undefined' && event && event.type === 'input') renderListBientot(); else renderList();
@@ -1427,6 +1427,7 @@ function majChamps(){
     const cles = b.dataset.champs.split(',');
     b.innerHTML = defs.filter(c => cles.includes(c.k)).map(c => htmlChamp(o, c)).join('');
   });
+  decorerFiche();
 }
 function ouvrirChamp(k){
   champOuvert = champOuvert === k ? '' : k; champSaisie = false;
@@ -1979,6 +1980,7 @@ function majFicheEnPlace(){
   // les lignes de choix suivent aussi, sauf si l'on est en train d'y taper une valeur
   const a = document.activeElement;
   if (!(a && a.tagName === 'INPUT' && a.closest('.tuile-saisie'))) majChamps();
+  decorerFiche();
 }
 
 /* Le bouton flottant : Moteur pour ouvrir une prise et lancer le chrono,
@@ -2173,6 +2175,7 @@ function noteRapide(n){
   patch('prise', t.id, { notes: segs.join(' · ') });
   const ta = document.querySelector('#sbody textarea[data-k="notes"]'); if (ta){ ta.value = t.notes; autoHauteur(ta); }
   document.querySelectorAll('.chips-notes button').forEach(b => b.classList.toggle('on', aNote(t, b.dataset.n)));
+  decorerFiche();
   renderList();
 }
 
@@ -2364,6 +2367,7 @@ function openPrise(id, y){
   montrerFiche(y);
   majChronoFiche();
   envoyerPresence();
+  decorerFiche(); majAutres();
 }
 
 /* Les verdicts d'une prise et les etats d'un plan : la valeur, et la couleur du bouton choisi. */
@@ -2387,6 +2391,7 @@ function majBoutonsPrise(){
   if (k){ k.className = 'star' + (t.retenue ? ' on' : ''); k.innerHTML = htmlEtoile(t); }
   document.querySelectorAll('.chips-notes button').forEach(b => b.classList.toggle('on', aNote(t, b.dataset.n)));
   majResumes(); majNavPrise(); majChoix();
+  decorerFiche();
 }
 
 function delPrise(){
@@ -3399,6 +3404,7 @@ function openPlan(id, y){
   calerPrises('#fiche-prises');
   dessinerApercu(p);
   envoyerPresence();
+  decorerFiche(); majAutres();
 }
 
 function majBoutonsPlan(){
@@ -3410,6 +3416,7 @@ function majBoutonsPlan(){
   });
   majChoix(); majResumes(); majNavPlan();
   const pt = $('ptags-fiche'); if (pt) pt.innerHTML = htmlPtags(p);
+  decorerFiche();
 }
 
 /* On ne reconstruit pas la feuille pour un simple basculement : elle remonterait
@@ -4991,6 +4998,159 @@ function choisirTous(){
   appliquerChoix(); renderReport();
 }
 const quandDepot = iso => { const d = new Date(iso); return isNaN(d) ? '' : deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + ' ' + hhmm(d); };
+
+/* ------------------------------------------ Ce que les autres ont note */
+/* Dans la fiche d'une prise ou d'un plan, ce que les autres ont saisi sur la
+   meme prise (meme plan, meme numero) ou le meme plan se lit a cote : sur un
+   champ a taper, une barre a leur couleur quand eux seuls l'ont rempli, verte
+   quand on a ecrit la meme chose, rouge quand on differe, et leur valeur
+   dessous, qui se reprend d'un appui. Sur une bulle (resultat, etoile, notes
+   rapides, elements captes, etat, tuiles), un rond a leur initiale ; toucher
+   la meme bulle la confirme, elle s'entoure de vert. Les projets des autres
+   sont relus toutes les quinze secondes tant qu'une fiche est ouverte, et
+   seulement ceux qui ont change (la revision de chaque espace). */
+const AUTRES = { liste: [], revs: {}, t: 0, encours: false };
+const COULEURS_AUTRES = ['var(--tag-bleu)', '#b48ad6', 'var(--tag-orange)', '#5fb3b3', 'var(--tag-rouge)', '#c9a27a'];
+// l'heure, les timecodes et la duree ne sont pas des desaccords ; le reste de la liste est a chacun ou au decoupage
+const A2_IGNORE = ['par', 'heure', 'tcIn', 'tcOut', 'duree', 'n', 'jour', 'plan', 'seq', 'seqTitre', 'lieu', 'desc'];
+// les textes libres s'ajoutent au sien au lieu de le remplacer
+const A2_AJOUT = ['notes', 'notesClient', 'vfxDesc', 'elementsAutre'];
+const ficheA2 = () => openType === 'prise' || openType === 'plan';
+function oublierAutres(){ AUTRES.liste = []; AUTRES.revs = {}; AUTRES.t = 0; }
+function majAutres(force){
+  if (!RESEAU.possible || !UI.nom || AUTRES.encours) return;
+  if (!force && Date.now() - AUTRES.t < 10000) return;
+  AUTRES.encours = true; AUTRES.t = Date.now();
+  const s = RESEAU.session;
+  fetch(API('espaces'), { cache:'no-store' }).then(r => r.json()).then(rep => {
+    const autres = (rep.espaces || []).filter(e => e.espace !== monEspace());
+    const changes = autres.filter(e => AUTRES.revs[e.espace] !== e.rev);
+    return Promise.all(changes.map(e => fetch(API('etat') + '?espace=' + encodeURIComponent(e.espace), { cache:'no-store' })
+      .then(r => r.json()).then(x => ({ e, db: x.db })).catch(() => null)))
+    .then(res => {
+      if (s !== RESEAU.session) return;   // on a change de personne entre-temps
+      const garde = new Map(AUTRES.liste.map(a => [a.espace, a]));
+      res.forEach(x => {
+        if (!x || !x.db) return;
+        try{ garde.set(x.e.espace, { espace: x.e.espace, nom: x.e.nom || x.e.espace, db: normaliser(x.db) }); AUTRES.revs[x.e.espace] = x.e.rev; }catch(err){}
+      });
+      const la = new Set(autres.map(e => e.espace));
+      AUTRES.liste = [...garde.values()].filter(a => la.has(a.espace)).sort((a, b) => a.nom.localeCompare(b.nom));
+      AUTRES.liste.forEach((a, i) => { a.coul = COULEURS_AUTRES[i % COULEURS_AUTRES.length]; });
+      if (changes.length) decorerFiche();
+    });
+  }).catch(() => {}).then(() => { AUTRES.encours = false; });
+}
+setInterval(() => { if (ficheA2() && !document.hidden) majAutres(); }, 15000);
+
+/* La meme prise, ou le meme plan, chez chacun des autres : [{ a, o }]. */
+function jumelles(o){
+  if (!o || !AUTRES.liste.length || !ficheA2()) return [];
+  const p = openType === 'prise' ? plan(o.planId) : o;
+  if (!p) return [];
+  const out = [];
+  AUTRES.liste.forEach(a => {
+    const q = a.db.plans.find(x => x.id === p.id) || ((p.seq || p.plan) ? a.db.plans.find(x => clePlan(x) === clePlan(p)) : null);
+    if (!q) return;
+    const x = openType === 'prise' ? a.db.prises.find(t => t.planId === q.id && t.n === o.n) : q;
+    if (x) out.push({ a, o: x });
+  });
+  return out;
+}
+const pastilleA2 = a => `<span class="a2-pt" style="--c:${a.coul}" title="${esc(a.nom)}">${esc(initiale(a.nom))}</span>`;
+
+/* Une ligne a taper (un champ, ou les deux d'un depart / arrivee) et ce que les autres y ont mis. */
+function decorerSpec(s, o, j){
+  const suite = s.nextElementSibling;
+  if (suite && suite.classList.contains('a2-row')) suite.remove();
+  s.classList.remove('a2-autre', 'a2-accord', 'a2-ecart');
+  const ks = [...s.querySelectorAll('[data-o][data-k]')].map(el => el.dataset.k).filter(k => A2_IGNORE.indexOf(k) < 0);
+  if (!ks.length || !j.length) return;
+  const mien = ks.map(k => valRap(o[k])), rien = mien.every(v => !v);
+  const avis = j.map(x => {
+    const leur = ks.map(k => valRap(x.o[k]));
+    if (leur.every(v => !v)) return null;
+    const pareil = ks.every((k, i) => memeVal(mien[i], leur[i]));
+    return { x, leur, etat: pareil ? 'accord' : rien ? 'autre' : 'ecart' };
+  }).filter(Boolean);
+  if (!avis.length) return;
+  const etat = avis.some(v => v.etat === 'ecart') ? 'ecart' : avis.some(v => v.etat === 'autre') ? 'autre' : 'accord';
+  s.classList.add('a2-' + etat);
+  s.style.setProperty('--c', (avis.find(v => v.etat === 'autre') || avis[0]).x.a.coul);
+  // la barre verte suffit a dire qu'on concorde : la ligne ne montre que ce qui differe
+  if (etat === 'accord') return;
+  const html = avis.filter(v => v.etat !== 'accord').map(v =>
+    `<button type="button" class="a2-val" style="--c:${v.x.a.coul}" onclick="reprendreAutre('${esc(v.x.a.espace)}','${ks.join(',')}')"
+         title="Reprendre ce que ${esc(v.x.a.nom)} a noté">${pastilleA2(v.x.a)}<span>${esc(ks.length > 1 ? fleche(v.leur[0], v.leur[1]) : v.leur[0])}</span><b>${
+         A2_AJOUT.indexOf(ks[0]) >= 0 && !rien ? '+ ajouter' : 'reprendre'}</b></button>`).join('');
+  s.insertAdjacentHTML('afterend', `<div class="a2-row a2-${etat}" style="--c:${s.style.getPropertyValue('--c')}">${html}</div>`);
+}
+/* Une bulle : qui l'a choisie parmi les autres, et moi ? */
+function decorerBulle(b, moi, qui){
+  b.querySelectorAll('.a2-pt').forEach(x => x.remove());
+  b.classList.remove('a2-lui', 'a2-deux');
+  if (!qui.length) return;
+  b.classList.add(moi ? 'a2-deux' : 'a2-lui');
+  b.style.setProperty('--c', qui[0].coul);
+  b.insertAdjacentHTML('beforeend', `<span class="a2-pts">${qui.map(pastilleA2).join('')}</span>`);
+}
+function decorerFiche(){
+  const sb = $('sbody');
+  if (!sb || !ficheA2()) return;
+  const o = cible(openId); if (!o) return;
+  const j = jumelles(o);
+  sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
+  // en tete : qui a aussi note cette prise
+  const tete = sb.querySelector('.a2-tete');
+  const texte = j.length ? `<div class="a2-tete">${j.map(x => pastilleA2(x.a)).join('')}
+      <span><b>${esc(j.map(x => x.a.nom).join(', '))}</b> ${j.length > 1 ? 'ont' : 'a'} aussi noté ${openType === 'prise' ? 'cette prise' : 'ce plan'}</span></div>` : '';
+  if (tete) tete.outerHTML = texte || '<i class="a2-tete" hidden></i>';
+  else if (texte) sb.insertAdjacentHTML('afterbegin', texte);
+  const specs = new Set();
+  sb.querySelectorAll('[data-o][data-k]').forEach(el => { const s = el.closest('.spec, .clip'); if (s) specs.add(s); });
+  specs.forEach(s => decorerSpec(s, o, j));
+  const qui = f => j.filter(x => f(x.o)).map(x => x.a);
+  if (openType === 'prise'){
+    sb.querySelectorAll('#seg-statut button[data-st]').forEach(b => decorerBulle(b, o.statut === b.dataset.st, qui(x => x.statut === b.dataset.st)));
+    const k = $('btn-star'); if (k) decorerBulle(k, !!o.retenue, qui(x => !!x.retenue));
+    sb.querySelectorAll('.chips-notes button[data-n]').forEach(b => decorerBulle(b, aNote(o, b.dataset.n), qui(x => aNote(x, b.dataset.n))));
+  } else {
+    sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, o.etat === b.dataset.et, qui(x => x.etat === b.dataset.et)));
+    sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!(o.elements || {})[b.dataset.el], qui(x => !!(x.elements || {})[b.dataset.el])));
+  }
+  // les lignes a tuiles : la valeur des autres dans l'en-tete, leur initiale sur la tuile
+  sb.querySelectorAll('.champ[data-champ]').forEach(c => {
+    const k = c.dataset.champ, a = x => Array.isArray(x) ? x : valRap(x) ? [valRap(x)] : [];
+    const mien = a(o[k]), porte = (l, v) => l.some(y => memeVal(y, v));
+    c.classList.remove('a2-autre', 'a2-accord', 'a2-ecart');
+    const avis = j.filter(x => a(x.o[k]).length);
+    if (avis.length){
+      const pareil = x => a(x.o[k]).length === mien.length && a(x.o[k]).every(v => porte(mien, v));
+      const etat = avis.every(pareil) ? 'accord' : !mien.length ? 'autre' : 'ecart';
+      c.classList.add('a2-' + etat);
+      c.style.setProperty('--c', avis[0].a.coul);
+      const v = c.querySelector('.champ-val');
+      if (v) v.insertAdjacentHTML('beforeend', `<span class="a2-pts">${avis.filter(x => !pareil(x)).map(x =>
+        pastilleA2(x.a) + '<em>' + esc(a(x.o[k]).join(', ')) + '</em>').join('')}</span>`);
+    }
+    c.querySelectorAll('.tuile[data-f]').forEach(b => decorerBulle(b, porte(mien, b.dataset.f), avis.filter(x => porte(a(x.o[k]), b.dataset.f)).map(x => x.a)));
+  });
+}
+/* Reprendre ce qu'un autre a note : sa valeur devient la mienne (une note s'ajoute a la mienne). */
+function reprendreAutre(espace, cles){
+  const o = cible(openId), kind = kindDe(openId); if (!o || !kind) return;
+  const x = jumelles(o).find(y => y.a.espace === espace); if (!x) return;
+  const d = {};
+  cles.split(',').forEach(k => {
+    const lui = x.o[k] == null ? '' : x.o[k], moi = (o[k] || '').trim();
+    if (A2_AJOUT.indexOf(k) < 0 || !moi) { d[k] = lui; return; }
+    const segs = moi.split(/\s*·\s*/);
+    String(lui).split(/\s*·\s*/).forEach(sg => { if (sg.trim() && !segs.some(y => memeVal(y, sg))) segs.push(sg.trim()); });
+    d[k] = segs.join(' · ');
+  });
+  patch(kind, o.id, d);
+  majFicheEnPlace(); majResumes(); renderListBientot();
+}
 
 /* ------------------------------------------------ Rapprocher les saisies */
 /* Chacun saisit de son cote, dans son navigateur ; le DIT depose ici les

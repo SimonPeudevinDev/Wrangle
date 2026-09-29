@@ -25,6 +25,14 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
   sont ceux qui ont saisi au moins une prise : un prénom choisi un jour sans rien saisir reste
   proposé, grisé, sans encombrer le rapport. Le choix vaut pour tout le rapport (bilan, les trois
   PDF, exports) et reste sur l'appareil.
+- **Ce que les autres ont noté, dans la fiche** : en ouvrant une prise (ou un plan), on voit ce que
+  les autres ont saisi sur la même prise — même plan, même numéro. Chaque ligne porte une barre :
+  à la couleur de l'autre quand lui seul l'a remplie, verte quand on a noté la même chose, rouge
+  quand on diffère ; sa valeur est dessous, un appui la reprend (une note s'ajoute à la sienne).
+  Sur les bulles (résultat, étoile, notes rapides, éléments captés, état, météo, focale…), un rond
+  à son initiale ; toucher la même bulle la confirme, elle s'entoure de vert. L'heure, les
+  timecodes et la durée ne comptent pas. La fiche relit les saisies des autres toutes les quinze
+  secondes, seulement celles qui ont changé.
 - **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
   (par une personne, jour par jour) et le serveur la reporte chez tout le monde ; chacun garde sa
   copie de ce qu'il note dessus (états, éléments captés). Quand deux personnes ont noté des choses
@@ -321,7 +329,7 @@ Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal
 
 ## Vérifier que rien n'est cassé
 
-Vingt et un scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Vingt-deux scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -346,6 +354,7 @@ py tests/verif_personnes.py         chacun ses saisies sur le site, et à qui re
 py tests/verif_interroger.py       la page en mode php, comme chez l'hébergeur : elle interroge au lieu d'écouter
 py tests/verif_coupure.py          saisir en zone blanche, fermer l'appli avant le retour du réseau : rien ne se perd
 py tests/verif_choix_equipe.py     le DIT réunit une personne, plusieurs ou toutes ; « Tous », ce sont ceux qui ont saisi
+py tests/verif_a_deux.py           dans la fiche, ce que les autres ont noté sur la même prise, à reprendre ou confirmer
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
