@@ -36,11 +36,13 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
 - **Qui tourne quoi** : quand quelqu'un vise un plan pour le Moteur (l'anneau rouge de la carte),
   son rond à initiale apparaît sur l'anneau de ce plan chez tous les autres. Chaque personne a
   sa couleur, la même sur tous les appareils : sa place dans la liste de l'équipe.
-- **La fiche d'un plan** : le plan est partagé, ce qu'un seul y coche arrive chez tout le monde.
-  Une pastille dit seulement qui a coché un élément capté ou changé l'état (quand ce n'est pas
-  soi). La description VFX et la note sont à chacun : on écrit la sienne, celles des autres (et
-  celle du découpage) se lisent dessous, en italique, avec leur prénom ; les PDF et les exports
-  les reprennent toutes.
+- **La fiche d'un plan** : les éléments captés sont à chacun. On coche les siens sans toucher à
+  ceux des autres ; ceux de Romain portent son rond, contour à sa couleur, et une case cochée à
+  deux s'entoure de vert, comme dans la fiche d'une prise. La description VFX, la note et
+  « Autre » sont aussi à chacun : on écrit la sienne, celles des autres (et celle du découpage) se
+  lisent dessous, en italique, avec leur prénom. La liste, les filtres, les PDF et les exports
+  prennent les éléments et les textes de tous. Une pastille dit qui a changé l'état. L'anneau du
+  Moteur est à côté de la description.
 - **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
   (par une personne, jour par jour) et le serveur la reporte chez tout le monde ; chacun garde sa
   copie de ce qu'il note dessus (états, éléments captés). Quand deux personnes ont noté des choses

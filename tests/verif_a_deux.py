@@ -96,10 +96,22 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     # le plan : son element capte
     banc.js("openPlan(%s)" % json.dumps(pid))
     # le plan est partage : le HDRI coche par Romain est chez Simon aussi, avec sa pastille a lui seul
-    essais.verifier('fiche du plan : le HDRI porte la pastille de Romain, qui l a coche', bulle(banc, '.el[data-el="hdri"]'), 'a2-lui R')
+    # les elements sont a chacun : le HDRI de Romain porte son rond, il n'est pas coche chez Simon
+    essais.verifier('fiche du plan : le HDRI de Romain porte son rond, pas coche chez Simon', bulle(banc, '.el[data-el="hdri"]'), 'a2-lui R')
+    essais.verifier('et il n est pas dans les elements de Simon', banc.js("!!mesElements(plan(openId)).hdri"), False)
     banc.js("toggleElement('chart')")
-    essais.verifier('la charte, cochee par Simon lui-meme : pas de pastille', [banc.js("plan(openId).auteurs['el:chart']"), bulle(banc, '.el[data-el="chart"]')], ['Simon', ''])
-    essais.verifier('les elements que personne n a coches : rien', banc.js("document.querySelectorAll('#sbody .el:not(.on) .a2-pt').length"), 0)
+    essais.verifier('la charte, cochee par Simon : sous son prenom, sans rond', [banc.js("plan(openId)['elements@Simon']"), bulle(banc, '.el[data-el="chart"]')], [{'chart': True}, ''])
+    essais.verifier('cocher la sienne ne touche pas au HDRI de Romain', banc.js("elementsDe(plan(openId), 'Romain', false)"), {'hdri': True})
+    banc.js("toggleElement('hdri')")
+    essais.verifier('Simon coche le HDRI aussi : a deux, entoure de vert', bulle(banc, '.el[data-el="hdri"]'), 'a2-deux R')
+    banc.js("toggleElement('hdri')")
+    essais.verifier('Simon le decoche : celui de Romain reste', [bulle(banc, '.el[data-el="hdri"]'), banc.js("elementsTous(plan(openId)).hdri")], ['a2-lui R', True])
+    romain([{'op': 'patch', 'kind': 'plan', 'id': pid, 'data': {'elements@Romain': {'hdri': True, 'lidar': True}}}])
+    essais.verifier('Romain coche le Lidar de son cote : son rond, et la charte de Simon reste',
+                    patienter(lambda: bulle(banc, '.el[data-el="lidar"]') == 'a2-lui R' and banc.js("!!mesElements(plan(openId)).chart"), tours=40), True)
+    essais.verifier('la liste, les filtres et les PDF voient les elements de tous', sorted(banc.js("Object.keys(elementsTous(plan(openId)))")), ['chart', 'hdri', 'lidar'])
+    essais.verifier('les elements que personne n a coches : rien', banc.js("document.querySelectorAll('#sbody .el:not(.on):not(.a2-lui) .a2-pt').length"), 0)
+    essais.verifier('l anneau du Moteur a cote de la description', banc.js("!!document.querySelector('#sbody .lead-ligne .viser[data-vise=\"' + openId + '\"]')"), True)
     essais.verifier('pas de bandeau sur un plan : il n y a rien a comparer', banc.js("!!document.querySelector('#sbody .a2-tete')"), False)
     # la note du plan est a chacun : celle de Romain en italique sous la sienne
     essais.verifier('sa note a lui, en italique sous la mienne',

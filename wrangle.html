@@ -189,6 +189,41 @@ const ELEMENTS = [
   ['camtrack',   'CamTrack live',  'CAMTRACK',   ''],
   ['led',        'Mur LED',        'MUR LED',    'v'],
 ];
+/* Les elements captes sont a chacun : chacun coche les siens (elements@Prenom),
+   sans toucher a ceux des autres ; le plan etant partage, tous voyagent
+   ensemble. Ceux d'avant, communs (p.elements), restent a qui les a coches
+   (p.auteurs) ; ceux sans auteur sont a chacun, tant qu'il n'a pas les siens.
+   Au premier element qu'on touche, les siens passent sous son prenom.
+   elementsTous : l'ensemble, pour la liste, les filtres, les PDF et exports. */
+function elementsDe(p, nom, moi){
+  const out = {};
+  if (!p) return out;
+  const perso = p['elements@' + nom];
+  if (perso && typeof perso === 'object'){ Object.keys(perso).forEach(k => { if (perso[k]) out[k] = true; }); return out; }
+  const au = p.auteurs || {};
+  Object.keys(p.elements || {}).forEach(k => {
+    const a = au['el:' + k];
+    if (p.elements[k] && (a ? a === nom : moi)) out[k] = true;
+  });
+  return out;
+}
+function elementsTous(p){
+  const out = {};
+  if (!p) return out;
+  Object.keys(p.elements || {}).forEach(k => { if (p.elements[k]) out[k] = true; });
+  Object.keys(p).forEach(c => {
+    if (c.indexOf('elements@') !== 0 || !p[c] || typeof p[c] !== 'object') return;
+    Object.keys(p[c]).forEach(k => { if (p[c][k]) out[k] = true; });
+  });
+  return out;
+}
+/* Ceux qui ont coche des elements sur ce plan : leurs prenoms. */
+function quiAElements(p){
+  const l = [];
+  Object.keys(p || {}).forEach(c => { if (c.indexOf('elements@') === 0) l.push(c.slice(9)); });
+  Object.keys((p && p.auteurs) || {}).forEach(c => { if (c.indexOf('el:') === 0 && p.elements && p.elements[c.slice(3)]) l.push(p.auteurs[c]); });
+  return l.filter((n, i) => n && l.indexOf(n) === i);
+}
 
 /* Repris automatiquement d'une prise a la suivante : sur le plateau,
    la camera et l'optique ne changent pas entre deux prises d'un meme plan. */
@@ -210,7 +245,7 @@ const fleche = (a, b) => [a, b].filter(Boolean).join(' → ');
    rangee sous son prenom (notesClient@Romain), et on lit celles des autres. Le
    plan etant partage, toutes voyagent ensemble ; celle du decoupage (sans
    prenom) reste en tete. textesDe : [[prenom ou '', texte]]. */
-const TEXTES_A_CHACUN = ['vfxDesc', 'notesClient'];
+const TEXTES_A_CHACUN = ['vfxDesc', 'notesClient', 'elementsAutre'];
 const cleTexte = k => UI.nom ? k + '@' + UI.nom.trim() : k;
 function textesDe(p, k){
   const out = [];
@@ -504,7 +539,7 @@ const cible = id => id === 'prod' ? DB.prod : (prise(id) || plan(id));
 const kindDe = id => id === 'prod' ? 'prod' : prise(id) ? 'prise' : plan(id) ? 'plan' : null;
 
 const prisesDe = pid => DB.prises.filter(t => t.planId === pid).sort((a, b) => (a.n || 0) - (b.n || 0));
-const aElements = p => !!(p && p.elements && Object.values(p.elements).some(Boolean));
+const aElements = p => !!p && Object.keys(elementsTous(p)).length > 0;
 
 /* ------------------------------------------------------------------ Reseau */
 /* Servie par serveur.py, la page envoie ses modifications sous forme
@@ -617,7 +652,7 @@ function patch(kind, id, data){
 /* Qui a pose quoi sur un plan. Le plan est partage : ce qu'un seul coche
    arrive chez tout le monde ; la fiche ne montre la pastille que de celui qui
    l'a coche ou change (p.auteurs : { 'el:hdri': 'Romain', etat: 'Simon' }). */
-const AUTEURS_SUIVIS = ['etat', 'meteo', 'elementsAutre'];
+const AUTEURS_SUIVIS = ['etat', 'meteo'];
 function avecAuteurs(o, data){
   if (!UI.nom || 'auteurs' in data) return data;
   const au = Object.assign({}, o.auteurs || {});
@@ -1585,13 +1620,13 @@ const ETATS = { todo:'À tourner', done:'Tourné', drop:'Abandonné' };
 
 /* Les elements captes : une ligne de texte, les fonds en couleur. */
 /* Les elements coches sur un plan, dans l'ordre de la feuille. */
-const elementsCoches = p => ELEMENTS.filter(e => p && p.elements && p.elements[e[0]]);
+const elementsCoches = p => { const t = elementsTous(p); return ELEMENTS.filter(e => t[e[0]]); };
 function lisElements(p){
   if (!p) return '';
   // les fonds d'abord : c'est ce qui change tout pour la post
   const l = elementsCoches(p).sort((a, b) => (b[3] === 'v') - (a[3] === 'v'))
     .map(e => `<span>${e[3] === 'v' ? `<em>${e[2]}</em>` : e[2]}</span>`);
-  if (p.elementsAutre) l.push(`<span>${esc(p.elementsAutre.toUpperCase())}</span>`);
+  if (texteDe(p, 'elementsAutre')) l.push(`<span>${esc(texteDe(p, 'elementsAutre').toUpperCase())}</span>`);
   return l.join('');
 }
 
@@ -3451,7 +3486,9 @@ function openPlan(id, y){
     <div class="bandeau">
       <div class="btxt">
         <div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div>
-        <div class="lead">${esc(p.desc || '—')}</div>
+        <div class="lead-ligne"><div class="lead">${esc(p.desc || '—')}</div>
+          <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}" onclick="viser('${p.id}')"
+            title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
         ${p.assets ? `<div class="note"><b>Découpage VFX</b>${esc(p.assets)}</div>` : ''}
       </div>
     </div>
@@ -3464,11 +3501,12 @@ function openPlan(id, y){
     <div class="sec">
       <h3>Éléments captés</h3>
       <div class="elems">
-        ${ELEMENTS.map(e => `<button class="el ${p.elements[e[0]] ? 'on ' + e[3] : ''}"
+        ${ELEMENTS.map(e => `<button class="el${mesElements(p)[e[0]] ? ' on' : ''}"
           data-el="${e[0]}" onclick="toggleElement('${e[0]}')">${e[1]}</button>`).join('')}
       </div>
       <div class="specs suite">
-        ${F(p, 'Autre', 'elementsAutre', {ph:'Witness cam, relevé décamètre…', refresh:1})}
+        ${F(p, 'Autre', cleTexte('elementsAutre'), {ph:'Witness cam, relevé décamètre…', refresh:1})}
+        <div class="textes-autres" data-texte="elementsAutre"></div>
       </div>
     </div>
 
@@ -3523,10 +3561,8 @@ function openPlan(id, y){
 function majBoutonsPlan(){
   const p = plan(openId); if (!p) return;
   majSeg('#seg-etat', 'et', ETATS_SEG, p.etat);
-  document.querySelectorAll('#sbody .el[data-el]').forEach(b => {
-    const e = ELEMENTS.find(x => x[0] === b.dataset.el);
-    b.className = 'el' + (p.elements && p.elements[b.dataset.el] ? ' on ' + e[3] : '');
-  });
+  const mes = mesElements(p);
+  document.querySelectorAll('#sbody .el[data-el]').forEach(b => { b.className = 'el' + (mes[b.dataset.el] ? ' on' : ''); });
   majChoix(); majResumes(); majNavPlan();
   const pt = $('ptags-fiche'); if (pt) pt.innerHTML = htmlPtags(p);
   decorerFiche();
@@ -3534,11 +3570,28 @@ function majBoutonsPlan(){
 
 /* On ne reconstruit pas la feuille pour un simple basculement : elle remonterait
    en haut a chaque clic et deviendrait impossible a remplir. */
+/* Mes elements sur ce plan (sans prenom, sur un appareil seul : ceux du plan). */
+const mesElements = p => UI.nom ? elementsDe(p, UI.nom.trim(), true) : Object.assign({}, p.elements || {});
 function toggleElement(k){
   const p = plan(openId); if (!p) return;
-  const el = Object.assign({}, p.elements || {});
-  el[k] = !el[k];
-  patch('plan', p.id, { elements: el });
+  if (!UI.nom){
+    const el = Object.assign({}, p.elements || {});
+    el[k] = !el[k];
+    patch('plan', p.id, { elements: el });
+  } else {
+    const nom = UI.nom.trim(), cle = 'elements@' + nom;
+    const mien = mesElements(p);
+    if (mien[k]) delete mien[k]; else mien[k] = true;
+    const d = { [cle]: mien };
+    // la premiere fois, les elements communs qui sont a moi passent sous mon prenom ;
+    // ceux coches par d'autres restent aux autres
+    if (!(p[cle] && typeof p[cle] === 'object')){
+      const au = p.auteurs || {}, reste = {};
+      Object.keys(p.elements || {}).forEach(e => { if (p.elements[e] && au['el:' + e] && au['el:' + e] !== nom) reste[e] = true; });
+      d.elements = reste;
+    }
+    patch('plan', p.id, d);
+  }
   majBoutonsPlan();
   renderList();
 }
@@ -4241,7 +4294,7 @@ function renderBilan(perimetre, rapprochement){
     al.push(['o', `Plan <b>${esc(x.plan)}</b> : ${prisesDe(x.id).length} prise(s), aucune retenue pour le montage.`]));
   if (!al.length && T.length) al.push(['g', 'Rien à signaler : clips et prises retenues sont cohérents.']);
 
-  const compte = ELEMENTS.map(e => [e[1], P.filter(x => x.elements && x.elements[e[0]]).length]).filter(x => x[1]);
+  const compte = ELEMENTS.map(e => [e[1], P.filter(x => elementsTous(x)[e[0]]).length]).filter(x => x[1]);
   const parJour = joursConnus().map(j => [j, prisesDuJour(j).length]);
   const maxJ = Math.max(1, ...parJour.map(x => x[1]));
   const parQui = frequences(T.map(t => t.par || '—'));
@@ -4363,7 +4416,7 @@ function htmlPost(j){
     const ref = keep[0] || pr[pr.length - 1];
     const autres = pr.filter(t => keep.indexOf(t) < 0);
     const el = elementsCoches(x).map(e => `<span${e[3] === 'v' ? ' class="v"' : ''}>${esc(e[2])}</span>`).join('') +
-      (x.elementsAutre ? `<span>${esc(x.elementsAutre.toUpperCase())}</span>` : '');
+      (texteDe(x, 'elementsAutre') ? `<span>${esc(texteDe(x, 'elementsAutre').toUpperCase())}</span>` : '');
     const rel = ref ? relevesDe(ref) : [];
     return `<article class="pplan">
       <div class="ptete">
@@ -4859,7 +4912,7 @@ function telechargerDIT(){
    Les ecarts de saisie n'y sont pas : ils se tranchent avant, sur la fiche
    data wrangling. Meme charte que le journal DIT, une journee par page. */
 const COMMUNS_VFX = ['Caméra', 'Format', 'Cadence', 'Exposition', 'Couleur', 'Objectif', 'Filtres', 'Diaph'];
-const planVFX = x => !!(texteDe(x, 'vfxDesc') || x.assets || x.elementsAutre || aElements(x) || (x.tags || []).some(t => t === 'VFX' || t === 'CG'));
+const planVFX = x => !!(texteDe(x, 'vfxDesc') || x.assets || texteDe(x, 'elementsAutre') || aElements(x) || (x.tags || []).some(t => t === 'VFX' || t === 'CG'));
 function modeleVFX(j){
   const jours = j === '*' ? joursConnus().filter(x => plansDuJour(x).length) : [j];
   const p = DB.prod, d = new Date();
@@ -4880,7 +4933,7 @@ function modeleVFX(j){
         // ni la description du plan ni le titre de sequence : le comp a le decoupage pour ca
         meta: [x.lieu, x.intExt, x.momentJour, x.cadrage].filter(Boolean).join(' · '),
         vfxDesc: texteDe(x, 'vfxDesc'), assets: x.assets || '',
-        elements: elementsCoches(x).map(e => e[1]).concat(x.elementsAutre ? [x.elementsAutre] : []),
+        elements: elementsCoches(x).map(e => e[1]).concat(texteDe(x, 'elementsAutre') ? [texteDe(x, 'elementsAutre')] : []),
         // toutes les prises du plan ; la retenue fait foi pour les reglages
         prises: pr.map(g => ({ n: g.n, clip: g.clip || '', carte: g.carte || '', statut: g.statut || '', retenue: !!g.retenue,
                                duree: g.duree || '', note: g.notes || '', par: g.par || '', heure: g.heure || '' })),
@@ -5259,7 +5312,10 @@ function decorerPlan(sb, p){
   sb.querySelectorAll('.a2-pts').forEach(x => x.remove());
   const t = sb.querySelector('.a2-tete'); if (t) t.remove();
   const au = p.auteurs || {}, de = cle => au[cle] && au[cle] !== UI.nom ? [personneA2(au[cle])] : [];
-  sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, false, (p.elements || {})[b.dataset.el] ? de('el:' + b.dataset.el) : []));
+  // les elements sont a chacun : ceux des autres portent leur rond ; coches a deux, entoures de vert
+  const mes = mesElements(p), autres = quiAElements(p).filter(n => n !== (UI.nom || '').trim())
+    .map(n => ({ a: personneA2(n), el: elementsDe(p, n, false) }));
+  sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!mes[b.dataset.el], autres.filter(x => x.el[b.dataset.el]).map(x => x.a)));
   sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
   sb.querySelectorAll('.textes-autres[data-texte]').forEach(d => {
     d.innerHTML = textesDe(p, d.dataset.texte).filter(([n]) => n !== (UI.nom || '').trim()).map(([n, v]) =>
@@ -5301,7 +5357,7 @@ const RAP_PLAN = [['etat', 'État'], ['elements', 'Éléments captés'], ['eleme
 const valRap = v => v === true ? 'oui' : v === false || v == null ? '' : Array.isArray(v) ? v.join(', ') : String(v).trim();
 const clePlan = p => (p.seq || '') + '|' + (p.plan || '');
 const champPlan = (p, k) => k === 'etat' ? (ETATS[p.etat] || valRap(p.etat))
-  : k === 'elements' ? Object.keys(p.elements || {}).filter(x => p.elements[x]).sort().join(', ')
+  : k === 'elements' ? Object.keys(elementsTous(p)).sort().join(', ')
   : TEXTES_A_CHACUN.indexOf(k) >= 0 ? texteDe(p, k) : valRap(p[k]);
 /* les saisies a rapprocher : celles de ce navigateur d'abord, puis les fichiers deposes */
 const sourcesRap = () => [{ nom: UI.nom || 'Ce navigateur', db: DB, ici: true }].concat(RAP.sources);
@@ -5855,7 +5911,7 @@ window.addEventListener('afterprint', () => {
 const cell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
 const plat = v => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim();
 const listeElements = p => !p ? '' :
-  elementsCoches(p).map(e => e[1]).concat(p.elementsAutre ? [p.elementsAutre] : []).join(', ');
+  elementsCoches(p).map(e => e[1]).concat(texteDe(p, 'elementsAutre') ? [texteDe(p, 'elementsAutre')] : []).join(', ');
 
 function download(name, content, mime){
   const b = new Blob([content], { type: mime });

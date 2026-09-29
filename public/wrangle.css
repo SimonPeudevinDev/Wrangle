@@ -1019,7 +1019,6 @@ select option{background:var(--surface);color:var(--txt)}
 .elems{display:flex;flex-wrap:wrap;gap:8px}
 .el{ height:42px;padding:0 16px;font-size:13.5px }
 .el.on{border-color:var(--txt);color:var(--txt)}
-.el.on.v{background:var(--ok);color:var(--ok-txt);border-color:var(--ok)}
 
 /* -------- Boutons : au trait, caramel plein pour l'action principale -------- */
 .btn{ height:46px;padding:0 20px;color:var(--txt);font-weight:600;font-size:14px }
@@ -1397,3 +1396,8 @@ select option{background:var(--surface);color:var(--txt)}
 /* L'anneau du Moteur : qui d'autre tourne ce plan */
 .viser .a2-pts{position:absolute;top:-7px;right:-9px;display:flex;gap:2px;pointer-events:none}
 .viser .a2-pt{width:18px;height:18px;font-size:9.5px;font-style:normal;box-shadow:0 0 0 2px var(--bg)}
+
+/* La fiche du plan : l'anneau du Moteur a cote de la description */
+.lead-ligne{display:flex;align-items:flex-start;gap:14px}
+.lead-ligne .lead{flex:1;min-width:0}
+.lead-ligne .viser{flex:none;margin-top:2px}
