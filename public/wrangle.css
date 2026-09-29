@@ -1018,7 +1018,7 @@ select option{background:var(--surface);color:var(--txt)}
 /* -------- Elements captes : des capsules au trait -------- */
 .elems{display:flex;flex-wrap:wrap;gap:8px}
 .el{ height:42px;padding:0 16px;font-size:13.5px }
-.el.on{border-color:var(--txt);color:var(--txt)}
+.el.on{background:var(--acc);border-color:var(--acc);color:var(--acc-txt)}
 
 /* -------- Boutons : au trait, caramel plein pour l'action principale -------- */
 .btn{ height:46px;padding:0 20px;color:var(--txt);font-weight:600;font-size:14px }
@@ -1363,7 +1363,6 @@ select option{background:var(--surface);color:var(--txt)}
 .a2-val:hover{background:var(--surface2)}
 /* les bulles : un rond par personne dans le coin, la bordure a la couleur de l'autre */
 .a2-lui,.a2-deux{position:relative}
-.a2-lui:not(.on){border-color:var(--c)!important;border-width:1.5px}
 .a2-deux{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ok)!important}
 .a2-lui .a2-pts,.a2-deux .a2-pts{position:absolute;top:-8px;right:-6px;display:flex;gap:2px;pointer-events:none}
 .a2-lui .a2-pt,.a2-deux .a2-pt{width:18px;height:18px;font-size:9.5px;box-shadow:0 0 0 2px var(--bg)}
