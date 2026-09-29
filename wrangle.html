@@ -1636,9 +1636,9 @@ const ETATS = { todo:'À tourner', done:'Tourné', drop:'Abandonné' };
 const elementsCoches = p => { const t = elementsTous(p); return ELEMENTS.filter(e => t[e[0]]); };
 function lisElements(p){
   if (!p) return '';
-  // les fonds d'abord : c'est ce qui change tout pour la post
+  // les fonds d'abord : c'est ce qui change tout pour la post ; tous de la meme couleur
   const l = elementsCoches(p).sort((a, b) => (b[3] === 'v') - (a[3] === 'v'))
-    .map(e => `<span>${e[3] === 'v' ? `<em>${e[2]}</em>` : e[2]}</span>`);
+    .map(e => `<span>${e[2]}</span>`);
   if (texteDe(p, 'elementsAutre')) l.push(`<span>${esc(texteDe(p, 'elementsAutre').toUpperCase())}</span>`);
   return l.join('');
 }
@@ -4445,7 +4445,7 @@ function htmlPost(j){
     const keep = pr.filter(t => t.retenue);
     const ref = keep[0] || pr[pr.length - 1];
     const autres = pr.filter(t => keep.indexOf(t) < 0);
-    const el = elementsCoches(x).map(e => `<span${e[3] === 'v' ? ' class="v"' : ''}>${esc(e[2])}</span>`).join('') +
+    const el = elementsCoches(x).map(e => `<span>${esc(e[2])}</span>`).join('') +
       (texteDe(x, 'elementsAutre') ? `<span>${esc(texteDe(x, 'elementsAutre').toUpperCase())}</span>` : '');
     const rel = ref ? relevesDe(ref) : [];
     return `<article class="pplan">
