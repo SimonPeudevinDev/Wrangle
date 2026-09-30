@@ -91,5 +91,34 @@ with Banc(8786, 9371) as banc:
     essais.verifier('sur un plan au trait, on ne garde jamais le plus lourd', choix[2], True)
     essais.detail('au trait : JPEG %d Ko, WebP %d Ko' % (choix[0], choix[1]))
 
+    # -- l'aimant : un mur presque droit se couche a l'horizontale ; un second mur
+    #    commence au bout du premier ; avec Alt, a main levee
+    banc.js('ouvrirCroquis(DB.plans[2].id)'); time.sleep(0.8)
+    r = banc.js("(() => { const r = $('croquis').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })()")
+    ecran = lambda fx, fy: (r[0] + r[2] * fx, r[1] + r[3] * fy)
+
+    def tirer(de, a, alt=False):
+        mods = 1 if alt else 0
+        x, y = ecran(*de)
+        banc.cdp.appel('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', buttons=1, clickCount=1, modifiers=mods)
+        for k in range(1, 6):
+            xx, yy = ecran(de[0] + (a[0] - de[0]) * k / 5, de[1] + (a[1] - de[1]) * k / 5)
+            banc.cdp.appel('Input.dispatchMouseEvent', type='mouseMoved', x=xx, y=yy, button='left', buttons=1, modifiers=mods)
+        x, y = ecran(*a)
+        banc.cdp.appel('Input.dispatchMouseEvent', type='mouseReleased', x=x, y=y, button='left', buttons=0, clickCount=1, modifiers=mods)
+        time.sleep(0.2)
+
+    banc.js("outilCroquis('objet', 'mur')")
+    tirer((0.20, 0.30), (0.60, 0.33))        # a 4 ou 5° de l'horizontale
+    m1 = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.t, o.y1, o.y2, o.x2]; })()")
+    essais.verifier('aimant : le mur presque droit se couche a l horizontale', [m1[0], m1[1] == m1[2]], ['mur', True])
+    tirer((0.601, 0.305), (0.605, 0.70))     # commence tout pres du bout du premier, descend presque droit
+    m2 = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.x1, o.y1, o.x2]; })()")
+    essais.verifier('aimant : le second mur part du bout du premier, et descend a la verticale', [m2[0] == m1[3], m2[1] == m1[2], m2[0] == m2[2]], [True, True, True])
+    tirer((0.20, 0.60), (0.40, 0.63), alt=True)
+    m3 = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return o.y1 !== o.y2; })()")
+    essais.verifier('avec Alt, a main levee', m3, True)
+    banc.js("fermerCroquis()")
+
     essais.exceptions(banc)
 essais.bilan()

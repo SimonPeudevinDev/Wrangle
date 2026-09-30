@@ -339,7 +339,12 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   notée sur un autre shot. Le shot qu'on tourne encore ne le dit pas.
 - **« + Plan »** demande d'abord le numéro du shot (modifiable ensuite dans sa fiche) ; le plan
   est au découpage, il arrive chez toute l'équipe.
-- Pendant une prise, le bouton « Coupez » respire lentement.
+- Pendant une prise, le bouton Moteur fait comme une caméra : fond noir bordé de rouge, point
+  « REC » qui clignote, chrono, et le carré pour couper.
+- **Le croquis** a un aimant : un mur, un fond, un diffuseur ou une orientation proche d'un
+  multiple de 45° s'y colle ; un bout qui passe près du bout d'un autre trait s'y accroche. Alt
+  pour tracer à main levée. Fond vert, diffuseur blanc (gris) et diffuseur noir se tirent comme
+  un mur.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
 ## Divers

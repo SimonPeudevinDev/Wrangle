@@ -240,7 +240,8 @@ const deuxCh = n => String(n).padStart(2, '0');
 const hhmm = d => deuxCh(d.getHours()) + ':' + deuxCh(d.getMinutes());
 const maintenant = () => hhmm(new Date());
 const plur = n => n > 1 ? 's' : '';
-const fleche = (a, b) => [a, b].filter(Boolean).join(' → ');
+// depart et arrivee ; la meme valeur aux deux bouts ne s'ecrit qu'une fois (« 14 mm », pas « 14 mm → 14 mm »)
+const fleche = (a, b) => String(a || '').trim() && String(a).trim() === String(b || '').trim() ? String(a).trim() : [a, b].filter(Boolean).join(' → ');
 /* La description VFX et la note d'un plan sont a chacun : on ecrit la sienne,
    rangee sous son prenom (notesClient@Romain), et on lit celles des autres. Le
    plan etant partage, toutes voyagent ensemble ; celle du decoupage (sans
@@ -1514,7 +1515,7 @@ const CHAMPS_PLAN = () => [
 const CHAMPS_PRISE = () => [
   CHAMP_METEO(),
   CHAMP_FOCALE('focale', 'Focale'),   // « Focale  14 mm → 20 mm » : debut, fin (la fin a son nom, cache sur la ligne)
-  CHAMP_FOCALE('focaleStop', 'Focale fin'),
+  Object.assign(CHAMP_FOCALE('focaleStop', 'Focale fin'), { aucun: 'Pas de zoom' }),
   CHAMP_MOUV('mouvement'),
   CHAMP_SUPPORT()
 ];
@@ -1534,6 +1535,7 @@ function htmlChamp(p, c){
       <span class="champ-nom">${c.nom}</span><span class="champ-val${lu ? '' : ' vide'}">${lu ? esc(lu) : '—'}</span><i></i>
     </button>
     ${ouvert ? `<div class="tuiles${c.court ? ' courtes' : ''}${c.ico ? ' pictos' : ''}">
+      ${c.aucun ? `<button type="button" class="tuile aucun${v ? '' : ' on'}" onclick="choisirChamp('${c.k}', '')"><span>${esc(c.aucun)}</span></button>` : ''}
       ${liste.map(x => `<button type="button" class="tuile${pris(x) ? ' on' : ''}" data-f="${esc(x)}"
           onclick="choisirChamp('${c.k}', this.dataset.f)">${c.ico ? ICO_AMBIANCE[cleSimple(x)] || '' : ''}<span>${esc(x)}</span></button>`).join('')}
       ${(c.cases || []).map(x => `<button type="button" class="tuile case${p[x[0]] ? ' on' : ''}"
@@ -2216,7 +2218,8 @@ function majFab(){
   if (chrono){
     const t = prise(chrono.priseId);
     cls = 'fab rec';
-    html = `${ICO_COUPEZ} Coupez <em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em>`;
+    // comme sur une camera : le point rouge qui clignote, REC, le chrono ; le carre pour couper
+    html = `<i class="rec-point"></i><b class="rec-mot">REC</b><em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em><span class="rec-stop" title="Coupez">${ICO_COUPEZ}</span>`;
   } else {
     cls = 'fab';
     html = ICO_MOTEUR + (p ? ` Moteur <em>plan ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : ' Moteur');
@@ -3451,9 +3454,36 @@ function debutTrait(e){
   }
   if (o === 'txt'){ dessin.courant = { t:'txt', x:pt[0], y:pt[1], txt:'', c:dessin.couleur, pose:true }; return; }
   if (OBJ_POSE.includes(o)){ dessin.courant = { t:o, x:pt[0], y:pt[1], a:0, c:dessin.couleur }; rendreCroquis(); return; }
-  if (OBJ_SEG.includes(o) || OBJ_RECT.includes(o)){ dessin.courant = { t:o, x1:pt[0], y1:pt[1], x2:pt[0], y2:pt[1], c:dessin.couleur }; rendreCroquis(); return; }
+  if (OBJ_SEG.includes(o)){ const d = aimanterDepart(pt, e.altKey); dessin.courant = { t:o, x1:d[0], y1:d[1], x2:d[0], y2:d[1], c:dessin.couleur }; rendreCroquis(); return; }
+  if (OBJ_RECT.includes(o)){ dessin.courant = { t:o, x1:pt[0], y1:pt[1], x2:pt[0], y2:pt[1], c:dessin.couleur }; rendreCroquis(); return; }
   dessin.courant = { c: dessin.couleur, w: CROQUIS_LARGEURS[dessin.largeur], pts:[pt] };
   rendreCroquis();
+}
+/* L'aimant : un trait (mur, fond, diffuseur, fleche…) ou une orientation proche
+   d'un multiple de 45° s'y colle, a 7° pres ; un bout qui passe pres du bout d'un
+   autre trait s'y accroche (les coins se ferment). Alt : a main levee. */
+const AIMANT = Math.PI / 4, PRISE_AIMANT = 7 * Math.PI / 180;
+const aimanterAngle = a => { const k = Math.round(a / AIMANT) * AIMANT; return Math.abs(a - k) < PRISE_AIMANT ? k : a; };
+function aimanterBout(x0, y0, pt, sauf, libre){
+  if (libre) return pt;
+  const r = 14 * dessin.w / 1600;
+  for (const o of dessin.objets){
+    if (o === sauf || !OBJ_SEG.includes(o.t)) continue;
+    for (const q of [[o.x1, o.y1], [o.x2, o.y2]]) if (Math.hypot(q[0] - pt[0], q[1] - pt[1]) <= r) return q.slice();
+  }
+  const a = Math.atan2(pt[1] - y0, pt[0] - x0), b = aimanterAngle(a);
+  if (b === a) return pt;
+  const d = Math.hypot(pt[0] - x0, pt[1] - y0);
+  return [x0 + Math.cos(b) * d, y0 + Math.sin(b) * d];
+}
+function aimanterDepart(pt, libre){
+  if (libre) return pt;
+  const r = 14 * dessin.w / 1600;
+  for (const o of dessin.objets){
+    if (!OBJ_SEG.includes(o.t)) continue;
+    for (const q of [[o.x1, o.y1], [o.x2, o.y2]]) if (Math.hypot(q[0] - pt[0], q[1] - pt[1]) <= r) return q.slice();
+  }
+  return pt;
 }
 function mouvTrait(e){
   if (!dessin || !e.buttons) return;
@@ -3462,14 +3492,15 @@ function mouvTrait(e){
   e.preventDefault();
   const pt = pointCroquis(e), c = dessin.courant;
   if (c && c.tourne){
-    const o = c.tourne, a = Math.atan2(pt[1] - o.y, pt[0] - o.x);
+    const o = c.tourne, a0 = Math.atan2(pt[1] - o.y, pt[0] - o.x), a = e.altKey ? a0 : aimanterAngle(a0);
     if (a === (o.a || 0)) return;
     retenir(c); o.a = a; c.deplace = true; rendreCroquis(); return;
   }
   if (c && c.bout){
     const o = c.bout, un = c.quel === 1;
     if (pt[0] === (un ? o.x1 : o.x2) && pt[1] === (un ? o.y1 : o.y2)) return;
-    retenir(c); if (un){ o.x1 = pt[0]; o.y1 = pt[1]; } else { o.x2 = pt[0]; o.y2 = pt[1]; }
+    const q = OBJ_SEG.includes(o.t) ? aimanterBout(un ? o.x2 : o.x1, un ? o.y2 : o.y1, pt, o, e.altKey) : pt;
+    retenir(c); if (un){ o.x1 = q[0]; o.y1 = q[1]; } else { o.x2 = q[0]; o.y2 = q[1]; }
     c.deplace = true; rendreCroquis(); return;
   }
   if (c && c.pan){
@@ -3486,8 +3517,9 @@ function mouvTrait(e){
   } else if (OBJ_POSE.includes(c.t)){
     // on pose, puis on tire dans la direction visee
     const dx = pt[0] - c.x, dy = pt[1] - c.y;
-    if (Math.hypot(dx, dy) > 12 * dessin.w / 1600) c.a = Math.atan2(dy, dx);
-  } else if (OBJ_SEG.includes(c.t) || OBJ_RECT.includes(c.t)){ c.x2 = pt[0]; c.y2 = pt[1]; }
+    if (Math.hypot(dx, dy) > 12 * dessin.w / 1600){ const a = Math.atan2(dy, dx); c.a = e.altKey ? a : aimanterAngle(a); }
+  } else if (OBJ_SEG.includes(c.t)){ const q = aimanterBout(c.x1, c.y1, pt, null, e.altKey); c.x2 = q[0]; c.y2 = q[1]; }
+  else if (OBJ_RECT.includes(c.t)){ c.x2 = pt[0]; c.y2 = pt[1]; }
   else c.pts.push(pt);
   rendreCroquis();
 }
