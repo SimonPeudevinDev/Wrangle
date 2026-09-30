@@ -321,7 +321,13 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   qui n'a pas la forme d'une bobine (`1F6K`) n'est pas touché.
 - **Relevés à l'ARRI Alexa 35** : F-stop par tiers, ISO / EI de 160 à 6400, Shutter speed en
   temps (1/48, 1/50…) puis en angle (5 à 356°), balance au curseur ; chaque menu finit par
-  « + Custom… » pour une valeur hors liste. « Distance de mise au point (focus) » au lieu de
+  « + Custom… » pour une valeur hors liste. Les réglages image aussi partent de l'Alexa 35 :
+  codecs ARRIRAW et ProRes 4444 XQ / 4444 / 422 HQ, formats capteur (4.6K 3:2 Open Gate … 2K),
+  cadences jusqu'à 120 i/s, ND internes 0.6 / 1.2 / 1.8, looks en LogC4, objectifs et filtres
+  courants ; chaque menu (caméra et modèle compris) a son « + Custom… », et une valeur posée
+  revient ensuite dans le menu. Une prise neuve part à **24 i/s** et en **Sigma Classic Prime**
+  (les optiques de tous les plans). Dans un menu, retoucher la valeur cochée la décoche : le
+  champ revient à vide. « Distance de mise au point (focus) » au lieu de
   « Distance de point » ; « Mesuré depuis » passe en fin de relevés. Le **support** se coche à
   plusieurs (« Trépied + Rail / dolly »), et le **mouvement** se règle aussi prise par prise, sous
   la note, à côté de la météo.

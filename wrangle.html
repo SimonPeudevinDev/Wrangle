@@ -280,8 +280,9 @@ const NEUVE = () => ({
   tcIn:'', tcOut:'', duree:'', heure:'',
   focale:'', focaleStop:'', focusStart:'', focusStop:'', hauteurStart:'', hauteurStop:'', mesureDepuis:'',
   panStart:'', panStop:'', tiltStart:'', tiltStop:'', rollStart:'', rollStop:'',
-  codec:'', reso:'', fps:'', shutter:'', ei:'', wb:'', nd:'', lut:'',
-  objectif:'', diaph:'', filtre:'',
+  // le tournage : Alexa 35 a 24 i/s, en Sigma Classic Prime sur tous les plans
+  codec:'', reso:'', fps:'24', shutter:'', ei:'', wb:'', nd:'', lut:'',
+  objectif:'Sigma Classic Prime', diaph:'', filtre:'',
   sonRoll:'', sonFile:'', sync:'',
   notes:'', par:''
 });
@@ -1280,15 +1281,21 @@ const LISTES = {
     const num = j => parseInt(numJour(j), 10) || 0;
     return [...l].sort((a, b) => num(a) - num(b)).concat(connusJ.indexOf('CG') >= 0 ? ['CG'] : []);
   },
-  // le tournage se fait a l'ARRI Alexa 35 : la camera, et les codecs qu'elle enregistre
-  'dl-cam':   ['ARRI Alexa 35'],
-  'dl-codec': ['ARRIRAW', 'ProRes 4444 XQ', 'ProRes 4444', 'ProRes 422 HQ', 'ProRes 422'],
+  // le tournage se fait a l'ARRI Alexa 35 : la camera, et les codecs qu'elle enregistre. Chaque
+  // menu garde aussi les valeurs deja posees sur le tournage : un « Custom » y revient.
+  'dl-cam':   () => fusion(['ARRI Alexa 35'], connus(DB.prises, 'camModel')),
+  'dl-codec': () => fusion(['ARRIRAW', 'ProRes 4444 XQ', 'ProRes 4444', 'ProRes 422 HQ'], connus(DB.prises, 'codec')),
   // le diaph de l'optique (l'Alexa 35 affiche celui de l'objectif) : la serie cinema, par tiers
   'dl-diaph': () => fusion(['1.3', '1.4', '1.6', '1.8', '2', '2.2', '2.5', '2.8', '3.2', '3.5', '4', '4.5', '5', '5.6',
                             '6.3', '7.1', '8', '9', '10', '11', '13', '14', '16', '18', '20', '22'], connus(DB.prises, 'diaph')),
-  'dl-reso':  ['4448x3096 (Open Gate)', '4096x2160 (4K DCI)', '3840x2160 (UHD)', '1920x1080 (HD)', '6144x3240 (6K)',
-               '8192x4320 (8K)'],
-  'dl-fps':   ['23.976', '24', '25', '29.97', '48', '50', '60', '100', '120'],
+  // les formats capteur de l'Alexa 35 (Open Gate et anamorphiques compris)
+  'dl-reso':  () => fusion(['4.6K 3:2 Open Gate (4608 x 3164)', '4.6K 16:9 (4608 x 2592)', '4K 16:9 (4096 x 2304)',
+                            '4K 2:1 (4096 x 2048)', 'UHD (3840 x 2160)', '3.3K 6:5 (3328 x 2790)', '3K 1:1 (3072 x 3072)',
+                            '2.7K 8:9 (2743 x 3086)', '2K 16:9 S16 (2048 x 1152)', 'HD (1920 x 1080)'], connus(DB.prises, 'reso')),
+  // la cadence : 0.75 a 120 i/s selon le format
+  'dl-fps':   () => fusion(['23.976', '24', '25', '29.97', '30', '48', '50', '60', '75', '96', '100', '120'], connus(DB.prises, 'fps')),
+  // les ND internes de l'Alexa 35 (FSND motorises)
+  'dl-nd':    () => fusion(['Aucun', '0.6', '1.2', '1.8'], connus(DB.prises, 'nd')),
   // l'obturateur de l'ARRI Alexa 35 : en temps d'exposition (1 s a 1/8000) ou en angle (5 a 356°)
   'dl-shut':  () => fusion(['1/24', '1/48', '1/50', '1/60', '1/96', '1/100', '1/120', '1/200', '1/250', '1/500', '1/1000',
                             '5°', '11.2°', '22.5°', '45°', '90°', '144°', '172.8°', '180°', '270°', '356°'], connus(DB.prises, 'shutter')),
@@ -1300,9 +1307,12 @@ const LISTES = {
   'dl-wb':    () => fusion(['2000 K', '2500 K', '2800 K', '3000 K', '3200 K', '3400 K', '3600 K', '4000 K', '4300 K', '4700 K',
                             '5000 K', '5300 K', '5600 K', '6000 K', '6500 K', '7000 K', '7500 K', '8000 K', '9000 K', '10000 K', '11000 K'],
                            connus(DB.prises, 'wb')),
-  'dl-lut':   ['Rec709', 'LogC3 to Rec709', 'LogC4 to Rec709', 'Show LUT', 'Aucune'],
-  'dl-obj':   ['Sigma Classic Prime', 'NiSi Athena Prime', 'Cooke S4', 'Zeiss Supreme Prime', 'ARRI Signature Prime', 'Angénieux Optimo',
-               'Canon K35', 'Panavision C Series']
+  // l'Alexa 35 enregistre en LogC4 ; le look sur le retour
+  'dl-lut':   () => fusion(['Aucune (LogC4)', 'ARRI Rec 709', 'Rec 2100 PQ (HDR)', 'Rec 2100 HLG (HDR)', 'Show LUT'], connus(DB.prises, 'lut')),
+  'dl-obj':   () => fusion(['Sigma Classic Prime', 'NiSi Athena Prime', 'Cooke S4', 'Zeiss Supreme Prime', 'ARRI Signature Prime',
+                            'Angénieux Optimo', 'Canon K35', 'Panavision C Series'], connus(DB.prises, 'objectif')),
+  'dl-filtre': () => fusion(['Black Pro-Mist 1/8', 'Black Pro-Mist 1/4', 'Black Pro-Mist 1/2', 'Glimmerglass 1', 'Polarisant',
+                             'ND 0.3', 'ND 0.6', 'ND 0.9', 'IRND 0.6', 'Diffusion 1/4'], connus(DB.prises, 'filtre'))
 };
 const CHEVRON_BAS = ICO('<path d="M6 9l6 6 6-6"/>', 15, 2.2), CHEVRON_HAUT = ICO('<path d="M6 15l6-6 6 6"/>', 15, 2.2);
 
@@ -1355,6 +1365,15 @@ const AJOUTS = {
   'dl-diaph': custom('F-stop / diaph', '2.4, T2.8, 4 1/3…'),
   'dl-ei':    custom('ISO / EI', '1100, 1600 ES…'),
   'dl-shut':  custom('Shutter speed', '150°, 1/250…'),
+  'dl-camname': custom('Caméra', 'CAM-D, DRONE…'),
+  'dl-cam':   custom('Modèle de caméra', 'ARRI Alexa Mini LF, Sony Venice 2…'),
+  'dl-codec': custom('Codec', 'ARRICORE, ProRes 422 LT…'),
+  'dl-reso':  custom('Résolution', '4.6K 3:2 Open Gate 2x ana…'),
+  'dl-fps':   custom('Cadence', '33, 0.75, 110…'),
+  'dl-nd':    custom('ND', '2.1, 0.9 + 0.6…'),
+  'dl-lut':   custom('LUT / look', 'Nom de la LUT du film…'),
+  'dl-obj':   custom('Objectif', 'Leitz Summilux-C, Atlas Orion…'),
+  'dl-filtre': custom('Filtres', 'Hollywood Black Magic 1/4…'),
   // une balance hors liste : « 4850 » devient « 4850 K » ; « 5600 K +3 CC » reste tel quel
   'dl-wb':   { nom: '+ Valeur personnalisée…', faire: () => demanderTexte('Balance des blancs', { aide:'4850 K, 5600 K +3 CC…', im:'text', ok:'Poser' })
                  .then(v => { v = String(v || '').trim(); return /^\d+$/.test(v) ? v + ' K' : v; }) }
@@ -1378,7 +1397,8 @@ function choisirMenu(b){
     b.classList.toggle('on', i < 0);
     return;
   }
-  input.value = b.dataset.v;
+  // la valeur deja cochee se decoche : le champ revient a vide
+  input.value = b.classList.contains('on') ? '' : b.dataset.v;
   live(input);
   fermerMenu();
 }
@@ -2693,13 +2713,13 @@ function openPrise(id, y){
 
     ${sectionFiche('image', 'Réglages image', t, `
       <div class="specs">
-        ${F(t, 'Codec', 'codec', {dl:'dl-codec'})}
-        ${F(t, 'Résolution', 'reso', {dl:'dl-reso'})}
-        ${F(t, 'Cadence', 'fps', {dl:'dl-fps', refresh:1, im:'decimal'})}
-        ${F(t, 'ND', 'nd', {ph:'0.6', im:'decimal'})}
-        ${F(t, 'LUT', 'lut', {dl:'dl-lut'})}
+        ${F(t, 'Codec', 'codec', {dl:'dl-codec', ph:'ARRIRAW'})}
+        ${F(t, 'Résolution', 'reso', {dl:'dl-reso', ph:'4.6K 3:2 Open Gate'})}
+        ${F(t, 'Cadence', 'fps', {dl:'dl-fps', refresh:1, im:'decimal', ph:'24'})}
+        ${F(t, 'ND', 'nd', {ph:'0.6', dl:'dl-nd'})}
+        ${F(t, 'LUT', 'lut', {dl:'dl-lut', ph:'ARRI Rec 709'})}
         ${F(t, 'Objectif', 'objectif', {dl:'dl-obj'})}
-        ${F(t, 'Filtres', 'filtre')}
+        ${F(t, 'Filtres', 'filtre', {dl:'dl-filtre'})}
       </div>`)}
 
     ${sectionFiche('son', 'Son', t, `

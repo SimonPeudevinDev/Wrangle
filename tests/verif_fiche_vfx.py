@@ -48,7 +48,7 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     s = dict(f['script'])
     essais.verifier('le script : INT coche, NIGHT coche',
                     [[n for n, on in s['Int / Ext']['choix'] if on], [n for n, on in s['Time of day']['choix'] if on]], [['INT'], ['NIGHT']])
-    essais.verifier('la camera, l objectif, le codec et la cadence', [f['camera'], f['lens'], f['codec']], ['ARRI Alexa 35', 'Cooke S4/i', 'ARRIRAW / 24 fps'])
+    essais.verifier('la camera, l objectif, le codec et la cadence', [f['camera'], f['lens'], f['codec']], ['ARRI Alexa 35', 'Sigma Classic Prime', 'ARRIRAW / 24 fps'])
     on = [n for n, on in f['mouvements'] if on]
     essais.verifier('le mouvement lu dans le plan et ses prises',
                     [all(n in on for n in ['STATIC', 'TRAVEL', 'STEADI']), 'HANDHELD' in on], [True, False])

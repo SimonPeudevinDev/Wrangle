@@ -151,5 +151,12 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     essais.verifier('on tourne encore le shot : pas de « Tourne »', tourneAff('p0.id'), False)
     banc.js("viser(p1.id, true); ajouterPrise(p1.id); renderList()"); time.sleep(0.3)
     essais.verifier('premiere prise du shot suivant : le precedent passe « Tourne »', [tourneAff('p0.id'), tourneAff('p1.id')], [True, False])
+    # -- une prise neuve : Alexa 35 a 24 i/s, en Sigma Classic Prime ; un menu decoche sa valeur
+    banc.js("window.tn = ajouterPrise(DB.plans[0].id); openPrise(tn.id)"); time.sleep(0.5)
+    essais.verifier('prise neuve : 24 i/s, Sigma Classic Prime', banc.js("[prise(tn.id).fps, prise(tn.id).objectif]"), ['24', 'Sigma Classic Prime'])
+    menu_codec = "document.querySelector('#sbody [data-k=\"codec\"]').closest('.spec').querySelector('.deroul').click(); "                  "[...document.querySelectorAll('.menu button')].find(b => b.dataset.v === 'ARRIRAW').click()"
+    banc.js(menu_codec); time.sleep(0.3)
+    banc.js(menu_codec); time.sleep(0.3)
+    essais.verifier('la valeur cochee du menu se decoche', banc.js("prise(tn.id).codec"), '')
     essais.exceptions(banc)
 essais.bilan()
