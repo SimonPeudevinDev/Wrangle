@@ -132,7 +132,9 @@ const frappe = (W, sel, val) => {
 
   // 10. plan hors découpage
   const nb = B.DB.plans.length;
-  A.nouveauPlan(); const np = A.plan(A.dernierPlan);
+  // la page demande d'abord le numero : on valide sans en donner, il se tape ensuite dans la fiche
+  A.nouveauPlan(); await valider(Aw); await attendre(() => A.openType === 'plan');
+  const np = A.plan(A.dernierPlan);
   log(await attendre(() => B.DB.plans.length === nb + 1 && B.plan(np.id)), 'plan hors découpage ajouté sur A visible sur B');
   log(B.DB.plans.findIndex(x => x.id === np.id) === A.DB.plans.findIndex(x => x.id === np.id), 'même position dans la liste');
   frappe(Aw, '#sbody input[data-k="plan"]', '99X');

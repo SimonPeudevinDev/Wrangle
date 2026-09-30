@@ -1982,6 +1982,13 @@ function calerPrises(racine){
 /* Seul le plan que le Moteur vise deplie ses prises ; les autres les replient
    en une ligne (« 8 prises · 2 OK »), qu'un appui deplie en visant le plan.
    Un filtre qui trie les prises (a monter, saisie par) les montre partout. */
+/* « Tourne » s'affiche une fois qu'on est passe a la suite : la derniere prise
+   notee est sur un autre shot. Le shot qu'on tourne encore ne le dit pas. */
+function tourne(p){
+  if (p.etat !== 'done') return false;
+  const derniere = DB.prises[DB.prises.length - 1];
+  return !derniere || derniere.planId !== p.id;
+}
 /* Une fusion se lit sur la carte : « + 06 » sur le shot garde, « dans 05 » sur l'autre. */
 function htmlFusion(p){
   const dans = p.fusionDans && plan(p.fusionDans);
@@ -2015,7 +2022,7 @@ function blocPlan(p, seulementRetenues, qui){
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
         <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}</span>${
-          p.etat === 'done' ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
+          tourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
@@ -2480,15 +2487,17 @@ function voisinePrise(sens){
 }
 
 /* La feuille s'affiche, ses zones de texte prennent leur hauteur, au defilement demande. */
-/* Le bouton Retour du navigateur (le geste retour du telephone) ferme la fiche
-   au lieu de quitter le site ; d'une prise ouverte depuis son plan, il ramene
-   au plan. Chaque fiche ouverte pose une marque dans l'historique : une autre
-   sorte de fiche s'empile, la meme sorte (la prise suivante, aux fleches) prend
-   sa place. Fermer la fiche par sa fleche retire ses marques. */
+/* Le bouton Retour du navigateur (le geste retour du telephone) revient en
+   arriere dans la page au lieu de quitter le site : il ferme la fiche ouverte,
+   ramene d'une prise a son plan, et d'une page a l'autre (Preparation,
+   Tournage, Rapport). Chaque fiche et chaque page posent une marque dans
+   l'historique, avec la page ou l'on etait ; la meme sorte de fiche (la prise
+   suivante, aux fleches) prend la place de la precedente. Fermer la fiche par
+   sa fleche retire ses marques. */
 const RETOUR = { rejoue: false, ignorer: false };
 function noterFiche(){
   if (RETOUR.rejoue || !openType) return;
-  const h = history.state, e = { fiche: openType, id: openId || '' };
+  const h = history.state, e = { fiche: openType, id: openId || '', vue: view };
   try{
     if (h && h.fiche){
       if (h.fiche === e.fiche && h.id === e.id) return;
@@ -2502,6 +2511,7 @@ window.addEventListener('popstate', ev => {
   const st = ev.state;
   RETOUR.rejoue = true;
   try{
+    if (st && st.vue && st.vue !== view) allerVue(st.vue);
     if (st && st.fiche === 'plan' && plan(st.id)) openPlan(st.id);
     else if (st && st.fiche === 'prise' && prise(st.id)) openPrise(st.id);
     else if (openType) closeSheet();
@@ -3810,11 +3820,16 @@ function supprimerPlanConfirme(p){
    sur le plateau. Il se range dans la journee filtree, ou dans celle du dernier
    plan touche si on est en vue "Tout". */
 function nouveauPlan(){
-  const ref = dernierPlan && plan(dernierPlan);
-  const p = creerPlan(fJour !== '*' ? fJour : (ref ? ref.jour : ''), true);
-  renderAll(); openPlan(p.id);
-  toast('Plan ajouté — donnez-lui un numéro');
-  const i = document.querySelector('#sbody input[data-k="plan"]'); if (i) i.focus();
+  demanderTexte('Numéro du nouveau shot', { aide:'12, 12A, 06bis… (modifiable ensuite dans sa fiche)', ok:'Ajouter' }).then(num => {
+    if (num == null) return;   // on renonce : pas de plan
+    num = String(num).trim();
+    const ref = dernierPlan && plan(dernierPlan);
+    const p = creerPlan(fJour !== '*' ? fJour : (ref ? ref.jour : ''), true);
+    // le plan est au decoupage : il arrive chez toute l'equipe, numero compris
+    if (num) patch('plan', p.id, { plan: num });
+    renderAll(); openPlan(p.id);
+    toast(num ? 'Shot ' + num + ' ajouté pour toute l’équipe' : 'Shot ajouté — donnez-lui un numéro dans sa fiche');
+  });
 }
 
 /* ------------------------------------------------------------ Preparation */
@@ -3928,6 +3943,7 @@ function rangPrep(p){
 
 function renderPrep(){
   const l = $('l-prep'); if (!l) return;
+  if (!prepare()) return renderPrepLecture(l);
   const ids = fJourP + '|' + DB.plans.map(p => p.id).join(',');
   // quelqu'un tape ici, ou coche dans un menu : on ne redessine pas, les autres champs se mettent a niveau
   if (l.dataset.ids === ids && (l.contains(document.activeElement) || l.querySelector('.menu'))){
@@ -3974,6 +3990,35 @@ function renderPrep(){
   brancherOrdre();
 }
 
+/* Pour les autres que Simon : le decoupage en lecture, jour par jour. Rien ne
+   s'y modifie ; toucher un shot ouvre sa fiche, comme au Tournage. */
+function renderPrepLecture(l){
+  const tous = joursPrep();
+  if (fJourP !== '*' && tous.indexOf(fJourP) < 0) fJourP = '*';
+  $('c-jourp').innerHTML = chipsJours(fJourP, 'setJourP', j => {
+    const n = j === '*' ? DB.plans.length : plansDuJour(j).length;
+    return { titre: (j === '*' ? 'Tout le tournage' : nomJour(j)) + ' · ' + n + ' plan' + plur(n) };
+  }, tous);
+  cadrerJour('c-jourp', fJourP);
+  const unJour = fJourP !== '*', nP = unJour ? plansDuJour(fJourP).length : DB.plans.length;
+  let html = `<div class="ptitre"><div><b>Découpage</b><span>${unJour ? esc(nomJour(fJourP)) + ' · ' : ''}${nP} plan${plur(nP)}</span></div></div>
+    <p class="pnote">Le découpage préparé par ${esc(PREPARATEURS.join(', '))}, jour par jour, à consulter. Pour noter une prise : Tournage.</p>`;
+  (unJour ? [fJourP] : tous).forEach(j => {
+    const ps = trierPlans(plansDuJour(j), false);
+    html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span></div>` + ps.map((p, i) => {
+      const ctx = [p.lieu && `<span><b>${esc(p.lieu)}</b></span>`, p.cadrage && `<span>${esc(p.cadrage)}</span>`,
+                   p.focale && `<span>${esc(p.focale)}</span>`, (p.acteurs || []).length && `<span>${esc(p.acteurs.join(', '))}</span>`]
+                  .filter(Boolean).join('');
+      return `<div class="lprep" onclick="openPlan('${p.id}')">
+        <div class="lprep-tete"><span class="lprep-ordre">${deuxCh(i + 1)}</span><b>Shot ${esc(p.plan || 'sans n°')}</b>
+          <span class="lprep-seq">Séq ${esc(p.seq || '—')}${p.seqTitre ? ' · ' + esc(p.seqTitre) : ''}</span><span class="ptags">${htmlPtags(p)}</span></div>
+        ${p.desc ? `<div class="lprep-desc">${esc(p.desc)}</div>` : ''}
+        ${ctx ? `<div class="pctx">${ctx}</div>` : ''}
+      </div>`;
+    }).join('');
+  });
+  l.innerHTML = html; l.dataset.ids = '';
+}
 /* Le mode Ordonner : les cartes se glissent (souris) ou montent et descendent
    (fleches, au doigt) ; un plan ne change pas de jour en bougeant. */
 let modeOrdre = false, plansTire = null;
@@ -6432,14 +6477,13 @@ function reprendrePlace(){
 }
 
 /* Le logo ramene en haut de la page Tournage, d'ou que l'on vienne. */
-/* La preparation (le decoupage) n'est qu'a Simon : les autres ne voient pas
-   l'onglet, et y etaient-ils, ils reviennent au tournage. */
+/* La preparation (le decoupage) ne se modifie que par Simon ; les autres la
+   consultent en lecture, jour par jour. Changer de prenom redessine la page. */
 const PREPARATEURS = ['Simon'];
 function prepare(){ return PREPARATEURS.indexOf((UI.nom || '').trim()) >= 0; }
 function majOnglets(){
-  const b = document.querySelector('nav button[data-v="prep"]');
-  if (b) b.hidden = !prepare();
-  if (view === 'prep' && !prepare()){ const t = document.querySelector('nav button[data-v="shoot"]'); if (t && t.onclick) t.click(); }
+  oublierPrep();
+  if (view === 'prep') renderList();
 }
 function accueil(){
   if (openType) closeSheet();
@@ -6447,17 +6491,28 @@ function accueil(){
   window.scrollTo({ top:0, behavior:'smooth' });
 }
 
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  if (b.dataset.v === 'prep' && !prepare()) return;
-  // le menu reste atteignable une fiche ouverte : on la referme d abord
-  if (openType) closeSheet();
-  view = b.dataset.v;
+/* Changer de page. Depuis le menu, la page pose sa marque dans l'historique :
+   Retour y ramene ; depuis l'historique (Retour), elle ne s'y ajoute pas. */
+function allerVue(v){
+  const b = document.querySelector(`nav button[data-v="${v}"]`);
+  if (!b) return;
+  // le menu reste atteignable une fiche ouverte : on la referme d abord (ses marques
+  // restent : Retour y revient, a la page ou elle etait ouverte)
+  if (openType){ const r = RETOUR.rejoue; RETOUR.rejoue = true; try{ closeSheet(); } finally { RETOUR.rejoue = r; } }
+  view = v;
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('.view').forEach(v => v.hidden = (v.id !== 'v-' + view));
+  document.querySelectorAll('.view').forEach(x => x.hidden = (x.id !== 'v-' + view));
   renderList();
   majFab();
   window.scrollTo(0, 0);
-});
+  if (!RETOUR.rejoue){
+    const h = history.state;
+    try{ if (!h || h.vue !== v || h.fiche) history.pushState({ vue: v }, ''); }catch(e){}
+  }
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => allerVue(b.dataset.v));
+// la page d'ouverture porte sa marque : Retour depuis une autre page y revient
+try{ if (!history.state) history.replaceState({ vue: view }, ''); }catch(e){}
 majOnglets();
 setTimeout(() => majAutres(true), 1500);   // le controle des prises, dans la liste, sans attendre quinze secondes
 

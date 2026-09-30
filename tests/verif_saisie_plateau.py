@@ -87,14 +87,26 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     banc.js("closeSheet()"); time.sleep(0.6)
     essais.verifier('le menu des jours : J1 a J5, sans J6, J7 ni CG', banc.js("LISTES['dl-jour']()"), ['J1', 'J2', 'J3', 'J4', 'J5'])
 
-    # -- la preparation est a Simon
-    essais.verifier('Simon voit la preparation', banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), False)
-    banc.js("document.querySelector('nav button[data-v=\"prep\"]').click(); changerDePersonne('Romain')"); time.sleep(0.4)
-    essais.verifier('Romain ne la voit pas, et revient au tournage', [banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), banc.js("view")], [True, 'shoot'])
-    banc.js("document.querySelector('nav button[data-v=\"prep\"]').click()")
-    essais.verifier('et ne peut pas y aller', banc.js("view"), 'shoot')
+    # -- la preparation : Simon la modifie, les autres la consultent
+    champs = lambda: banc.js("document.querySelectorAll('#l-prep input, #l-prep textarea, #l-prep select').length")
+    banc.js("document.querySelector('nav button[data-v=\"prep\"]').click()"); time.sleep(0.4)
+    essais.verifier('Simon : la preparation a modifier', champs() > 0, True)
+    banc.js("changerDePersonne('Romain')"); time.sleep(0.4)
+    essais.verifier('Romain : l onglet est la, la page en lecture seule',
+                    [banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), banc.js("view"), champs(), banc.js("document.querySelectorAll('#l-prep .lprep').length > 0")],
+                    [False, 'prep', 0, True])
+    essais.verifier('ni ajouter, ni ordonner', banc.js("[...document.querySelectorAll('#l-prep button')].map(b => b.textContent.trim()).filter(t => /Ajouter|Ordonner|Jour|Décors/.test(t))"), [])
+    banc.js("setJourP('J1')"); time.sleep(0.2)
+    essais.verifier('les shots d un jour, dans l ordre', banc.js("[...document.querySelectorAll('#l-prep .lprep-ordre')].slice(0, 2).map(x => x.textContent)"), ['01', '02'])
     banc.js("changerDePersonne('Simon')"); time.sleep(0.4)
-    essais.verifier('Simon la retrouve', banc.js("document.querySelector('nav button[data-v=\"prep\"]').hidden"), False)
+    essais.verifier('Simon retrouve la page a modifier', champs() > 0, True)
+    banc.js("document.querySelector('nav button[data-v=\"shoot\"]').click()"); time.sleep(0.3)
+
+    # -- « + Plan » demande le numero du shot
+    banc.js("nouveauPlan()"); time.sleep(0.3)
+    banc.js("$('dlg-saisie').value = '12A'; $('dlg-oui').click()"); time.sleep(0.4)
+    essais.verifier('le nouveau plan porte le numero donne, sa fiche ouverte', [banc.js("plan(openId).plan"), banc.js("openType")], ['12A', 'plan'])
+    banc.js("closeSheet()"); time.sleep(0.6)
 
     # -- le bouton Retour du navigateur ferme la fiche, il ne quitte pas le site
     etat = lambda: banc.js("[openType, openType === 'plan' ? plan(openId).plan : openType === 'prise' ? prise(openId).n : null, $('sheet').classList.contains('on')]")
@@ -113,5 +125,25 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     banc.js("openPlan(p1.id)"); time.sleep(0.3)
     banc.js("closeSheet()"); time.sleep(0.6)
     essais.verifier('fermee a la main : ses marques quittent l historique', [etat()[0], banc.js("!!(history.state && history.state.fiche)")], [None, False])
+
+    # -- le Retour entre les pages : Rapport -> Tournage, sans quitter le site
+    banc.js("document.querySelector('nav button[data-v=\"report\"]').click()"); time.sleep(0.3)
+    essais.verifier('on passe au Rapport', banc.js("view"), 'report')
+    retour()
+    essais.verifier('Retour ramene au Tournage, sur le site', [banc.js("view"), banc.js("typeof DB")], ['shoot', 'object'])
+    banc.js("openPlan(p0.id)"); time.sleep(0.2)
+    banc.js("document.querySelector('nav button[data-v=\"report\"]').click()"); time.sleep(0.3)
+    retour()
+    essais.verifier('une fiche ouverte avant de changer de page : Retour la retrouve, au Tournage',
+                    [banc.js("view"), banc.js("openType")], ['shoot', 'plan'])
+    retour()
+    essais.verifier('et Retour encore la ferme', [banc.js("view"), banc.js("openType")], ['shoot', None])
+
+    # -- « Tourne » : une fois passe au shot suivant
+    banc.js("patch('plan', p0.id, { etat: 'done' }); patch('plan', p1.id, { etat: 'todo' }); ajouterPrise(p0.id); renderList()"); time.sleep(0.3)
+    tourneAff = lambda pid: banc.js("!!document.querySelector('#l-shoot .plan[data-id=\"' + %s + '\"] .ptourne')" % pid)
+    essais.verifier('on tourne encore le shot : pas de « Tourne »', tourneAff('p0.id'), False)
+    banc.js("viser(p1.id, true); ajouterPrise(p1.id); renderList()"); time.sleep(0.3)
+    essais.verifier('premiere prise du shot suivant : le precedent passe « Tourne »', [tourneAff('p0.id'), tourneAff('p1.id')], [True, False])
     essais.exceptions(banc)
 essais.bilan()

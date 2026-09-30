@@ -572,11 +572,16 @@ nav button i{display:none}
 /* ca tourne : une onde s'eloigne du bouton, lentement, toujours dans le meme
    sens, et le carre remplace l'oeil. Pas de va-et-vient : il ne clignote pas.
    C'est a cela, et au mot, qu'on distingue « ca tourne » de « prêt a tourner ». */
-/* pendant la prise : un contour fixe, pas d'onde qui pulse (on la prenait pour un clignotement) */
+/* pendant la prise : le bouton respire, lentement et en douceur (pas d'onde qui part) */
 .fab.rec{
   background:var(--ng);color:var(--ng-txt);
-  box-shadow:0 0 0 4px rgba(var(--ng-rgb),.3);
+  animation:respire 2.4s ease-in-out infinite alternate;
 }
+@keyframes respire{
+  from{opacity:1;box-shadow:0 0 0 0 rgba(var(--ng-rgb),0)}
+  to{opacity:.72;box-shadow:0 0 18px 2px rgba(var(--ng-rgb),.45)}
+}
+@media (prefers-reduced-motion: reduce){ .fab.rec{animation:none} }
 .fab.rec:hover{background:var(--ng-g1)}
 .fab.rec em{opacity:.9;font-variant-numeric:tabular-nums}
 @keyframes rec{
@@ -1458,3 +1463,13 @@ select option{background:var(--surface);color:var(--txt)}
 /* Fusion de deux shots : le bouton de la fiche, la mention sur la carte */
 .btn.fusion{margin-top:14px;width:100%}
 .pfusion{font:700 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--acc);order:1}
+
+/* La preparation en lecture (pour les autres que Simon) : une ligne par shot */
+.lprep{padding:16px 0 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.lprep:hover .lprep-tete b{color:var(--acc)}
+.lprep-tete{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
+.lprep-ordre{font:700 14px var(--font-titre);color:var(--acc);min-width:22px}
+.lprep-tete b{font:700 19px/1.1 var(--font-titre);letter-spacing:-.01em}
+.lprep-seq{font-size:13px;color:var(--dim)}
+.lprep-desc{margin-top:6px;font-size:14.5px;line-height:1.5;color:var(--txt)}
+.lprep .pctx{margin-top:5px}

@@ -44,6 +44,8 @@ La page est `wrangle.html`, avec sa feuille de style et son logo dans `public/` 
   du découpage, ou tapé quand le champ était commun), s'y lit sous « Commun ». La liste, les filtres, les PDF et les exports
   prennent les éléments et les textes de tous. Une pastille dit qui a changé l'état. L'anneau du
   Moteur est à côté de la description.
+- **La Préparation** (le découpage) : seul Simon la modifie (`PREPARATEURS`, en tête du script) ;
+  les autres la consultent en lecture, jour par jour.
 - **Le découpage est à tous, les prises à chacun** : la liste des plans se prépare dans Préparation
   (par une personne, jour par jour) et le serveur la reporte chez tout le monde ; chacun garde sa
   copie de ce qu'il note dessus (états, éléments captés). Quand deux personnes ont noté des choses
@@ -330,8 +332,14 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   descriptions, notes et éléments captés, ceux de chacun, rejoignent le shot gardé ; il passe en
   « Abandonné », marqué « fusionné dans 05 », et le shot gardé porte « + 06 ». Ce n'est pas
   facile à défaire : la page demande confirmation.
-- **Le bouton Retour du navigateur** (le geste retour du téléphone) ferme la fiche ouverte au lieu
-  de quitter le site ; d'une prise ouverte depuis son plan, il ramène au plan.
+- **Le bouton Retour du navigateur** (le geste retour du téléphone) revient en arrière dans le
+  site au lieu de le quitter : il ferme la fiche ouverte, ramène d'une prise à son plan, et d'une
+  page à l'autre (Préparation, Tournage, Rapport).
+- **« Tourné »** s'affiche sur un shot une fois qu'on est passé à la suite : dès la première prise
+  notée sur un autre shot. Le shot qu'on tourne encore ne le dit pas.
+- **« + Plan »** demande d'abord le numéro du shot (modifiable ensuite dans sa fiche) ; le plan
+  est au découpage, il arrive chez toute l'équipe.
+- Pendant une prise, le bouton « Coupez » respire lentement.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
 ## Divers
