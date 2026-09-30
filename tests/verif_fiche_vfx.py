@@ -39,13 +39,14 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('le plan VFX est reconnu, avec ses tags', [b['vfx'], b['tags'], m['plans'][1]['vfx']], [True, ['VFX'], False])
     essais.verifier('toutes les prises, la retenue marquee', [(t['clip'], t['retenue']) for t in b['prises']], [('A001C001', False), ('A001C002', True)])
     essais.verifier('les colonnes : camera, optique, matchmove, elements', [g[0] for g in b['groupes']], ['Caméra', 'Optique', 'Matchmove', 'Éléments captés'])
-    essais.verifier('la camera, chaque reglage nomme', dict(b['groupes'][0][1]), {'Caméra': 'ARRI Alexa 35', 'Format': 'ARRIRAW', 'Cadence': '24 i/s', 'Exposition': 'EI 800'})
+    # toutes les prises sont a l'Alexa 35 (la camera du tournage, d'office) : elle monte en tete de journee
+    essais.verifier('la camera, chaque reglage nomme', dict(b['groupes'][0][1]), {'Format': 'ARRIRAW', 'Cadence': '24 i/s', 'Exposition': 'EI 800'})
     essais.verifier('le point et la hauteur, d ou elle est mesuree',
                     [dict(b['groupes'][1][1])['Point'], dict(b['groupes'][2][1])['Hauteur']], ['3 m → 2 m', '1,40 m · depuis sol'])
     essais.verifier('ni description du plan ni titre de sequence', 'desc' in b or b['meta'].startswith(banc.js('DB.plans[0].seqTitre') or '#'), False)
     essais.verifier('pas de meteo en interieur', 'Météo' in dict(b['groupes'][2][1]), False)
     essais.verifier('les elements, l autre element compris', b['elements'], ['Chrome / grey ball', 'HDRI', 'lidar du décor'])
-    essais.verifier('sans reglage partage par tous les plans, rien en commun', m['communs'], [])
+    essais.verifier('en commun : seulement la camera du tournage', m['communs'], [['Caméra', 'ARRI Alexa 35']])
     # la derniere prise du plan 2 a les memes camera, format et objectif : ils montent en tete de journee
     banc.js("patch('prise', DB.prises.find(t => t.clip === 'A001C003').id, { camModel:'ARRI Alexa 35', codec:'ARRIRAW', fps:'24', ei:'800', objectif:'Cooke S4/i', diaph:'T4' })")
     m2 = banc.js('modeleVFX(%s)' % json.dumps(j))[0]

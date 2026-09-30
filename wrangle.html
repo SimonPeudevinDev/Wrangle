@@ -275,7 +275,7 @@ const NOTES_RAPIDES = ['Raccord', 'Jeu', 'Cadre', 'Point', 'Son', 'Lumière', 'T
                        'Figuration', 'Bonne pour le son', 'Bonne pour l’image'];
 
 const NEUVE = () => ({
-  statut:'', retenue:false, clip:'', carte:'', cam:'', camModel:'', mouvement:'', support:'', meteo:'',
+  statut:'', retenue:false, clip:'', carte:'', cam:'', camModel:'ARRI Alexa 35', mouvement:'', support:'', meteo:'',
   tcIn:'', tcOut:'', duree:'', heure:'',
   focale:'', focaleStop:'', focusStart:'', focusStop:'', hauteurStart:'', hauteurStop:'', mesureDepuis:'',
   panStart:'', panStop:'', tiltStart:'', tiltStop:'', rollStart:'', rollStop:'',
@@ -1279,10 +1279,12 @@ const LISTES = {
     const num = j => parseInt(numJour(j), 10) || 0;
     return [...l].sort((a, b) => num(a) - num(b)).concat(connusJ.indexOf('CG') >= 0 ? ['CG'] : []);
   },
-  'dl-cam':   ['ARRI Alexa 35', 'ARRI Alexa Mini LF', 'ARRI Alexa 265', 'RED V-Raptor', 'RED Komodo',
-               'Sony Venice 2', 'Sony Burano', 'Blackmagic URSA 17K'],
-  'dl-codec': ['ARRIRAW', 'ProRes 4444 XQ', 'ProRes 4444', 'ProRes 422 HQ', 'ProRes 422', 'BRAW 3:1', 'BRAW 5:1',
-               'REDCODE 8:1', 'X-OCN ST'],
+  // le tournage se fait a l'ARRI Alexa 35 : la camera, et les codecs qu'elle enregistre
+  'dl-cam':   ['ARRI Alexa 35'],
+  'dl-codec': ['ARRIRAW', 'ProRes 4444 XQ', 'ProRes 4444', 'ProRes 422 HQ', 'ProRes 422'],
+  // le diaph de l'optique (l'Alexa 35 affiche celui de l'objectif) : la serie cinema, par tiers
+  'dl-diaph': () => fusion(['1.3', '1.4', '1.6', '1.8', '2', '2.2', '2.5', '2.8', '3.2', '3.5', '4', '4.5', '5', '5.6',
+                            '6.3', '7.1', '8', '9', '10', '11', '13', '14', '16', '18', '20', '22'], connus(DB.prises, 'diaph')),
   'dl-reso':  ['4448x3096 (Open Gate)', '4096x2160 (4K DCI)', '3840x2160 (UHD)', '1920x1080 (HD)', '6144x3240 (6K)',
                '8192x4320 (8K)'],
   'dl-fps':   ['23.976', '24', '25', '29.97', '48', '50', '60', '100', '120'],
@@ -1511,7 +1513,7 @@ const CHAMPS_PLAN = () => [
    se note sans changer de mode ; sans zoom, la fin reste vide. */
 const CHAMPS_PRISE = () => [
   CHAMP_METEO(),
-  CHAMP_FOCALE('focale', 'Focale début'),
+  CHAMP_FOCALE('focale', 'Focale'),   // « Focale  14 mm → 20 mm » : debut, fin (la fin a son nom, cache sur la ligne)
   CHAMP_FOCALE('focaleStop', 'Focale fin'),
   CHAMP_MOUV('mouvement'),
   CHAMP_SUPPORT()
@@ -1547,7 +1549,7 @@ function htmlChamp(p, c){
 }
 /* Un bloc de lignes dans la fiche : il retient ses cles pour se redessiner seul. Une fiche
    peut en porter plusieurs (la prise : la meteo sous la note, le reste dans les releves). */
-const blocChamps = (o, cles) => `<div class="champs" data-champs="${cles.join(',')}">${
+const blocChamps = (o, cles, cls) => `<div class="champs${cls ? ' ' + cls : ''}" data-champs="${cles.join(',')}">${
   champsDe().filter(c => cles.includes(c.k)).map(c => htmlChamp(o, c)).join('')}</div>`;
 function majChamps(){
   const o = (openType === 'plan' || openType === 'prise') && cible(openId); if (!o) return;
@@ -2443,6 +2445,16 @@ function curseurWb(r){
   i.value = r.value + ' K';
   live(i);
 }
+/* Une valeur libre, hors du curseur : « 4850 » -> « 4850 K », « 5600 K +3 CC » tel quel. */
+function wbCustom(b){
+  const i = b.parentNode.querySelector('.wb-val'); if (!i) return;
+  demanderTexte('Balance des blancs', { valeur: i.value, aide:'4850 K, 5600 K +3 CC…', ok:'Poser' }).then(v => {
+    if (v == null) return;
+    v = String(v).trim();
+    i.value = /^\d+$/.test(v) ? v + ' K' : v;
+    live(i); majCurseurWb(i);
+  });
+}
 function majCurseurWb(i){
   const r = i.parentNode.querySelector('.curseur-wb'), k = kelvinDe(i.value);
   if (r && k) r.value = k;
@@ -2642,14 +2654,15 @@ function openPrise(id, y){
       </div>`)}
 
     ${sectionFiche('releves', 'Relevés caméra', t, `
-      ${blocChamps(t, ['focale', 'focaleStop'])}
+      ${blocChamps(t, ['focale', 'focaleStop'], 'duo-champs')}
       <div class="specs suite">
-        ${F(t, 'F-stop / diaph', 'diaph', {ph:'T2.8', refresh:1})}
+        ${F(t, 'F-stop / diaph', 'diaph', {ph:'2.8', refresh:1, dl:'dl-diaph', im:'decimal'})}
         ${DUO(t, 'Distance de point', 'focusStart', 'focusStop', '2.40 m')}
         <div class="spec wb"><label>Balance (WB)</label>
           <input class="wb-val" ${liaison(t, 'wb', ';majCurseurWb(this)')} value="${esc(t.wb)}" placeholder="5600 K">
           <input type="range" class="curseur-wb" min="2000" max="11000" step="100" value="${kelvinDe(t.wb) || 5600}"
-            oninput="curseurWb(this)" aria-label="Balance des blancs, en kelvins"></div>
+            oninput="curseurWb(this)" aria-label="Balance des blancs, en kelvins">
+          <button type="button" class="mini wb-custom" onclick="wbCustom(this)">Custom</button></div>
         ${F(t, 'ISO / EI', 'ei', {ph:'800', im:'numeric'})}
         ${F(t, 'Shutter', 'shutter', {dl:'dl-shut'})}
         ${DUO(t, 'Hauteur', 'hauteurStart', 'hauteurStop', '1.45 m')}
@@ -2990,11 +3003,13 @@ const CROQUIS_OBJETS = [
   ['mur',     'Mur',        PICTO('<path d="M4 12h16" stroke-width="4"/>')],
   ['fenetre', 'Fenêtre',    PICTO('<path d="M4 10h16M4 14h16"/>')],
   ['vert',    'Fond vert',  PICTO('<path d="M4 12h16" stroke-width="4"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#fff" stroke-width="1.6"/>')],
+  ['diffb',   'Diffuseur blanc', PICTO('<path d="M4 12h16" stroke-width="4" stroke="#b9b3ac"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#fff" stroke-width="1.6"/>')],
+  ['diffn',   'Diffuseur noir',  PICTO('<path d="M4 12h16" stroke-width="4"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#8a8480" stroke-width="1.6"/>')],
   ['cote',    'Mesure',     PICTO('<path d="M4 12h16M4 12l3-3M4 12l3 3M20 12l-3-3M20 12l-3 3"/>')],
   ['txt',     'Texte',      PICTO('<path d="M5 6h14M12 6v13"/>')]
 ];
 /* trois gestes : poser puis orienter ; tirer d'un bout a l'autre ; tirer coin a coin */
-const OBJ_POSE = ['cam', 'lum', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
+const OBJ_POSE = ['cam', 'lum', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
 let dessin = null;   // l'editeur ouvert
 
 const fondDecor = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
@@ -3292,13 +3307,15 @@ function dessinerObjet(g, o, k, u){
     g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
     g.strokeStyle = '#fff'; g.lineWidth = 4 * u;
     g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
-  } else if (o.t === 'mur' || o.t === 'vert'){
+  } else if (o.t === 'mur' || o.t === 'vert' || o.t === 'diffb' || o.t === 'diffn'){
+    // le fond vert et les diffuseurs (blanc : gris clair ; noir) se tirent comme un mur, en plus epais
+    const TEINTE = { mur:'#3a3330', vert:'#5fb36d', diffb:'#b9b3ac', diffn:'#1d1a18' };
     g.lineCap = 'butt';
-    g.strokeStyle = o.t === 'vert' ? '#5fb36d' : '#3a3330'; g.lineWidth = (o.t === 'vert' ? 16 : 12) * u;
+    g.strokeStyle = TEINTE[o.t]; g.lineWidth = (o.t === 'mur' ? 12 : 16) * u;
     g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
-    if (o.t === 'vert'){
-      // une hachure claire : le fond vert se distingue d'un mur peint
-      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 3 * u; g.setLineDash([8 * u, 8 * u]);
+    if (o.t !== 'mur'){
+      // une hachure : un fond ou un diffuseur se distingue d'un mur peint
+      g.strokeStyle = o.t === 'diffn' ? 'rgba(160,152,146,.8)' : 'rgba(255,255,255,.6)'; g.lineWidth = 3 * u; g.setLineDash([8 * u, 8 * u]);
       g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
     }
   } else if (o.t === 'txt'){
@@ -3708,7 +3725,8 @@ function openPlan(id, y){
   $('sbody').innerHTML = `
     <div class="bandeau">
       <div class="btxt">
-        <div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div>
+        <div class="fiche-tete"><div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div>
+          <button type="button" class="mini renommer" onclick="renommerPlan('${p.id}')">Renommer</button></div>
         <div class="lead-ligne"><div class="lead">${esc(p.desc || '—')}</div>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}" onclick="viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
@@ -3769,7 +3787,7 @@ function openPlan(id, y){
         : `<button type="button" class="btn fusion" onclick="choisirFusion('${p.id}')">Fusionner avec un autre shot…</button>`}
     </div>
 
-    <div class="note">Pour retirer ce plan du découpage, ou en ajouter un : Préparation. Depuis le tournage, on ne supprime pas un plan.</div>`;
+    <div class="note centre">Pour retirer ce plan du découpage, ou en ajouter un : Préparation. Depuis le tournage, on ne supprime pas un plan.</div>`;
 
   const f = $('sfoot');
   f.innerHTML = `<button type="button" class="btn" id="moteur-fiche">&#9679; Moteur</button>
@@ -3856,10 +3874,26 @@ function supprimerPlanConfirme(p){
 /* Un plan tourne en plus du decoupage : insert, plan de coupe, raccord ajoute
    sur le plateau. Il se range dans la journee filtree, ou dans celle du dernier
    plan touche si on est en vue "Tout". */
+/* Un numero de shot tape « Plan 12A » ou « shot 12A » : le mot s'en va, le titre le met deja. */
+const numeroPropre = v => String(v || '').trim().replace(/^(plan|shot)\s*[:.\-]?\s*/i, '');
+/* Renommer un plan : son numero change pour toute l'equipe, ses prises suivent. */
+function renommerPlan(id){
+  const p = plan(id); if (!p) return;
+  demanderTexte('Numéro du shot', { valeur: p.plan || '', aide:'12, 12A, 06bis…', ok:'Renommer' }).then(v => {
+    if (v == null || !plan(id)) return;
+    v = numeroPropre(v);
+    if (v === (p.plan || '')) return;
+    patch('plan', id, { plan: v });
+    propager(plan(id));
+    renderList();
+    if (openType === 'plan' && openId === id) rouvrirFiche();
+    toast(v ? 'Shot renommé ' + v + ' pour toute l’équipe' : 'Shot sans numéro');
+  });
+}
 function nouveauPlan(){
   demanderTexte('Numéro du nouveau shot', { aide:'12, 12A, 06bis… (modifiable ensuite dans sa fiche)', ok:'Ajouter' }).then(num => {
     if (num == null) return;   // on renonce : pas de plan
-    num = String(num).trim();
+    num = numeroPropre(num);
     const ref = dernierPlan && plan(dernierPlan);
     const p = creerPlan(fJour !== '*' ? fJour : (ref ? ref.jour : ''), true);
     // le plan est au decoupage : il arrive chez toute l'equipe, numero compris
