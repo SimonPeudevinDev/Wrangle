@@ -350,13 +350,17 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
 }
 .seq em{font:500 13px var(--font);color:var(--dim2);letter-spacing:0;margin-left:6px}
 
-/* -------- Un plan : une entree du carnet, entre deux filets -------- */
+/* -------- Un plan : une entree du carnet, entre deux traits francs -------- */
+/* entre deux plans, un trait plein, epais et clair ; entre les prises d'un plan,
+   des pointilles fins : on voit d'un coup d'oeil ou un plan finit */
 .plan{
-  position:relative;margin:0;padding:16px 0 14px;border-radius:0;
-  background:none;border:none;border-bottom:1px solid var(--line);
+  position:relative;margin:0;padding:20px 0 18px;border-radius:0;
+  background:none;border:none;border-bottom:2px solid var(--line2);
 }
-.plan.done .pnum{color:var(--ok)}
-.plan.done .pnum::after{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:4px;vertical-align:middle;order:1}
+/* « Shot 01 » ; un plan tourne le dit en toutes lettres, en vert */
+.pno{display:inline-flex;align-items:baseline;gap:7px}
+.pno small{font:700 11px var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--dim2)}
+.ptourne{font:700 11px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--ok);order:1}
 .plan.drop{opacity:.45}
 .plan.drop .pnum{text-decoration:line-through}
 .plan.pick{padding:12px 0}
@@ -568,9 +572,10 @@ nav button i{display:none}
 /* ca tourne : une onde s'eloigne du bouton, lentement, toujours dans le meme
    sens, et le carre remplace l'oeil. Pas de va-et-vient : il ne clignote pas.
    C'est a cela, et au mot, qu'on distingue « ca tourne » de « prêt a tourner ». */
+/* pendant la prise : un contour fixe, pas d'onde qui pulse (on la prenait pour un clignotement) */
 .fab.rec{
   background:var(--ng);color:var(--ng-txt);
-  animation:rec 1.8s ease-out infinite;
+  box-shadow:0 0 0 4px rgba(var(--ng-rgb),.3);
 }
 .fab.rec:hover{background:var(--ng-g1)}
 .fab.rec em{opacity:.9;font-variant-numeric:tabular-nums}

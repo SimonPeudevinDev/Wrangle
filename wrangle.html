@@ -2007,7 +2007,8 @@ function blocPlan(p, seulementRetenues, qui){
   return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}" data-id="${p.id}">
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
-        <div class="pnum">${p.plan ? esc(p.plan) : 'sans n°'}<span class="ptags">${htmlPtags(p)}</span>
+        <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}</span>${
+          p.etat === 'done' ? '<span class="ptourne">Tourné</span>' : ''}<span class="ptags">${htmlPtags(p)}</span>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
