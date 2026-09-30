@@ -1382,7 +1382,12 @@ select option{background:var(--surface);color:var(--txt)}
 
 /* La prise : la focale qui n'est pas celle du plan, et la prise pas saisie */
 .tmeta span.hors{color:var(--tag-orange);font-weight:700}
-.tstat.pas{color:var(--dim);font-style:italic;font-weight:600;letter-spacing:0;text-transform:none}
+/* « non saisie » et « saisie differee » : une etiquette en capsule, grise ou orange,
+   qui ne prend pas la couleur de la ligne (OK, NG) */
+.prise .tstat.pas{display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:var(--rp);
+  font:700 10px/1 var(--font);letter-spacing:.08em;text-transform:uppercase;font-style:normal;
+  color:var(--dim);border:1px solid var(--line2);background:none}
+.prise .tstat.pas.diff{color:var(--tag-orange);border-color:rgba(217,160,102,.55);background:rgba(217,160,102,.1)}
 .tstat+.tstat.pas{margin-left:8px}
 #alertes-prise:empty{display:none}
 #alertes-prise{padding:12px 20px 0}
@@ -1444,3 +1449,7 @@ select option{background:var(--surface);color:var(--txt)}
 
 /* les boutons au bas de la fiche d'une prise : centres */
 .btns.btns-prise{justify-content:center}
+
+/* les boutons des deux marques, dans la fiche : pleins quand la marque est posee */
+.btn.btn-marque.on{background:var(--surface3);border-color:var(--dim2);color:var(--txt)}
+.btn.btn-marque.diff.on{background:var(--tag-orange);border-color:var(--tag-orange);color:#1f1409}

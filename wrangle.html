@@ -2082,7 +2082,7 @@ function ligne(t, sansActions){
         ${t.notes ? `<span class="tnote" title="${esc(t.notes)}">${esc(t.notes)}</span>` : ''}
         ${t.statut && t.statut !== 'OK' && t.statut !== 'NG'
           ? `<span class="tstat">${esc(t.statut)}</span>` : ''}
-        ${t.pasSaisie ? `<span class="tstat pas">non saisie</span>` : t.differee ? `<span class="tstat pas">saisie différée</span>` : ''}
+        ${t.pasSaisie ? `<span class="tstat pas non">non saisie</span>` : t.differee ? `<span class="tstat pas diff">saisie différée</span>` : ''}
       </div>
       ${meta || rel ? `<div class="tmeta">${meta}${rel}</div>` : ''}
     </div>
@@ -2630,8 +2630,8 @@ function openPrise(id, y){
 
     <div class="sec btns btns-prise">
       <button class="btn d" onclick="delPrise()">Supprimer la prise</button>
-      <button class="btn${t.pasSaisie ? ' on' : ''}" id="btn-pas-saisie" onclick="basculerPasSaisie()">${t.pasSaisie ? '&#10003; ' : ''}Prise non saisie</button>
-      <button class="btn${t.differee ? ' on' : ''}" id="btn-differee" onclick="basculerDifferee()">${t.differee ? '&#10003; ' : ''}Saisie différée</button>
+      <button class="btn btn-marque${t.pasSaisie ? ' on' : ''}" id="btn-pas-saisie" onclick="basculerPasSaisie()">${t.pasSaisie ? '&#10003; ' : ''}Prise non saisie</button>
+      <button class="btn btn-marque diff${t.differee ? ' on' : ''}" id="btn-differee" onclick="basculerDifferee()">${t.differee ? '&#10003; ' : ''}Saisie différée</button>
     </div>`;
 
   const f = $('sfoot');
