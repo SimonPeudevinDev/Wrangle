@@ -358,8 +358,8 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
   background:none;border:none;border-bottom:2px solid var(--line2);
 }
 /* « Shot 01 » ; un plan tourne le dit en toutes lettres, en vert */
-.pno{display:inline-flex;align-items:baseline;gap:7px}
-.pno small{font:700 11px var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--dim2)}
+.pno{display:inline-flex;align-items:baseline;gap:.28em}
+.pno small{font:inherit;letter-spacing:inherit;color:inherit}   /* « Shot 01 » d'une seule typo */
 .ptourne{font:700 11px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--ok);order:1}
 .plan.drop{opacity:.45}
 .plan.drop .pnum{text-decoration:line-through}
