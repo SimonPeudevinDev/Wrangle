@@ -2451,8 +2451,8 @@ function noteRapide(n){
    contient, pour verifier sans l'ouvrir que la prise herite des bons reglages. */
 const RESUME_PRISE = {
   fichier: t => [t.cam, t.tcIn && 'TC ' + t.tcIn, t.duree],
-  releves: t => [t.focale && fleche(t.focale, t.focaleStop), t.diaph, t.focusStart && fleche(t.focusStart, t.focusStop), t.mouvement, t.support],
-  image:   t => [t.codec, t.reso, t.fps && t.fps + ' fps', t.ei && 'EI ' + t.ei, t.wb, t.nd && 'ND ' + t.nd, t.lut],
+  releves: t => [t.focale && fleche(t.focale, t.focaleStop), t.diaph, t.focusStart && fleche(t.focusStart, t.focusStop), t.wb, t.ei && 'ISO ' + t.ei, t.shutter, t.mouvement, t.support],
+  image:   t => [t.codec, t.reso, t.fps && t.fps + ' fps', t.nd && 'ND ' + t.nd, t.lut],
   son:     t => [t.sonRoll, t.sync, t.sonFile]
 };
 // la table est lue a l'usage : RESUME_PLAN n'est declare que plus bas
@@ -2621,8 +2621,11 @@ function openPrise(id, y){
     ${sectionFiche('releves', 'Relevés caméra', t, `
       ${blocChamps(t, ['focale', 'focaleStop'])}
       <div class="specs suite">
-        ${F(t, 'Diaph', 'diaph', {ph:'T2.8', refresh:1})}
-        ${DUO(t, 'Point de map', 'focusStart', 'focusStop', '2.40 m')}
+        ${F(t, 'F-stop / diaph', 'diaph', {ph:'T2.8', refresh:1})}
+        ${DUO(t, 'Distance de point', 'focusStart', 'focusStop', '2.40 m')}
+        ${F(t, 'Balance (WB)', 'wb', {dl:'dl-wb'})}
+        ${F(t, 'ISO / EI', 'ei', {ph:'800', im:'numeric'})}
+        ${F(t, 'Shutter', 'shutter', {dl:'dl-shut'})}
         ${DUO(t, 'Hauteur', 'hauteurStart', 'hauteurStop', '1.45 m')}
         ${F(t, 'Mesuré depuis', 'mesureDepuis', {ph:'Nodal, sol, mur nord…'})}
         ${DUO(t, 'Pan', 'panStart', 'panStop', '0°')}
@@ -2637,9 +2640,6 @@ function openPrise(id, y){
         ${F(t, 'Codec', 'codec', {dl:'dl-codec'})}
         ${F(t, 'Résolution', 'reso', {dl:'dl-reso'})}
         ${F(t, 'Cadence', 'fps', {dl:'dl-fps', refresh:1, im:'decimal'})}
-        ${F(t, 'Obturateur', 'shutter', {dl:'dl-shut'})}
-        ${F(t, 'EI / ISO', 'ei', {ph:'800', im:'numeric'})}
-        ${F(t, 'Balance', 'wb', {dl:'dl-wb'})}
         ${F(t, 'ND', 'nd', {ph:'0.6', im:'decimal'})}
         ${F(t, 'LUT', 'lut', {dl:'dl-lut'})}
         ${F(t, 'Objectif', 'objectif', {dl:'dl-obj'})}
