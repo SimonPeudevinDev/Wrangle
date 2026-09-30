@@ -1979,9 +1979,6 @@ function calerPrises(racine){
   });
 }
 
-/* Seul le plan que le Moteur vise deplie ses prises ; les autres les replient
-   en une ligne (« 8 prises · 2 OK »), qu'un appui deplie en visant le plan.
-   Un filtre qui trie les prises (a monter, saisie par) les montre partout. */
 /* « Tourne » s'affiche une fois qu'on est passe a la suite : la derniere prise
    notee est sur un autre shot. Le shot qu'on tourne encore ne le dit pas. */
 function tourne(p){
@@ -1992,14 +1989,27 @@ function tourne(p){
 /* Une fusion se lit sur la carte : « + 06 » sur le shot garde, « dans 05 » sur l'autre. */
 function htmlFusion(p){
   const dans = p.fusionDans && plan(p.fusionDans);
-  if (dans) return `<span class="pfusion">fusionné dans ${esc(dans.plan || '?')}</span>`;
+  return dans ? `<span class="pfusion">fusionné dans ${esc(dans.plan || '?')}</span>` : '';
+}
+/* dans le numero meme, de la meme typo : « Shot 1 + 2 » */
+function plusFusion(p){
   const avec = (p.fusionAvec || []).map(plan).filter(Boolean);
-  return avec.length ? `<span class="pfusion">+ ${avec.map(x => esc(x.plan || '?')).join(' + ')}</span>` : '';
+  return avec.length ? `<span class="pno-plus">+ ${avec.map(x => esc(x.plan || '?')).join(' + ')}</span>` : '';
+}
+/* Le plan que le Moteur vise deplie ses prises ; les autres les replient en
+   une ligne (« 8 prises · 2 OK »), qu'un appui deplie sans changer le plan vise
+   (pour revoir un shot precedent), et qu'un « Replier » referme. Un filtre qui
+   trie les prises (a monter, saisie par) les montre partout. */
+const OUVERTS = new Set();
+function basculerOuvert(id){
+  if (OUVERTS.has(id)) OUVERTS.delete(id); else OUVERTS.add(id);
+  renderList();
 }
 function blocPlan(p, seulementRetenues, qui){
   let pr = prisesDe(p.id);
   const total = pr.length;
-  const deplie = seulementRetenues || qui || (planVise() || {}).id === p.id;
+  const vise = (planVise() || {}).id === p.id, ouvert = OUVERTS.has(p.id) && !vise;
+  const deplie = seulementRetenues || qui || vise || ouvert;
   if (seulementRetenues) pr = pr.filter(t => t.retenue);
   if (qui) pr = pr.filter(t => quiDe(t) === qui);
   const el = lisElements(p);
@@ -2021,7 +2031,7 @@ function blocPlan(p, seulementRetenues, qui){
   return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}" data-id="${p.id}">
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
-        <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}</span>${
+        <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}${plusFusion(p)}</span>${
           tourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
@@ -2031,7 +2041,8 @@ function blocPlan(p, seulementRetenues, qui){
         ${el ? `<div class="pelem">${el}</div>` : ''}
       </div>
     </div>
-    ${deplie ? htmlPrises(pr) : pr.length ? `<button type="button" class="prises-repliees" onclick="viser('${p.id}')"
+    ${deplie ? htmlPrises(pr) + (ouvert && !seulementRetenues && !qui ? `<button type="button" class="prises-replier" onclick="basculerOuvert('${p.id}')">Replier<i></i></button>` : '')
+      : pr.length ? `<button type="button" class="prises-repliees" onclick="basculerOuvert('${p.id}')"
         aria-label="Déplier les prises"><span class="res">${resumePrises(p)}</span><i></i></button>` : ''}
     ${p.fusionDans ? '' : `<button class="addtake" onclick="viser('${p.id}', true);ajouterPrise('${p.id}')">+ Prise ${total + 1}</button>`}
   </div>`;

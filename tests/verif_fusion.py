@@ -74,7 +74,7 @@ with Banc(PORT, 9370, taille=(1200, 900)) as banc:
                     ['Reflet a effacer', 'Pied de micro', {'hdri': True}])
     essais.verifier('la note commune de A le dit', 'Tourné avec le shot' in banc.js("plan(A).notesClient"), True)
     essais.verifier('la liste : « + » sur A, « fusionne dans » sur B',
-                    [banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + A + '\"] .pfusion').textContent.indexOf('+') === 0"),
+                    [banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + A + '\"] .pno-plus').textContent.indexOf('+') === 0"),
                      banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + B + '\"] .pfusion').textContent.indexOf('fusionné dans') === 0")], [True, True])
     patienter(lambda: len([t for t in api('etat.php?espace=simon')['db']['prises'] if t['planId'] == a]) == 3, tours=40)
     essais.verifier('le serveur a mes prises sur A', sorted(t['n'] for t in api('etat.php?espace=simon')['db']['prises'] if t['planId'] == a), [1, 4, 5])

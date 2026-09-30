@@ -71,10 +71,14 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     essais.verifier('l autre les replie en une ligne', deplie('p1.id'), [False, True])
     essais.verifier('la ligne dit combien', banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + p1.id + '\"] .prises-repliees').textContent.trim()"), '1 prise')
     banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + p1.id + '\"] .prises-repliees').click()"); time.sleep(0.3)
-    essais.verifier('un appui la deplie et vise ce plan', [deplie('p1.id'), banc.js("planVise().id === p1.id")], [[True, False], True])
-    essais.verifier('l autre se replie', deplie('p0.id'), [False, True])
-    banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + p0.id + '\"] .viser').click()"); time.sleep(0.3)
-    essais.verifier('l anneau du Moteur fait de meme', [deplie('p0.id'), deplie('p1.id')], [[True, False], [False, True]])
+    essais.verifier('un appui la deplie, sans changer le plan vise', [deplie('p1.id'), banc.js("planVise().id === p0.id")], [[True, False], True])
+    essais.verifier('le plan vise reste deplie', deplie('p0.id'), [True, False])
+    banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + p1.id + '\"] .prises-replier').click()"); time.sleep(0.3)
+    essais.verifier('« Replier » la referme', deplie('p1.id'), [False, True])
+    banc.js("document.querySelector('#l-shoot .plan[data-id=\"' + p1.id + '\"] .viser').click()"); time.sleep(0.3)
+    essais.verifier('l anneau du Moteur, lui, change le plan vise et replie l autre',
+                    [deplie('p1.id'), deplie('p0.id'), banc.js("planVise().id === p1.id")], [[True, False], [False, True], True])
+    banc.js("viser(p0.id, true)")
 
     # -- les sequences sur deux chiffres, les cinq jours du tournage
     banc.js("patch('plan', p1.id, { seq: '3' })")

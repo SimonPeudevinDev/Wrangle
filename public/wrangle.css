@@ -1473,3 +1473,10 @@ select option{background:var(--surface);color:var(--txt)}
 .lprep-seq{font-size:13px;color:var(--dim)}
 .lprep-desc{margin-top:6px;font-size:14.5px;line-height:1.5;color:var(--txt)}
 .lprep .pctx{margin-top:5px}
+
+/* « Replier » sous les prises d'un shot deplie a la main */
+.prises-replier{display:inline-flex;align-items:center;gap:8px;margin:8px 0 0;padding:6px 2px;cursor:pointer;
+  background:none;border:none;color:var(--dim);font:500 12.5px var(--font)}
+.prises-replier i{width:7px;height:7px;border-left:1.5px solid currentColor;border-top:1.5px solid currentColor;transform:rotate(45deg);margin-top:4px}
+.prises-replier:hover{color:var(--txt)}
+.pno-plus{margin-left:.28em}
