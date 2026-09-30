@@ -60,6 +60,8 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
                     banc.js("[...document.querySelectorAll('.champ[data-champ=\"cadrage\"] .tuile.on')].map(b => b.dataset.f)"), ['Poitrine', 'Américain'])
     banc.js("choisirChamp('cadrage', 'Poitrine')")
     essais.verifier('un second appui retire le cadrage', banc.js("plan(p0.id).cadrage"), 'Américain')
+    banc.js("patch('plan', p0.id, { support: '' }); ouvrirChamp('support'); choisirChamp('support', 'Trépied'); choisirChamp('support', 'Rail / dolly')")
+    essais.verifier('le support a plusieurs, « Rail / dolly » reste une seule valeur', banc.js("plan(p0.id).support"), 'Trépied + Rail / dolly')
     banc.js("ouvrirChamp('mouv'); choisirChamp('mouv', 'Pan'); choisirChamp('mouv', 'Tilt')")
     essais.verifier('le mouvement aussi', banc.js("plan(p0.id).mouv"), 'Pan / Tilt')
     banc.js("closeSheet()")

@@ -319,6 +319,12 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 - **La carte, à côté du clip**, se lit dans son nom ARRI : `A_0001C0004` donne `A_0001` (le nom
   complet du fichier aussi). Elle suit le clip, « +1 » compris ; un identifiant tapé à la main
   qui n'a pas la forme d'une bobine (`1F6K`) n'est pas touché.
+- **Relevés à l'ARRI Alexa 35** : F-stop par tiers, ISO / EI de 160 à 6400, Shutter speed en
+  temps (1/48, 1/50…) puis en angle (5 à 356°), balance au curseur ; chaque menu finit par
+  « + Custom… » pour une valeur hors liste. « Distance de mise au point (focus) » au lieu de
+  « Distance de point » ; « Mesuré depuis » passe en fin de relevés. Le **support** se coche à
+  plusieurs (« Trépied + Rail / dolly »), et le **mouvement** se règle aussi prise par prise, sous
+  la note, à côté de la météo.
 - **Cadrage et mouvement se choisissent à plusieurs** : on coche les tuiles, puis « Terminé » ;
   ils se gardent ensemble, « Poitrine / Américain », comme dans le découpage.
 - **Seul le plan que le Moteur vise déplie ses prises** ; les autres les replient en une ligne

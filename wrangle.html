@@ -1289,7 +1289,12 @@ const LISTES = {
   'dl-reso':  ['4448x3096 (Open Gate)', '4096x2160 (4K DCI)', '3840x2160 (UHD)', '1920x1080 (HD)', '6144x3240 (6K)',
                '8192x4320 (8K)'],
   'dl-fps':   ['23.976', '24', '25', '29.97', '48', '50', '60', '100', '120'],
-  'dl-shut':  ['180°', '172.8°', '90°', '45°', '1/50'],
+  // l'obturateur de l'ARRI Alexa 35 : en temps d'exposition (1 s a 1/8000) ou en angle (5 a 356°)
+  'dl-shut':  () => fusion(['1/24', '1/48', '1/50', '1/60', '1/96', '1/100', '1/120', '1/200', '1/250', '1/500', '1/1000',
+                            '5°', '11.2°', '22.5°', '45°', '90°', '144°', '172.8°', '180°', '270°', '356°'], connus(DB.prises, 'shutter')),
+  // les EI de l'ARRI Alexa 35 (160 a 6400), par tiers
+  'dl-ei':    () => fusion(['160', '200', '250', '320', '400', '500', '640', '800', '1000', '1280', '1600', '2000',
+                            '2560', '3200', '4000', '5120', '6400'], connus(DB.prises, 'ei')),
   // la balance de l'ARRI Alexa 35 (2 000 a 11 000 K), les valeurs courantes, et celles deja
   // posees sur le tournage (une valeur personnalisee revient dans le menu)
   'dl-wb':    () => fusion(['2000 K', '2500 K', '2800 K', '3000 K', '3200 K', '3400 K', '3600 K', '4000 K', '4300 K', '4700 K',
@@ -1342,8 +1347,14 @@ function clicHorsMenu(e){
 }
 /* Les listes qui s'allongent depuis leur menu : le nom du bouton, et ce qu'il fait
    (une promesse de la valeur ajoutee, vide si on renonce). */
+/* « + Custom… » au bas d'un menu : une valeur hors liste, tapee ; elle revient ensuite dans le menu */
+const custom = (titre, aide) => ({ nom: '+ Custom…', faire: () => demanderTexte(titre, { aide, ok:'Poser' })
+  .then(v => String(v || '').trim()) });
 const AJOUTS = {
   'dl-lieu': { nom: '+ Ajouter un décor…', faire: () => ajouterDecor() },
+  'dl-diaph': custom('F-stop / diaph', '2.4, T2.8, 4 1/3…'),
+  'dl-ei':    custom('ISO / EI', '1100, 1600 ES…'),
+  'dl-shut':  custom('Shutter speed', '150°, 1/250…'),
   // une balance hors liste : « 4850 » devient « 4850 K » ; « 5600 K +3 CC » reste tel quel
   'dl-wb':   { nom: '+ Valeur personnalisée…', faire: () => demanderTexte('Balance des blancs', { aide:'4850 K, 5600 K +3 CC…', im:'text', ok:'Poser' })
                  .then(v => { v = String(v || '').trim(); return /^\d+$/.test(v) ? v + ' K' : v; }) }
@@ -1498,7 +1509,7 @@ const CHAMP_METEO   = () => ({ k:'meteo', nom:'Météo', liste: METEOS, ico:1, a
 const CHAMP_FOCALE  = (k, nom) => ({ k, nom, liste: focales(), court:1, autre:'ajouterFocale', trier: trierFocales, aide:'32, 18-35 zoom, 150 Macro…', im:'decimal' });
 // sep : plusieurs choix, gardes ensemble dans le meme texte (« Pan / Tilt »)
 const CHAMP_MOUV    = k => ({ k, nom:'Mouvement', liste: MOUVEMENTS, sep:' / ', autre:'poserDansTexte' });
-const CHAMP_SUPPORT = () => ({ k:'support', nom:'Support', liste: SUPPORTS, autre:'poserValeur' });
+const CHAMP_SUPPORT = () => ({ k:'support', nom:'Support', liste: SUPPORTS, sep:' + ', autre:'poserDansTexte' });
 const CHAMPS_PLAN = () => [
   { k:'lieu',       nom:'Décor',         liste: fusion(decorsTournage(), LISTES['dl-lieu']()), autre:'poserValeur' },
   { k:'intExt',     nom:'Int / Ext',     liste: ['Int', 'Ext', 'Int/Ext'], court:1 },
@@ -1521,12 +1532,13 @@ const CHAMPS_PRISE = () => [
 ];
 const champsDe = () => openType === 'plan' ? CHAMPS_PLAN() : openType === 'prise' ? CHAMPS_PRISE() : [];
 /* Les morceaux d'un choix multiple garde en texte : « Poitrine / Américain ». */
-const morceaux = v => String(v || '').split(/\s*\/\s*/).map(x => x.trim()).filter(Boolean);
+// le separateur est celui de la ligne : « / » (cadrage, mouvement), « + » (support : « Rail / dolly » est une seule valeur)
+const morceaux = (v, sep) => String(v || '').split((sep || ' / ').trim() === '+' ? /\s*\+\s*/ : /\s*\/\s*/).map(x => x.trim()).filter(Boolean);
 function htmlChamp(p, c){
   const multi = !!c.multi, sep = !!c.sep, v = multi ? (p[c.k] || []) : (p[c.k] || '').trim();
-  const parts = sep ? morceaux(v) : null;
+  const parts = sep ? morceaux(v, c.sep) : null;
   // un choix multiple : des tuiles simples (les combinaisons du decoupage se decomposent)
-  let liste = multi ? fusion(c.liste, v) : sep ? fusion(c.liste.filter(x => morceaux(x).length < 2), parts) : c.liste.slice();
+  let liste = multi ? fusion(c.liste, v) : sep ? fusion(c.liste.filter(x => morceaux(x, c.sep).length < 2), parts) : c.liste.slice();
   if (!multi && !sep && v && !liste.some(x => memeVal(x, v))){ liste.push(v); if (c.trier) c.trier(liste); }
   const lu = multi ? v.concat((c.cases || []).filter(x => p[x[0]]).map(x => x[1])).join(', ') : v;
   const ouvert = champOuvert === c.k, pris = x => multi ? v.some(y => memeVal(y, x)) : sep ? parts.some(y => memeVal(y, x)) : memeVal(x, v);
@@ -1583,7 +1595,7 @@ function champSuivant(k){
 function choisirChamp(k, val){
   const o = cible(openId), kind = kindDe(openId), c = champsDe().find(x => x.k === k); if (!o || !c) return;
   if (c.multi) patch(kind, o.id, { [k]: avecOuSans(o[k], val) });
-  else if (c.sep) patch(kind, o.id, { [k]: avecOuSans(morceaux(o[k]), val).join(c.sep) });   // la ligne reste ouverte
+  else if (c.sep) patch(kind, o.id, { [k]: avecOuSans(morceaux(o[k], c.sep), val).join(c.sep) });   // la ligne reste ouverte
   else {
     const pose = !memeVal(o[k], val);
     patch(kind, o.id, { [k]: pose ? val : '' });
@@ -1632,7 +1644,7 @@ const AIDE_AUTRE = { lieu:'Nom du décor…', cadrage:'Plongée, plan de coupe�
 function poserDansTexte(input){
   const s = lireSaisie(input); if (!s) return;
   const c = champsDe().find(x => x.k === s.k);
-  const l = morceaux(s.o[s.k]);
+  const l = morceaux(s.o[s.k], c && c.sep);
   if (!l.some(x => memeVal(x, s.val))) l.push(s.val);
   patch(s.kind, s.id, { [s.k]: l.join(c && c.sep || ' / ') });
   rouvrirFiche(); renderList();
@@ -2645,7 +2657,7 @@ function openPrise(id, y){
         ${F(t, 'Note', 'notes', {auto:1, refresh:1,
           ph:'Jeu, raccord, élément à effacer…'})}
       </div>
-      ${blocChamps(t, ['meteo'])}
+      ${blocChamps(t, ['meteo', 'mouvement'])}
     </div>
 
     ${sectionFiche('fichier', 'Fichier & caméra', t, `
@@ -2660,21 +2672,23 @@ function openPrise(id, y){
       ${blocChamps(t, ['focale', 'focaleStop'], 'duo-champs')}
       <div class="specs suite">
         ${F(t, 'F-stop / diaph', 'diaph', {ph:'2.8', refresh:1, dl:'dl-diaph', im:'decimal'})}
-        ${DUO(t, 'Distance de point', 'focusStart', 'focusStop', '2.40 m')}
+        ${DUO(t, 'Distance de mise au point (focus)', 'focusStart', 'focusStop', '2.40 m')}
         <div class="spec wb"><label>Balance (WB)</label>
           <input class="wb-val" ${liaison(t, 'wb', ';majCurseurWb(this)')} value="${esc(t.wb)}" placeholder="5600 K">
           <input type="range" class="curseur-wb" min="2000" max="11000" step="100" value="${kelvinDe(t.wb) || 5600}"
             oninput="curseurWb(this)" aria-label="Balance des blancs, en kelvins">
           <button type="button" class="mini wb-custom" onclick="wbCustom(this)">Custom</button></div>
-        ${F(t, 'ISO / EI', 'ei', {ph:'800', im:'numeric'})}
-        ${F(t, 'Shutter', 'shutter', {dl:'dl-shut'})}
+        ${F(t, 'ISO / EI', 'ei', {ph:'800', im:'numeric', dl:'dl-ei'})}
+        ${F(t, 'Shutter speed', 'shutter', {ph:'180°', dl:'dl-shut'})}
         ${DUO(t, 'Hauteur', 'hauteurStart', 'hauteurStop', '1.45 m')}
-        ${F(t, 'Mesuré depuis', 'mesureDepuis', {ph:'Nodal, sol, mur nord…'})}
         ${DUO(t, 'Pan', 'panStart', 'panStop', '0°')}
         ${DUO(t, 'Tilt', 'tiltStart', 'tiltStop', '-4°')}
         ${DUO(t, 'Roll', 'rollStart', 'rollStop', '0°')}
       </div>
-      ${blocChamps(t, ['mouvement', 'support'])}
+      ${blocChamps(t, ['support'])}
+      <div class="specs suite">
+        ${F(t, 'Mesuré depuis', 'mesureDepuis', {ph:'Nodal, sol, mur nord…'})}
+      </div>
       <div class="note">Ces relevés servent au matchmove : à gauche la valeur au départ, à droite de la flèche celle à l’arrivée si elle bouge pendant la prise.</div>`)}
 
     ${sectionFiche('image', 'Réglages image', t, `
@@ -5725,7 +5739,7 @@ function decorerFiche(){
   // les lignes a tuiles : la valeur des autres dans l'en-tete, leur initiale sur la tuile
   sb.querySelectorAll('.champ[data-champ]').forEach(c => {
     const k = c.dataset.champ, def = champsDe().find(d => d.k === k);
-    const a = x => Array.isArray(x) ? x : !valRap(x) ? [] : def && def.sep ? morceaux(x) : [valRap(x)];
+    const a = x => Array.isArray(x) ? x : !valRap(x) ? [] : def && def.sep ? morceaux(x, def.sep) : [valRap(x)];
     const mien = a(o[k]), porte = (l, v) => l.some(y => memeVal(y, v));
     c.classList.remove('a2-autre', 'a2-accord', 'a2-ecart');
     const avis = j.filter(x => a(x.o[k]).length);

@@ -75,7 +75,8 @@ with Banc(8796, 9381, taille=(430, 932)) as banc:
     # -- la fin du bloc referme tout
     ouvrir('support')
     poser_la_premiere()
-    essais.verifier('Support pose -> Focale s ouvre', banc.js(OUVERT), 'focale')
+    essais.verifier('Support, a plusieurs, reste ouvert', banc.js(OUVERT), 'support')
+    ouvrir('focale')
     poser_la_premiere()
     essais.verifier('Focale, derniere ligne : tout se referme', banc.js(OUVERT), '')
 
