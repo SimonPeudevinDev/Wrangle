@@ -1508,16 +1508,22 @@ select option{background:var(--surface);color:var(--txt)}
 .spec.wb .wb-custom{flex:none;margin:0 0 0 auto}
 .spec.wb .curseur-wb{order:3;flex:1 1 100%}
 
-/* Focale debut -> focale fin, cote a cote comme pan ou tilt : « FOCALE  14 mm → 20 mm »,
-   une seule etiquette ; les tuiles de celle qu'on ouvre dessous, en pleine largeur */
-.champs.duo-champs{display:grid;grid-template-columns:auto 1fr;column-gap:0}
+/* Focale debut -> focale fin, du meme dessin que hauteur, pan ou tilt : « FOCALE  14 mm → 20 mm »,
+   une seule etiquette, la fleche au meme endroit, ni chevron ni gras ; un appui sur une valeur
+   ouvre ses tuiles dessous, en pleine largeur. La premiere colonne va jusqu'a la fleche : la
+   moitie de la ligne, plus l'etiquette et son ecart (108 + 14), moins la fleche (16), en deux. */
+.champs.duo-champs{display:grid;grid-template-columns:calc(50% + 54px) 1fr;column-gap:0;border-top:none}
 .champs.duo-champs .champ{display:contents}
-.champs.duo-champs .champ-tete{grid-row:1;border-bottom:1px solid var(--line);min-width:0}
-.champs.duo-champs .champ-val{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.champs.duo-champs .champ + .champ .champ-tete{position:relative;padding-left:28px}
+.champs.duo-champs .champ-tete{grid-row:1;border-bottom:1px solid var(--line);min-width:0;min-height:48px;padding:0}
+.champs.duo-champs .champ-tete i{display:none}
+.champs.duo-champs .champ-val{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px;font-weight:400}
+.champs.duo-champs .champ-val.vide{opacity:.5}
+.champs.duo-champs .champ + .champ .champ-tete{position:relative;padding-left:23px}
 .champs.duo-champs .champ + .champ .champ-nom{display:none}
-.champs.duo-champs .champ + .champ .champ-tete::before{content:"→";position:absolute;left:4px;color:var(--dim2)}
-.champs.duo-champs .champ:first-child .champ-tete{padding-right:10px}
+.champs.duo-champs .champ + .champ .champ-tete::before{content:"→";position:absolute;left:0;font-size:15px;color:var(--dim2)}
+.champs.duo-champs .champ.ouvert .champ-val{color:var(--acc)}
+/* la barre « a deux » se pose une fois, a gauche de la ligne, comme sur hauteur ou pan */
+.champs.duo-champs .champ + .champ > .champ-tete{box-shadow:none!important;margin-left:0!important;width:100%!important}
 .champs.duo-champs .tuiles{grid-row:2;grid-column:1/-1}
 
 /* la focale fin : « Pas de zoom » en tete des tuiles */
