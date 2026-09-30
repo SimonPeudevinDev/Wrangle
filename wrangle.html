@@ -3038,6 +3038,7 @@ const CROQUIS_OBJETS = [
   ['bloc',    'Bloc',       PICTO('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9h16M9 4v16"/>')],
   ['rond',    'Rond',       PICTO('<circle cx="12" cy="12" r="8"/>')],
   ['fleche',  'Flèche',     PICTO('<path d="M4 18L18 6M18 6h-7M18 6v7"/>')],
+  ['trajet',  'Flèche libre', PICTO('<path d="M4 19c1-6 6-8 8-4s6 1 7-6M19 9l-3.6 1.2M19 9l.6 3.8"/>')],
   ['mur',     'Mur',        PICTO('<path d="M4 12h16" stroke-width="4"/>')],
   ['fenetre', 'Fenêtre',    PICTO('<path d="M4 10h16M4 14h16"/>')],
   ['vert',    'Fond vert',  PICTO('<path d="M4 12h16" stroke-width="4"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#fff" stroke-width="1.6"/>')],
@@ -3048,6 +3049,8 @@ const CROQUIS_OBJETS = [
 ];
 /* trois gestes : poser puis orienter ; tirer d'un bout a l'autre ; tirer coin a coin */
 const OBJ_POSE = ['cam', 'lum', 'soleil', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
+/* la fleche libre : un trajet dessine a main levee, en pointille, la pointe a l'arrivee */
+const OBJ_TRACE = ['trajet'];
 let dessin = null;   // l'editeur ouvert
 
 const fondDecor = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
@@ -3182,6 +3185,7 @@ function etatCroquis(p, img){
     const c = Object.assign({}, o, { n:++seq });
     ['x', 'x1', 'x2', 'mx'].forEach(k => { if (o[k] != null) c[k] = o[k] * kx; });
     ['y', 'y1', 'y2', 'my'].forEach(k => { if (o[k] != null) c[k] = o[k] * ky; });
+    if (o.pts) c.pts = o.pts.map(q => [q[0] * kx, q[1] * ky]);
     return c;
   });
   return { planId:p.id, fond:img, w, h, traits, objets, seq, outil:'crayon', couleur:CROQUIS_COULEURS[0], largeur:1, courant:null, sale:false, zoom:1, histo:[] };
@@ -3329,6 +3333,25 @@ function dessinerObjet(g, o, k, u){
     g.beginPath(); g.moveTo(bx, by);
     g.lineTo(bx - Math.cos(ang - .45) * 26 * u, by - Math.sin(ang - .45) * 26 * u);
     g.lineTo(bx - Math.cos(ang + .45) * 26 * u, by - Math.sin(ang + .45) * 26 * u); g.closePath(); g.fill();
+  } else if (o.t === 'trajet'){
+    // la fleche libre : le trajet lisse en pointille, arrete avant la pointe, qui suit sa derniere direction
+    const l = (o.pts || []).map(q => [X(q[0]), Y(q[1])]);
+    if (l.length > 1){
+      const fin = l[l.length - 1], coupe = retirerFin(l, 14 * u), base = pointAvant(l, 26 * u);
+      const ang = Math.atan2(fin[1] - base[1], fin[0] - base[0]);
+      g.strokeStyle = o.c || '#1c1410'; g.fillStyle = o.c || '#1c1410'; g.lineWidth = 5 * u; g.lineCap = 'round'; g.lineJoin = 'round';
+      g.setLineDash([16 * u, 12 * u]);
+      g.beginPath(); g.moveTo(coupe[0][0], coupe[0][1]);
+      // des courbes d'un milieu de segment au suivant : le trace a la main s'adoucit
+      for (let i = 1; i < coupe.length - 1; i++)
+        g.quadraticCurveTo(coupe[i][0], coupe[i][1], (coupe[i][0] + coupe[i + 1][0]) / 2, (coupe[i][1] + coupe[i + 1][1]) / 2);
+      g.lineTo(coupe[coupe.length - 1][0], coupe[coupe.length - 1][1]);
+      g.stroke();
+      g.setLineDash([]);
+      g.beginPath(); g.moveTo(fin[0], fin[1]);
+      g.lineTo(fin[0] - Math.cos(ang - .45) * 26 * u, fin[1] - Math.sin(ang - .45) * 26 * u);
+      g.lineTo(fin[0] - Math.cos(ang + .45) * 26 * u, fin[1] - Math.sin(ang + .45) * 26 * u); g.closePath(); g.fill();
+    }
   } else if (o.t === 'cote'){
     // une cote : la fleche a deux pointes, et la mesure ecrite au milieu, dans le sens de la ligne
     const ax = X(o.x1), ay = Y(o.y1), bx = X(o.x2), by = Y(o.y2), ang = Math.atan2(by - ay, bx - ax), l = Math.hypot(bx - ax, by - ay);
@@ -3449,7 +3472,7 @@ function rendreCroquis(cv){
   const k = c.width / dessin.w, u = k * dessin.w / 1600;
   g.lineCap = 'round'; g.lineJoin = 'round';
   const enCours = dessin.courant;
-  dessin.traits.concat(enCours && enCours.pts ? [enCours] : []).forEach(t => {
+  dessin.traits.concat(enCours && enCours.pts && !enCours.t ? [enCours] : []).forEach(t => {
     if (!t.pts.length) return;
     g.strokeStyle = t.c; g.lineWidth = t.w * u;
     g.beginPath(); g.moveTo(t.pts[0][0] * k, t.pts[0][1] * k);
@@ -3472,6 +3495,33 @@ function poigneesDe(o){
   if (OBJ_SEG.includes(o.t)) return [{ x: o.x1, y: o.y1, bout:1 }, { x: o.x2, y: o.y2, bout:2 }]
     .concat(o.t === 'fleche' ? [Object.assign({ courbe:true }, milieuFleche(o))] : []);
   return [];
+}
+/* La fleche libre : sa longueur, le trajet sans ses derniers `d` points de feuille (la pointe
+   les couvre), le point a `d` de l'arrivee (d'ou part la pointe), et le trace simplifie
+   (Douglas-Peucker : on ne garde que les points qui s'ecartent de plus de `eps`). */
+const longueurTrajet = l => l.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - l[i][0], q[1] - l[i][1]), 0);
+function pointAvant(l, d){
+  for (let i = l.length - 1, r = d; i > 0; i--){
+    const a = l[i - 1], b = l[i], s = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (s >= r) return [b[0] + (a[0] - b[0]) * r / s, b[1] + (a[1] - b[1]) * r / s];
+    r -= s;
+  }
+  return l[0];
+}
+function retirerFin(l, d){
+  for (let i = l.length - 1, r = d; i > 0; i--){
+    const a = l[i - 1], b = l[i], s = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (s >= r) return l.slice(0, i).concat([[b[0] + (a[0] - b[0]) * r / s, b[1] + (a[1] - b[1]) * r / s]]);
+    r -= s;
+  }
+  return [l[0], l[0]];
+}
+function simplifier(l, eps){
+  if (l.length < 3) return l;
+  let loin = 0, k = 0;
+  for (let i = 1; i < l.length - 1; i++){ const d = distSeg(l[i], l[0], l[l.length - 1]); if (d > loin){ loin = d; k = i; } }
+  if (loin <= eps) return [l[0], l[l.length - 1]];
+  return simplifier(l.slice(0, k + 1), eps).slice(0, -1).concat(simplifier(l.slice(k), eps));
 }
 /* La fleche courbe passe par son point du milieu : le point de controle de la
    courbe s'en deduit. Sans milieu note, elle est droite. */
@@ -3510,7 +3560,7 @@ function pointCroquis(e){
   const r = $('croquis').getBoundingClientRect();
   return [Math.round((e.clientX - r.left) / r.width * dessin.w), Math.round((e.clientY - r.top) / r.height * dessin.h)];
 }
-const estObjet = o => OBJ_POSE.includes(o) || OBJ_SEG.includes(o) || OBJ_RECT.includes(o) || o === 'txt';
+const estObjet = o => OBJ_POSE.includes(o) || OBJ_SEG.includes(o) || OBJ_RECT.includes(o) || OBJ_TRACE.includes(o) || o === 'txt';
 function debutTrait(e){
   if (!dessin) return;
   doigtPose(e);
@@ -3531,8 +3581,28 @@ function debutTrait(e){
   if (OBJ_POSE.includes(o)){ dessin.courant = { t:o, x:pt[0], y:pt[1], a:0, c:dessin.couleur }; rendreCroquis(); return; }
   if (OBJ_SEG.includes(o)){ const d = aimanterDepart(pt, e.altKey); dessin.courant = { t:o, x1:d[0], y1:d[1], x2:d[0], y2:d[1], c:dessin.couleur }; rendreCroquis(); return; }
   if (OBJ_RECT.includes(o)){ dessin.courant = { t:o, x1:pt[0], y1:pt[1], x2:pt[0], y2:pt[1], c:dessin.couleur }; rendreCroquis(); return; }
+  if (OBJ_TRACE.includes(o)){ dessin.courant = { t:o, pts:[pt], c:dessin.couleur }; rendreCroquis(); return; }
   dessin.courant = { c: dessin.couleur, w: CROQUIS_LARGEURS[dessin.largeur], pts:[pt] };
   rendreCroquis();
+}
+/* Le lissage (streamline) du crayon et de la fleche libre : le trait ne suit pas
+   chaque tremblement du doigt, il rattrape la main d'une part de l'ecart a chaque
+   mouvement ; au lever, il la rejoint. Garde sur l'appareil, actif d'office. */
+const LISSAGE = .28;
+function basculerLissage(){ UI.lissage = UI.lissage === false; ecrireUI(); majOutils(); }
+function pointLisse(c, pt){
+  c.brut = pt;
+  if (UI.lissage === false) return pt;
+  const d = c.lisse || c.pts[c.pts.length - 1];
+  c.lisse = [d[0] + (pt[0] - d[0]) * LISSAGE, d[1] + (pt[1] - d[1]) * LISSAGE];
+  return c.lisse.map(v => Math.round(v * 10) / 10);
+}
+/* au lever : quelques points qui ralentissent jusqu'a la main, pour finir ou elle s'est levee */
+function rejoindreMain(c){
+  if (!c.lisse || !c.brut) return;
+  const a = c.lisse, b = c.brut;
+  [.45, .75, .92, 1].forEach(k => c.pts.push([Math.round((a[0] + (b[0] - a[0]) * k) * 10) / 10, Math.round((a[1] + (b[1] - a[1]) * k) * 10) / 10]));
+  delete c.lisse; delete c.brut;
 }
 /* L'aimant : un trait (mur, fond, diffuseur, fleche…) ou une orientation proche
    d'un multiple de 45° s'y colle, a 7° pres ; un bout qui passe pres du bout d'un
@@ -3606,7 +3676,13 @@ function mouvTrait(e){
     if (Math.hypot(dx, dy) > 12 * dessin.w / 1600){ const a = Math.atan2(dy, dx); c.a = e.altKey ? a : aimanterAngle(a); }
   } else if (OBJ_SEG.includes(c.t)){ const q = aimanterBout(c.x1, c.y1, pt, null, e.altKey); c.x2 = q[0]; c.y2 = q[1]; }
   else if (OBJ_RECT.includes(c.t)){ c.x2 = pt[0]; c.y2 = pt[1]; }
-  else c.pts.push(pt);
+  else if (OBJ_TRACE.includes(c.t)){
+    // un point tous les quelques pixels : le trajet reste leger et se lisse au dessin
+    const q = pointLisse(c, pt), d = c.pts[c.pts.length - 1];
+    if (Math.hypot(q[0] - d[0], q[1] - d[1]) < 6 * dessin.w / 1600) return;
+    c.pts.push(q);
+  }
+  else c.pts.push(pointLisse(c, pt));
   rendreCroquis();
 }
 function finTrait(e){
@@ -3615,6 +3691,12 @@ function finTrait(e){
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
   if (c.bouge || c.tourne || c.bout || c.courbe){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  if (c.pts) rejoindreMain(c);
+  if (OBJ_TRACE.includes(c.t)){
+    const u = dessin.w / 1600;
+    if (longueurTrajet(c.pts) < 30 * u){ rendreCroquis(); return; }
+    c.pts = simplifier(c.pts, 2.5 * u).map(q => [Math.round(q[0]), Math.round(q[1])]);
+  }
   // ce qui vient d'etre trace rejoint le croquis, une fois son texte connu s'il en faut un
   const poser = () => {
     if (!dessin) return;
@@ -3657,6 +3739,7 @@ const distSeg = (p, a, b) => {
 /* Ce que le point touche : un objet (le dernier pose d'abord), sinon un trait. */
 function touche(pt, o){
   const u = dessin.w / 1600, r = 28 * u;
+  if (OBJ_TRACE.includes(o.t)) return (o.pts || []).slice(1).some((q, i) => distSeg(pt, o.pts[i], q) <= r);
   if (o.t === 'fleche' && o.mx != null){ const l = pointsFleche(o); return l.slice(1).some((q, i) => distSeg(pt, l[i], q) <= r); }
   if (OBJ_SEG.includes(o.t)) return distSeg(pt, [o.x1, o.y1], [o.x2, o.y2]) <= r;
   if (OBJ_RECT.includes(o.t)) return pt[0] >= Math.min(o.x1, o.x2) - r && pt[0] <= Math.max(o.x1, o.x2) + r && pt[1] >= Math.min(o.y1, o.y2) - r && pt[1] <= Math.max(o.y1, o.y2) + r;
@@ -3727,6 +3810,7 @@ function outilCroquis(k, v){
   majOutils();
 }
 function majOutils(){
+  const perso = !!dessin && !CROQUIS_COULEURS.includes(dessin.couleur);
   if (!dessin) return;
   const o = dessin.outil, crayon = !estObjet(o) && o !== 'gomme' && o !== 'move' && o !== 'main';
   $('dzone').classList.toggle('main', o === 'main');
@@ -3735,8 +3819,12 @@ function majOutils(){
     CROQUIS_OBJETS.map(([k, nom, ic]) => `<button type="button" class="dobj${o === k ? ' on' : ''}" onclick="outilCroquis('objet', '${k}')">${ic}<span>${nom}</span></button>`).join('');
   $('doutils').innerHTML =
     CROQUIS_COULEURS.map(c => `<button type="button" class="dcoul${o !== 'gomme' && dessin.couleur === c ? ' on' : ''}" style="background:${c}" onclick="outilCroquis('couleur', '${c}')" aria-label="Couleur"></button>`).join('') +
+    // une couleur au choix : la pastille arc-en-ciel ouvre le selecteur, puis prend la couleur choisie
+    `<label class="dcoul dperso${perso ? ' choisie' : ''}${o !== 'gomme' && perso ? ' on' : ''}" style="${perso ? 'background:' + dessin.couleur : ''}" title="Couleur au choix">` +
+      `<input type="color" value="${perso ? dessin.couleur : '#9b59b6'}" onchange="outilCroquis('couleur', this.value)" aria-label="Couleur au choix"></label>` +
     `<i class="dsep"></i>` +
     CROQUIS_LARGEURS.map((w, i) => `<button type="button" class="dlarg${crayon && dessin.largeur === i ? ' on' : ''}" onclick="outilCroquis('largeur', ${i})" aria-label="Épaisseur"><i style="width:${4 + i * 5}px;height:${4 + i * 5}px"></i></button>`).join('') +
+    `<button type="button" class="btn sm${UI.lissage !== false ? ' p' : ''}" onclick="basculerLissage()" title="Lisse le crayon et la flèche libre : le trait suit la main avec un léger retard, sans tremblement">Lissage</button>` +
     `<i class="dsep"></i>` +
     `<button type="button" class="btn sm${crayon ? ' p' : ''}" onclick="outilCroquis('crayon')">${ICONES.crayon} Crayon</button>` +
     `<button type="button" class="btn sm${o === 'move' ? ' p' : ''}" onclick="outilCroquis('move')">Déplacer</button>` +
@@ -3751,6 +3839,7 @@ function majOutils(){
     OBJ_POSE.includes(o) ? 'Posez, puis tirez dans la direction visée.' :
     o === 'cote' ? 'Tirez la flèche d’un point à l’autre, puis tapez la mesure.' :
     o === 'fleche' ? 'Tirez du départ à l’arrivée du mouvement. Pour la courber : Déplacer, puis tirez le point du milieu.' :
+    o === 'trajet' ? 'Dessinez le trajet d’un seul geste, courbes et virages compris : la pointe se pose à l’arrivée.' :
     OBJ_SEG.includes(o) ? 'Tirez d’un bout à l’autre.' :
     o === 'rond' ? 'Tirez d’un bord à l’autre ; le rond s’inscrit dedans.' :
     OBJ_RECT.includes(o) ? 'Tirez d’un coin à l’autre.' :

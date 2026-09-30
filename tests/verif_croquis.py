@@ -132,6 +132,42 @@ with Banc(8786, 9371) as banc:
     essais.verifier('ramenee sur la droite, elle se redresse',
                     banc.js("dessin.objets[dessin.objets.length - 1].mx == null"), True)
 
+    # -- la fleche libre : un trajet dessine a la main, en arc ; trop court, il n'est pas garde
+    def tracer(points):
+        x, y = ecran(*points[0])
+        banc.cdp.appel('Input.dispatchMouseEvent', type='mousePressed', x=x, y=y, button='left', buttons=1, clickCount=1)
+        for q in points[1:]:
+            x, y = ecran(*q)
+            banc.cdp.appel('Input.dispatchMouseEvent', type='mouseMoved', x=x, y=y, button='left', buttons=1)
+        banc.cdp.appel('Input.dispatchMouseEvent', type='mouseReleased', x=x, y=y, button='left', buttons=0, clickCount=1)
+        time.sleep(0.2)
+    import math
+    avant, traits = banc.js("[dessin.objets.length, dessin.traits.length]")
+    banc.js("outilCroquis('objet', 'trajet')")
+    tracer([(0.30 + 0.2 * math.cos(math.pi * k / 30), 0.55 - 0.2 * math.sin(math.pi * k / 30)) for k in range(31)])
+    tj = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.t, o.pts.length, dessin.traits.length]; })()")
+    essais.verifier('la fleche libre garde son trajet, simplifie, sans laisser de trait', [tj[0], 3 <= tj[1] <= 30, tj[2]], ['trajet', True, traits])
+    essais.verifier('elle se saisit sur son trajet',
+                    banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return touche(o.pts[Math.floor(o.pts.length / 2)], o); })()"), True)
+    tracer([(0.5, 0.5), (0.505, 0.5)])
+    essais.verifier('un trajet trop court n est pas pose', banc.js("dessin.objets.length"), avant + 1)
+
+    # -- le lissage : un trait tremble au crayon en sort plus calme, et finit sous la main
+    banc.js("outilCroquis('couleur', '#1c1410'); dessin.outil = 'crayon'; UI.lissage = true; majOutils()")
+    tracer([(0.10 + 0.4 * k / 40, 0.45 + (0.012 if k % 2 else -0.012)) for k in range(41)])
+    li = banc.js("""(() => { const p = dessin.traits[dessin.traits.length - 1].pts, h = $('croquis').getBoundingClientRect().height / dessin.h;
+      const ys = p.slice(5, -5).map(q => q[1]); return [Math.max(...ys) - Math.min(...ys), p[p.length - 1][0]]; })()""")
+    brut = banc.js("0.024 * dessin.h")
+    essais.verifier('le lissage calme le tremblement de moitie au moins', li[0] < brut / 2, True)
+    essais.detail('ecart vertical : %.1f lisse, %.1f a la main' % (li[0], brut))
+    essais.verifier('et le trait finit ou la main s est levee', abs(li[1] - banc.js("0.5 * dessin.w")) < 3, True)
+    essais.verifier('le bouton Lissage est allume', banc.js("[...document.querySelectorAll('#doutils .btn')].some(b => b.textContent === 'Lissage' && b.classList.contains('p'))"), True)
+
+    # -- une couleur au choix
+    banc.js("(() => { const i = document.querySelector('#doutils .dperso input'); i.value = '#8844cc'; i.dispatchEvent(new Event('change')); })()")
+    essais.verifier('la couleur au choix devient celle du crayon, et sa pastille la prend',
+                    banc.js("[dessin.couleur, document.querySelector('#doutils .dperso').classList.contains('on')]"), ['#8844cc', True])
+
     # -- le soleil se pose et s'oriente comme une lumiere
     banc.js("outilCroquis('objet', 'soleil')")
     tirer((0.80, 0.20), (0.70, 0.35))

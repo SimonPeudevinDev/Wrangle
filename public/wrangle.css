@@ -793,6 +793,10 @@ nav button i{display:none}
 .doutils{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px 8px;border-top:1px solid var(--line2)}
 .dcoul{width:30px;height:30px;border-radius:50%;border:2px solid transparent;box-shadow:0 0 0 1px var(--line2);cursor:pointer;padding:0}
 .dcoul.on{border-color:var(--bg);box-shadow:0 0 0 2px var(--txt)}
+/* la couleur au choix : un arc-en-ciel tant qu'on n'a rien choisi ; le selecteur couvre la pastille */
+.dcoul.dperso{position:relative;overflow:hidden;display:inline-block;flex:none;
+  background:conic-gradient(#e8675e,#e7b04a,#f2e14a,#5fb36d,#4fc3c9,#4f8fd6,#9b59b6,#e8675e)}
+.dcoul.dperso input{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:none;padding:0}
 .dlarg{width:36px;height:36px;border-radius:50%;border:1px solid var(--line2);background:none;display:grid;place-items:center;cursor:pointer;padding:0;color:var(--dim)}
 .dlarg i{display:block;border-radius:50%;background:currentColor}
 .dlarg.on{border-color:var(--acc);color:var(--acc)}

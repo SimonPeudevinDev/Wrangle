@@ -358,7 +358,11 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   pour tracer à main levée. Fond vert, diffuseur blanc (gris) et diffuseur noir se tirent comme
   un mur. **Une flèche se courbe** : Déplacer, puis tirer le point du milieu (ramené sur la
   droite, elle se redresse). **Le soleil** se pose du côté d'où il vient et se tourne vers où va
-  sa lumière, comme un projecteur.
+  sa lumière, comme un projecteur. **La flèche libre** se dessine d'un seul geste (courbes,
+  virages, trajets en L) : le tracé est simplifié et lissé, la pointe se pose à l'arrivée.
+  **Lissage** (allumé d'office, gardé sur l'appareil) calme le crayon et la flèche libre : le
+  trait rattrape la main sans ses tremblements, et finit où elle se lève. La pastille
+  arc-en-ciel, après les cinq couleurs, ouvre le sélecteur pour **une couleur au choix**.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
 ## Divers
