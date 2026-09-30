@@ -2251,8 +2251,12 @@ function majFicheEnPlace(){
    sans chrono, pour ceux qui notent apres coup. */
 function majFab(){
   const f = $('fab'), f2 = $('fab2'), f3 = $('fab3');
-  [f, f2, f3].forEach(b => { b.hidden = view !== 'shoot'; });
-  if (view !== 'shoot') return;
+  // pendant une prise, REC reste a l'ecran partout : sur chaque page, par-dessus une fiche ou
+  // le croquis, pour couper d'ou qu'on soit ; + Prise et + Plan restent a la page Tournage
+  document.body.classList.toggle('en-rec', !!chrono);
+  f.hidden = view !== 'shoot' && !chrono;
+  [f2, f3].forEach(b => { b.hidden = view !== 'shoot'; });
+  if (f.hidden) return;
   const p = planVise();
   // le bouton est redessine deux fois par seconde pendant une prise : on ne
   // touche au DOM que si son texte change, sinon l'onde du bouton tressaute
@@ -2270,7 +2274,7 @@ function majFab(){
   if (f.dataset.html !== html){ f.dataset.html = html; f.innerHTML = html; }
   f2.textContent = p ? '+ Prise ' + (prisesDe(p.id).length + 1) : '+ Prise';
   majMoteurFiche();
-  majVise();
+  if (view === 'shoot') majVise();
 }
 
 /* --------------------------------------------------------------- Chrono */

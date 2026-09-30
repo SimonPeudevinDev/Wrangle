@@ -557,6 +557,13 @@ nav button i{display:none}
   display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none;
 }
 .fabs > button{pointer-events:auto}
+/* pendant une prise, REC passe devant tout (fiche, croquis), sous les dialogues ; il monte
+   au-dessus des boutons du bas de la fiche et de la barre d'outils du croquis */
+body.en-rec .fabs{z-index:96}
+body.en-rec:has(.sheet.on) .fabs > .fab2,body.en-rec:has(#voile-dessin:not([hidden])) .fabs > .fab2{display:none}
+body.en-rec:has(.sheet.on) .fabs{bottom:calc(var(--nav) + var(--safe) + 84px)}
+body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-inset-bottom,0px) + 100px)}
+@media(max-width:900px){ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-inset-bottom,0px) + 170px)} }
 
 /* le bouton Moteur : rouge, comme le declencheur d'une camera et comme
    l'anneau du plan qui tourne ; l'oeil de l'anneau y est repris */

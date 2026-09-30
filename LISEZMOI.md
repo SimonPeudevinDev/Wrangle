@@ -352,7 +352,9 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 - **« + Plan »** demande d'abord le numéro du shot (modifiable ensuite dans sa fiche) ; le plan
   est au découpage, il arrive chez toute l'équipe.
 - Pendant une prise, le bouton Moteur fait comme une caméra : fond noir bordé de rouge, point
-  « REC » qui clignote, chrono, et le carré pour couper.
+  « REC » qui clignote, chrono, et le carré pour couper. Tant que la prise tourne, ce bouton reste
+  à l'écran partout — Préparation, Rapport, par-dessus une fiche ou le croquis — pour couper d'où
+  qu'on soit.
 - **Le croquis** a un aimant : un mur, un fond, un diffuseur ou une orientation proche d'un
   multiple de 45° s'y colle ; un bout qui passe près du bout d'un autre trait s'y accroche. Alt
   pour tracer à main levée. Fond vert, diffuseur blanc (gris) et diffuseur noir se tirent comme

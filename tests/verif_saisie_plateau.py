@@ -158,5 +158,18 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     banc.js(menu_codec); time.sleep(0.3)
     banc.js(menu_codec); time.sleep(0.3)
     essais.verifier('la valeur cochee du menu se decoche', banc.js("prise(tn.id).codec"), '')
+    # -- pendant une prise, REC reste devant, sur toutes les pages, fiche ou croquis ouverts
+    DESSUS = "(() => { const f = $('fab'); if (f.hidden) return 'cache'; const r = f.getBoundingClientRect(); "              "const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e && e.closest('#fab') ? 'devant' : 'recouvert'; })()"
+    banc.js("closeSheet(); moteurSur(DB.plans[0].id)"); time.sleep(0.5)
+    vus = []
+    for v in ('prep', 'report'):
+        banc.js("allerVue('%s')" % v); time.sleep(0.5); vus.append(banc.js(DESSUS))
+    banc.js("allerVue('shoot'); openPlan(DB.plans[1].id)"); time.sleep(0.6); vus.append(banc.js(DESSUS))
+    banc.js("closeSheet(); ouvrirCroquis(DB.plans[0].id)"); time.sleep(0.6); vus.append(banc.js(DESSUS))
+    essais.verifier('REC devant : Preparation, Rapport, fiche, croquis', vus, ['devant'] * 4)
+    banc.js("$('fab').click()"); time.sleep(0.4)
+    banc.js("fermerCroquis(); allerVue('report')"); time.sleep(0.4)
+    essais.verifier('on coupe d ou l on est ; sans prise, il quitte le Rapport', banc.js("[!chrono, $('fab').hidden]"), [True, True])
+    banc.js("allerVue('shoot')")
     essais.exceptions(banc)
 essais.bilan()
