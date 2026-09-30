@@ -575,13 +575,13 @@ nav button i{display:none}
 /* pendant la prise : le bouton respire, lentement et en douceur (pas d'onde qui part) */
 .fab.rec{
   background:var(--ng);color:var(--ng-txt);
-  animation:respire 2.4s ease-in-out infinite alternate;
+  animation:respire 2s ease-in-out infinite alternate;
 }
+/* voulu meme quand le systeme reduit les animations : c'est le signe que ca tourne */
 @keyframes respire{
   from{opacity:1;box-shadow:0 0 0 0 rgba(var(--ng-rgb),0)}
-  to{opacity:.72;box-shadow:0 0 18px 2px rgba(var(--ng-rgb),.45)}
+  to{opacity:.6;box-shadow:0 0 22px 4px rgba(var(--ng-rgb),.5)}
 }
-@media (prefers-reduced-motion: reduce){ .fab.rec{animation:none} }
 .fab.rec:hover{background:var(--ng-g1)}
 .fab.rec em{opacity:.9;font-variant-numeric:tabular-nums}
 @keyframes rec{
@@ -1348,6 +1348,8 @@ select option{background:var(--surface);color:var(--txt)}
   #post .ppied{margin-top:16pt;padding-top:6pt;border-top:.75pt solid #bbb;font-size:8pt;color:#777}
 }
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+/* sauf la respiration du bouton « Coupez » : c'est le signe que la camera tourne */
+@media (prefers-reduced-motion:reduce){.fabs .fab.rec{animation-duration:2s!important}}
 :focus-visible{outline:2px solid rgba(var(--acc-rgb),.8);outline-offset:2px}
 
 /* =========================================================================
