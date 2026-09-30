@@ -1982,6 +1982,13 @@ function calerPrises(racine){
 /* Seul le plan que le Moteur vise deplie ses prises ; les autres les replient
    en une ligne (« 8 prises · 2 OK »), qu'un appui deplie en visant le plan.
    Un filtre qui trie les prises (a monter, saisie par) les montre partout. */
+/* Une fusion se lit sur la carte : « + 06 » sur le shot garde, « dans 05 » sur l'autre. */
+function htmlFusion(p){
+  const dans = p.fusionDans && plan(p.fusionDans);
+  if (dans) return `<span class="pfusion">fusionné dans ${esc(dans.plan || '?')}</span>`;
+  const avec = (p.fusionAvec || []).map(plan).filter(Boolean);
+  return avec.length ? `<span class="pfusion">+ ${avec.map(x => esc(x.plan || '?')).join(' + ')}</span>` : '';
+}
 function blocPlan(p, seulementRetenues, qui){
   let pr = prisesDe(p.id);
   const total = pr.length;
@@ -2008,7 +2015,7 @@ function blocPlan(p, seulementRetenues, qui){
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
         <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}</span>${
-          p.etat === 'done' ? '<span class="ptourne">Tourné</span>' : ''}<span class="ptags">${htmlPtags(p)}</span>
+          p.etat === 'done' ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
@@ -2019,7 +2026,7 @@ function blocPlan(p, seulementRetenues, qui){
     </div>
     ${deplie ? htmlPrises(pr) : pr.length ? `<button type="button" class="prises-repliees" onclick="viser('${p.id}')"
         aria-label="Déplier les prises"><span class="res">${resumePrises(p)}</span><i></i></button>` : ''}
-    <button class="addtake" onclick="viser('${p.id}', true);ajouterPrise('${p.id}')">+ Prise ${total + 1}</button>
+    ${p.fusionDans ? '' : `<button class="addtake" onclick="viser('${p.id}', true);ajouterPrise('${p.id}')">+ Prise ${total + 1}</button>`}
   </div>`;
 }
 
@@ -2118,6 +2125,7 @@ function basculerEtoile(id){
    ni le champ en cours de frappe. C'est aussi ce qui se passe quand une
    modification arrive d'un autre appareil. */
 function rafraichirDoux(){
+  appliquerFusions();
   const y = window.scrollY;
   const sb = $('sbody');
   const ys = openType ? sb.scrollTop : 0;
@@ -3709,6 +3717,9 @@ function openPlan(id, y){
       <h3>État</h3>
       <div class="seg" id="seg-etat">${ETATS_SEG.map(([v, c]) =>
         `<button data-et="${v}" class="${classeSeg(v, p.etat, c)}" onclick="setEtatPlan('${v}')">${ETATS[v]}</button>`).join('')}</div>
+      ${p.fusionDans && plan(p.fusionDans)
+        ? `<div class="note">Fusionné dans le <a href="#" onclick="event.preventDefault();openPlan('${p.fusionDans}')">shot ${esc(plan(p.fusionDans).plan || '?')}</a> : ses prises y sont.</div>`
+        : `<button type="button" class="btn fusion" onclick="choisirFusion('${p.id}')">Fusionner avec un autre shot…</button>`}
     </div>
 
     <div class="note">Pour retirer ce plan du découpage, ou en ajouter un : Préparation. Depuis le tournage, on ne supprime pas un plan.</div>`;
@@ -4197,6 +4208,106 @@ function renderPicker(){
         </div></div></div>`;
     }).join('') || `<div class="empty">Aucun plan ne correspond.</div>`) +
     `<button class="addplan" onclick="nouveauPlan()">+ Plan hors découpage</button>`;
+}
+
+/* ------------------------------------------------ Fusionner deux shots */
+/* Deux shots tournes en un seul (le 06 dans le 05). Le shot absorbe passe en
+   « Abandonne », marque fusionDans : A ; ses descriptions, notes et elements
+   captes, ceux de chacun, rejoignent A (le plan est partage : un appareil le
+   fait pour tous). Les prises, elles, sont a chacun : chaque appareil deplace
+   les siennes des qu'il voit la fusion (appliquerFusions), a la suite de A,
+   avec un decalage fixe choisi a la fusion (fusionDecalage) : la prise 1 du 06
+   devient partout la meme prise du 05, et le rapprochement reste juste. */
+function choisirFusion(aId){
+  const a = plan(aId); if (!a) return;
+  openId = null; openType = 'picker';
+  videEntete();
+  $('stitle').textContent = 'Fusionner dans le shot ' + (a.plan || 'sans n°');
+  $('ssub').textContent = 'Le shot tourné avec lui : ses prises le rejoignent';
+  const libre = p => p.id !== a.id && !p.fusionDans;
+  const duJour = DB.plans.filter(p => libre(p) && (p.jour || '') === (a.jour || ''));
+  const autres = DB.plans.filter(p => libre(p) && (p.jour || '') !== (a.jour || ''));
+  const ligneF = p => {
+    const n = prisesDe(p.id).length;
+    return `<div class="plan pick"><div class="phead" onclick="confirmerFusion('${a.id}', '${p.id}')">
+      <div class="pmain">
+        <div class="pnum" style="font-size:17px">Shot ${p.plan ? esc(p.plan) : 'sans n°'}
+          <span style="font-size:12px;color:var(--dim2);font-weight:600;margin-left:8px">${esc(nomJour(p.jour || ''))}${n ? ' · ' + n + ' pr.' : ''}</span></div>
+        <div class="pdesc" style="font-size:13.5px;color:var(--dim);margin-top:4px;
+          display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(p.desc || '')}</div>
+      </div></div></div>`;
+  };
+  $('sbody').innerHTML = `<div class="list" id="l-pick">${duJour.map(ligneF).join('') || '<div class="empty">Aucun autre shot ce jour-là.</div>'}
+    ${autres.length ? `<div class="seq" style="padding-top:22px">Autres jours</div>${autres.map(ligneF).join('')}` : ''}</div>`;
+  montrerFiche(0);
+}
+/* le plus grand numero de prise du shot A, chez moi et chez les autres */
+function maxPrisesPartout(a){
+  let m = prisesDe(a.id).reduce((x, t) => Math.max(x, t.n || 0), 0);
+  try{
+    AUTRES.liste.forEach(o => {
+      const q = o.db.plans.find(x => x.id === a.id) || o.db.plans.find(x => clePlan(x) === clePlan(a));
+      if (q) o.db.prises.forEach(t => { if (t.planId === q.id) m = Math.max(m, t.n || 0); });
+    });
+  }catch(e){}
+  return m;
+}
+function confirmerFusion(aId, bId){
+  const a = plan(aId), b = plan(bId); if (!a || !b) return;
+  const na = a.plan || 'sans n°', nb = b.plan || 'sans n°', d = maxPrisesPartout(a), n = prisesDe(b.id).length;
+  confirmer('Fusionner le shot ' + nb + ' dans le shot ' + na + ' ?', {
+    detail: 'Les prises du ' + nb + ' passent sur le ' + na + ', à la suite (la prise 1 du ' + nb + ' devient la prise ' + (d + 1) +
+            '), chez toute l’équipe' + (n ? ' — ici, ' + n + ' prise' + plur(n) : '') + '. Descriptions, notes et éléments captés rejoignent le ' + na +
+            ' ; le ' + nb + ' passe en « Abandonné ». Ce n’est pas facile à défaire.',
+    ok: 'Fusionner'
+  }).then(oui => {
+    if (!oui || !plan(aId) || !plan(bId)) return;
+    fusionner(aId, bId, d);
+    closeSheet(); renderAll(); openPlan(aId);
+    toast('Shot ' + nb + ' fusionné dans le shot ' + na);
+  });
+}
+function fusionner(aId, bId, decalage){
+  const a = plan(aId), b = plan(bId); if (!a || !b) return;
+  const joindre = (x, y) => [String(x || '').trim(), String(y || '').trim()].filter(Boolean).join(' · ');
+  const da = {}, db = { fusionDans: a.id, fusionDecalage: decalage, etat: 'drop', auteurs: {} };
+  // les elements captes : ceux d'avant qui ont un auteur passent sous son prenom ; les autres restent communs
+  const au = Object.assign({}, a.auteurs || {}), aub = b.auteurs || {};
+  const perso = {};
+  const ajouter = (nom, l) => { perso[nom] = Object.assign(perso[nom] || {}, l); };
+  quiAElements(a).concat(quiAElements(b)).forEach(nom => {
+    ajouter(nom, elementsDe(a, nom, false)); ajouter(nom, elementsDe(b, nom, false));
+  });
+  const communs = {};
+  [[a, a.auteurs || {}], [b, aub]].forEach(([p, ax]) =>
+    Object.keys(p.elements || {}).forEach(k => { if (p.elements[k] && !ax['el:' + k]) communs[k] = true; }));
+  Object.keys(perso).forEach(nom => { da['elements@' + nom] = perso[nom]; db['elements@' + nom] = {}; });
+  Object.keys(au).forEach(k => { if (k.indexOf('el:') === 0) delete au[k]; });
+  da.elements = communs; da.auteurs = au; db.elements = {};
+  // les textes de chacun, et le commun : ceux du shot absorbe s'ajoutent a ceux de A
+  TEXTES_A_CHACUN.forEach(k => textesDe(b, k).forEach(([nom, v]) => {
+    const c = nom ? k + '@' + nom : k;
+    da[c] = joindre(da[c] !== undefined ? da[c] : a[c], v); db[c] = '';
+  }));
+  da.notesClient = joindre(da.notesClient !== undefined ? da.notesClient : a.notesClient, 'Tourné avec le shot ' + (b.plan || '?') + ' (fusion)');
+  db.notesClient = 'Fusionné dans le shot ' + (a.plan || '?');
+  da.fusionAvec = (a.fusionAvec || []).concat([b.id]);
+  if (b.etat === 'done' || prisesDe(b.id).length) da.etat = 'done';
+  patch('plan', a.id, da);
+  patch('plan', b.id, db);
+  appliquerFusions();
+}
+/* Mes prises d'un shot fusionne passent sur le shot qui l'a absorbe. */
+function appliquerFusions(){
+  DB.plans.forEach(b => {
+    if (!b.fusionDans) return;
+    const a = plan(b.fusionDans); if (!a) return;
+    prisesDe(b.id).forEach(t => {
+      const note = 'prise ' + t.n + ' du shot ' + (b.plan || '?');
+      patch('prise', t.id, { planId: a.id, plan: a.plan, seq: a.seq, jour: a.jour || '', n: (b.fusionDecalage || 0) + (t.n || 0),
+                             notes: [t.notes, note].filter(Boolean).join(' · ') });
+    });
+  });
 }
 
 /* ---------------------------------------------------- Feuille production */

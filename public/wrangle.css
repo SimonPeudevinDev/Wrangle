@@ -362,7 +362,7 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
 .pno small{font:inherit;letter-spacing:inherit;color:inherit}   /* « Shot 01 » d'une seule typo */
 .ptourne{font:700 11px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--ok);order:1}
 .plan.drop{opacity:.45}
-.plan.drop .pnum{text-decoration:line-through}
+.plan.drop .pno{text-decoration:line-through}   /* le numero seul : « fusionne dans 01 » reste lisible */
 .plan.pick{padding:12px 0}
 #l-pick{padding-top:12px}
 
@@ -1454,3 +1454,7 @@ select option{background:var(--surface);color:var(--txt)}
 .btn.btn-marque.on{background:var(--surface3);border-color:var(--dim2);color:var(--txt)}
 .btn.btn-marque.diff.on{background:var(--tag-orange);border-color:var(--tag-orange);color:#1f1409}
 .tact .tstat.pas{align-self:center;margin:0 6px 0 0}
+
+/* Fusion de deux shots : le bouton de la fiche, la mention sur la carte */
+.btn.fusion{margin-top:14px;width:100%}
+.pfusion{font:700 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--acc);order:1}

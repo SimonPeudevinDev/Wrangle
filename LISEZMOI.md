@@ -323,6 +323,13 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   (« 8 prises · 2 OK »), qu'un appui déplie. Viser un autre plan (son anneau, sa ligne, son
   « + Prise ») replie le précédent ; le plan touché reste à sa place à l'écran. Les filtres « À
   monter » et « Saisie par » montrent les prises partout.
+- **Fusionner deux shots** tournés en un seul : fiche du plan gardé → « Fusionner avec un autre
+  shot… », puis le shot à absorber. Ses prises passent sur le shot gardé, à la suite du plus
+  grand numéro connu chez tous (la prise 1 du 06 devient partout la même prise du 05, et garde
+  en note d'où elle vient) : chaque appareil déplace les siennes dès qu'il reçoit la fusion. Ses
+  descriptions, notes et éléments captés, ceux de chacun, rejoignent le shot gardé ; il passe en
+  « Abandonné », marqué « fusionné dans 05 », et le shot gardé porte « + 06 ». Ce n'est pas
+  facile à défaire : la page demande confirmation.
 - **Le bouton Retour du navigateur** (le geste retour du téléphone) ferme la fiche ouverte au lieu
   de quitter le site ; d'une prise ouverte depuis son plan, il ramène au plan.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
@@ -368,7 +375,7 @@ Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal
 
 ## Vérifier que rien n'est cassé
 
-Vingt-quatre scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
+Vingt-cinq scripts pilotent un Chrome invisible sur un serveur et un dossier de données temporaires :
 le projet réel n'est jamais touché.
 
 ```
@@ -396,6 +403,7 @@ py tests/verif_choix_equipe.py     le DIT réunit une personne, plusieurs ou tou
 py tests/verif_a_deux.py           dans la fiche, ce que les autres ont noté sur la même prise, à reprendre ou confirmer
 py tests/verif_pas_saisie.py       « prise non saisie », et la focale de la prise qui n'est pas celle du plan
 py tests/verif_saisie_plateau.py   focale reprise, carte lue dans le clip, cadrage multiple, prises repliées, bouton Retour
+py tests/verif_fusion.py           fusionner deux shots : les prises de chacun suivent, avec les mêmes numéros
 ```
 
 Chacun prend son propre port. Si un script se plaint que le serveur est injoignable, c'est qu'un
