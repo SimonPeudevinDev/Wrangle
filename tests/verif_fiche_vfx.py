@@ -63,7 +63,7 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('les autres elements dans « Other »', f['autres'], 'Extra plates, lidar du décor')
     essais.verifier('les distances : le point, d ou l on mesure, les cotes du croquis',
                     f['distances'], [['Take 2', '3 > 2', '', '', 'sol', ''], ['Set diagram', '', '', '', '', '4,20 m']])
-    essais.verifier('le croquis du plan va sur la feuille', f['croquis'], ids[0])
+    essais.verifier('le croquis du plan va sur la feuille', f['croquis'], ids[0] + ':0')
 
     # -- un jour ou rien n'est tourne : les feuilles de ses plans, pretes pour le plateau
     j2 = banc.js("joursConnus().find(x => x && x !== %s && plansDuJour(x).every(p => !prisesDe(p.id).length && p.etat !== 'done'))" % json.dumps(j))
@@ -85,6 +85,17 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('les notes a parentheses sont echappees', '\\(sans com\xe9diens\\)' in pdf, True)
     essais.verifier('les objets sont numerotes d un trait',
                     [int(x) for x in re.findall(r'(?m)^(\d+) 0 obj', pdf)] == list(range(1, pdf.count(' 0 obj') + 1)), True)
+
+    # -- un second croquis : sa propre page, en grand
+    banc.js("patch('plan', %s, { croquisPlus: [{ w:1600, h:1200, traits:[], objets:[{ t:'soleil', x:800, y:600, a:1 }, { t:'cote', x1:100, y1:100, x2:600, y2:100, txt:'3 m' }] }] })" % json.dumps(ids[0]))
+    f2 = banc.js('modeleVFX(%s)[0]' % json.dumps(j))
+    essais.verifier('le second croquis a sa page, ses cotes rejoignent les distances',
+                    [f2['autresCroquis'], f2['distances'][-1][5]], [[ids[0] + ':1'], '4,20 m · 3 m'])
+    pdf3 = banc.cdp.appel('Runtime.evaluate', returnByValue=True, awaitPromise=True, expression="""
+      imagesVFX(%s).then(ims => { const u = pdfVFX(%s, ims); let s = '';
+        for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return s; })""" % (json.dumps(j), json.dumps(j)))['result']['value']
+    essais.verifier('une page de plus, deux images', [pdf3.count('/Type /Page '), pdf3.count('/Subtype /Image')], [len(m) + 1, 2])
+    banc.js("patch('plan', %s, { croquisPlus: [] })" % json.dumps(ids[0]))
 
     # -- plus de quatorze prises : la feuille continue sur une page de suite
     banc.js("for (let i = 0; i < 15; i++) patch('prise', ajouterPrise(%s, false, {}).id, { clip:'B00' + i, statut:'OK' })" % json.dumps(ids[1]))

@@ -67,6 +67,25 @@ with Banc(8786, 9371) as banc:
     essais.verifier('l apercu porte bien des traits de couleur', isinstance(dessine, int) and dessine > 500, True)
     essais.detail('%r pixels colores dans l apercu' % dessine)
 
+    # -- plusieurs croquis : « + Croquis » en ouvre un neuf, qui n'existe qu'enregistre
+    essais.verifier('un croquis dessine propose « + Croquis »',
+                    banc.js("[...document.querySelectorAll('.croq-onglets button')].map(b => b.textContent.trim())"), ['+ Croquis'])
+    banc.js("nouveauCroquis(DB.plans[0].id)"); time.sleep(0.8)
+    essais.verifier('le nouveau croquis s ouvre vide, numero 2',
+                    banc.js("[dessin.index, dessin.traits.length, document.querySelector('#voile-dessin .dtitre b').textContent]"),
+                    [1, 0, 'Croquis 2 · plan ' + banc.js("DB.plans[0].plan")])
+    banc.js("dessin.traits.push({ c:'#4f8fd6', w:3, n:1, pts:[[100,100],[900,700]] }); enregistrerCroquis(); fermerCroquis()"); time.sleep(0.6)
+    essais.verifier('enregistre, il rejoint le plan sans toucher au premier',
+                    banc.js("[(DB.plans[0].croquisPlus || []).length, DB.plans[0].croquis.traits.length]"), [1, 3])
+    essais.verifier('la fiche a un onglet par croquis, le second montre',
+                    banc.js("[...document.querySelectorAll('.croq-onglets button')].map(b => b.textContent.trim() + (b.classList.contains('on') ? '*' : ''))"),
+                    ['Croquis 1', 'Croquis 2*', '+ Croquis', 'Supprimer le croquis 2'])
+    banc.js("voirCroquis(DB.plans[0].id, 0)"); time.sleep(0.4)
+    essais.verifier('l onglet 1 rouvre le premier', banc.js("croquisVu(DB.plans[0])"), 0)
+    banc.js("supprimerCroquis(DB.plans[0].id)"); time.sleep(0.3); banc.js("fermerDialogue(true)"); time.sleep(0.4)
+    essais.verifier('supprimer le premier : le second prend sa place',
+                    banc.js("[DB.plans[0].croquis.traits.length, (DB.plans[0].croquisPlus || []).length]"), [1, 0])
+
     # -- un vieux projet qui portait une image la perd au chargement
     banc.js("""
       DB.plans[1].croquisImg = 'data:image/jpeg;base64,AAAA';
@@ -164,9 +183,12 @@ with Banc(8786, 9371) as banc:
     essais.verifier('le bouton Lissage est allume', banc.js("[...document.querySelectorAll('#doutils .btn')].some(b => b.textContent === 'Lissage' && b.classList.contains('p'))"), True)
 
     # -- une couleur au choix
-    banc.js("(() => { const i = document.querySelector('#doutils .dperso input'); i.value = '#8844cc'; i.dispatchEvent(new Event('change')); })()")
+    banc.js("document.querySelector('#doutils .dperso').click()"); time.sleep(0.2)
+    essais.verifier('la pastille arc-en-ciel ouvre le selecteur de la charte', banc.js("!$('dpick').hidden"), True)
+    banc.js("hexPick('#8844cc'); fermerPick()"); time.sleep(0.2)
     essais.verifier('la couleur au choix devient celle du crayon, et sa pastille la prend',
                     banc.js("[dessin.couleur, document.querySelector('#doutils .dperso').classList.contains('on')]"), ['#8844cc', True])
+    essais.verifier('et rejoint les couleurs recentes', banc.js("UI.couleurs[0]"), '#8844cc')
 
     # -- le soleil se pose et s'oriente comme une lumiere
     banc.js("outilCroquis('objet', 'soleil')")

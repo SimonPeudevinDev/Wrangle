@@ -104,6 +104,16 @@
   </div>
   <div class="doutils" id="doutils"></div>
   <div class="dconseil" id="dconseil"></div>
+  <div class="dpick" id="dpick" hidden>
+    <div class="dpick-sv" id="dpick-sv"><i id="dpick-pt"></i></div>
+    <input type="range" class="dpick-h" id="dpick-h" min="0" max="359" step="1" aria-label="Teinte" oninput="teintePick(this.value)">
+    <div class="dpick-bas">
+      <span class="dpick-ap" id="dpick-ap"></span>
+      <input class="dpick-hex" id="dpick-hex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Code couleur" oninput="hexPick(this.value)">
+      <button type="button" class="btn sm p" onclick="fermerPick()">OK</button>
+    </div>
+    <div class="dpick-rec" id="dpick-rec"></div>
+  </div>
 </div>
 
 <div class="voile" id="voile-nom" hidden>
@@ -2938,7 +2948,7 @@ const RESUME_PLAN = {
   ppassages: p => { const n = (String(p.passages || '').match(/^\d+\/\d+ /gm) || []).length;
                     return [n > 1 ? n + ' passages' : '', court(p.passages, 60)]; },
   pvfx:      p => [court(texteDe(p, 'vfxDesc'), 40), court(texteDe(p, 'notesClient'), 40)],
-  pcroquis:  p => [aTraits(p) ? 'Un croquis' : '', fondDecor(lieuFond(p)) ? 'sur le plan « ' + lieuFond(p) + ' »' : ''],
+  pcroquis:  p => [aTraits(p) ? (croquisListe(p).filter(pleinCroquis).length > 1 ? croquisListe(p).filter(pleinCroquis).length + ' croquis' : 'Un croquis') : '', fondDecor(lieuFond(p)) ? 'sur le plan « ' + lieuFond(p) + ' »' : ''],
   pcontexte: p => [p.lieu, p.intExt, p.momentJour, p.meteo, (p.acteurs || []).join(', '), p.figu && 'Figuration', p.cadrage, p.mouv, p.support, p.focale, p.duree],
   preperes:  p => [p.jour && nomJour(p.jour), p.plan && 'Plan ' + p.plan, p.seq && 'Séq ' + p.seq]
 };
@@ -3136,21 +3146,35 @@ function chargerImage(src){
 
 /* A-t-on dessine quelque chose ? Et : y a-t-il quelque chose a montrer, le
    plan du decor seul comptant pour un apercu. */
-const aTraits = p => {
-  const c = p && p.croquis;
-  return !!(c && ((c.traits && c.traits.length) || (c.objets && c.objets.length)));
-};
+/* Un plan peut avoir plusieurs croquis : le premier reste dans p.croquis (les anciens
+   projets n'ont rien a changer), les suivants dans p.croquisPlus, dans l'ordre. Tous
+   partagent le plan du decor. La fiche en montre un a la fois (CROQ_VU, par plan). */
+const croquisListe = p => [p && p.croquis || null].concat(p && p.croquisPlus || []);
+const croquisDe = (p, i) => croquisListe(p)[i || 0] || null;
+const pleinCroquis = c => !!(c && ((c.traits && c.traits.length) || (c.objets && c.objets.length)));
+const CROQ_VU = {};
+const croquisVu = p => Math.max(0, Math.min(CROQ_VU[p.id] || 0, croquisListe(p).length - 1));
+// sans numero : un croquis dessine, quel qu'il soit
+const aTraits = (p, i) => i == null ? croquisListe(p).some(pleinCroquis) : pleinCroquis(croquisDe(p, i));
 const aCroquis = p => aTraits(p) || !!fondDecor(lieuFond(p));
 
 let choixFondOuvert = false;   // « Changer le plan du decor » : les vignettes des decors sont depliees
 function htmlCroquis(p){
   const lieu = lieuFond(p), fond = fondDecor(lieu);
   const decors = fusion(decorsTournage(), lieu ? [lieu] : []);
-  const montrer = aCroquis(p);
+  const n = croquisListe(p).length, vu = croquisVu(p);
+  const montrer = aTraits(p, vu) || !!fond;
+  // les onglets des croquis : un par croquis s'il y en a plusieurs, et « + Croquis » des qu'un est dessine
+  const onglets = n > 1 || aTraits(p, vu) ? `<div class="croq-onglets">
+      ${n > 1 ? croquisListe(p).map((c, i) => `<button type="button" class="${i === vu ? 'on' : ''}" onclick="voirCroquis('${p.id}', ${i})">Croquis ${i + 1}</button>`).join('') : ''}
+      <button type="button" class="plus" onclick="nouveauCroquis('${p.id}')">+ Croquis</button>
+      ${n > 1 ? `<button type="button" class="suppr" onclick="supprimerCroquis('${p.id}')">Supprimer le croquis ${vu + 1}</button>` : ''}
+    </div>` : '';
   // les trois gestes du croquis : des pictos poses en haut de l'image, leur nom au survol
   const outil = (cls, action, nom, ico) =>
     `<button type="button" class="${cls}" onclick="${action}('${p.id}')" title="${nom}" aria-label="${nom}">${ico}</button>`;
   return `<div class="croq">
+    ${onglets}
     <div class="croq-cadre${montrer ? '' : ' vide'}">
       ${montrer ? `<canvas id="croq-apercu" onclick="ouvrirCroquis('${p.id}')" title="Modifier le croquis"></canvas>`
                 : `<button type="button" class="croq-vide" onclick="ouvrirCroquis('${p.id}')">${ICONES.crayon}<span>Dessiner le set</span></button>`}
@@ -3172,9 +3196,10 @@ function htmlCroquis(p){
 }
 
 /* L'etat de l'editeur pour un plan, sur le fond donne : le croquis garde est remis a l'echelle du fond. */
-function etatCroquis(p, img){
+function etatCroquis(p, img, i){
   // sans plan du decor : le format du croquis existant, sinon une feuille dans le sens de l'ecran
-  const anc = p.croquis || {}, portrait = innerHeight > innerWidth;
+  i = i == null ? croquisVu(p) : i;
+  const anc = croquisDe(p, i) || {}, portrait = innerHeight > innerWidth;
   const plein = (anc.traits && anc.traits.length) || (anc.objets && anc.objets.length);
   const w = img ? img.naturalWidth : (plein && anc.w ? anc.w : (portrait ? 1200 : 1600));
   const h = img ? img.naturalHeight : (plein && anc.h ? anc.h : (portrait ? 1600 : 1200));
@@ -3188,18 +3213,37 @@ function etatCroquis(p, img){
     if (o.pts) c.pts = o.pts.map(q => [q[0] * kx, q[1] * ky]);
     return c;
   });
-  return { planId:p.id, fond:img, w, h, traits, objets, seq, outil:'crayon', couleur:CROQUIS_COULEURS[0], largeur:1, courant:null, sale:false, zoom:1, histo:[] };
+  return { planId:p.id, index:i, fond:img, w, h, traits, objets, seq, outil:'crayon', couleur:CROQUIS_COULEURS[0], largeur:1, courant:null, sale:false, zoom:1, histo:[] };
 }
 
-function ouvrirCroquis(id){
+function ouvrirCroquis(id, i){
   const p = plan(id); if (!p) return;
+  i = i == null ? croquisVu(p) : i;
   chargerImage(fondDecor(lieuFond(p))).catch(() => null).then(img => {
-    dessin = etatCroquis(p, img);
+    dessin = etatCroquis(p, img, i);
     const v = $('voile-dessin');
-    v.querySelector('.dtitre b').textContent = 'Croquis · plan ' + (p.plan || '?');
+    v.querySelector('.dtitre b').textContent = 'Croquis' + (croquisListe(p).length > 1 || i ? ' ' + (i + 1) : '') + ' · plan ' + (p.plan || '?');
     v.querySelector('.dtitre span').textContent = (lieuFond(p) || 'Sans décor') + (img ? ' — sur le plan du décor' : ' — feuille blanche');
     v.hidden = false;
     majOutils(); tailleCroquis(); rendreCroquis();
+  });
+}
+
+/* Les onglets de la fiche : voir un autre croquis, en commencer un nouveau (il n'existe
+   qu'une fois enregistre), ou en supprimer un (les suivants remontent d'un rang). */
+function voirCroquis(id, i){ const p = plan(id); if (!p) return; CROQ_VU[id] = i; redessinerFichePlan(p); }
+function nouveauCroquis(id){ const p = plan(id); if (!p) return; ouvrirCroquis(id, croquisListe(p).length); }
+function supprimerCroquis(id){
+  const p = plan(id); if (!p) return;
+  const i = croquisVu(p), l = croquisListe(p);
+  if (l.length < 2) return;
+  confirmer('Supprimer le croquis ' + (i + 1) + ' de ce plan ?', { ok:'Supprimer', danger:true }).then(oui => {
+    if (!oui) return;
+    const reste = l.filter((c, k) => k !== i);
+    patch('plan', p.id, { croquis: reste[0] || null, croquisPlus: reste.slice(1).map(x => x || {}) });
+    CROQ_VU[id] = Math.max(0, i - 1);
+    redessinerFichePlan(p); renderList();
+    toast('Croquis supprimé');
   });
 }
 
@@ -3225,7 +3269,7 @@ function dessinerApercu(p){
 }
 function fermerCroquis(demander){
   if (!dessin) return false;
-  const fermer = () => { dessin = null; $('voile-dessin').hidden = true; };
+  const fermer = () => { fermerPick(); dessin = null; $('voile-dessin').hidden = true; };
   if (demander && dessin.sale){
     confirmer('Abandonner les modifications du croquis ?', { ok:'Abandonner', danger:true, annuler:'Continuer' })
       .then(oui => { if (oui && dessin) fermer(); });
@@ -3820,8 +3864,8 @@ function majOutils(){
   $('doutils').innerHTML =
     CROQUIS_COULEURS.map(c => `<button type="button" class="dcoul${o !== 'gomme' && dessin.couleur === c ? ' on' : ''}" style="background:${c}" onclick="outilCroquis('couleur', '${c}')" aria-label="Couleur"></button>`).join('') +
     // une couleur au choix : la pastille arc-en-ciel ouvre le selecteur, puis prend la couleur choisie
-    `<label class="dcoul dperso${perso ? ' choisie' : ''}${o !== 'gomme' && perso ? ' on' : ''}" style="${perso ? 'background:' + dessin.couleur : ''}" title="Couleur au choix">` +
-      `<input type="color" value="${perso ? dessin.couleur : '#9b59b6'}" onchange="outilCroquis('couleur', this.value)" aria-label="Couleur au choix"></label>` +
+    `<button type="button" class="dcoul dperso${perso ? ' choisie' : ''}${o !== 'gomme' && perso ? ' on' : ''}" style="${perso ? 'background:' + dessin.couleur : ''}" ` +
+      `onclick="ouvrirPick(this)" title="Couleur au choix" aria-label="Couleur au choix"></button>` +
     `<i class="dsep"></i>` +
     CROQUIS_LARGEURS.map((w, i) => `<button type="button" class="dlarg${crayon && dessin.largeur === i ? ' on' : ''}" onclick="outilCroquis('largeur', ${i})" aria-label="Épaisseur"><i style="width:${4 + i * 5}px;height:${4 + i * 5}px"></i></button>`).join('') +
     `<button type="button" class="btn sm${UI.lissage !== false ? ' p' : ''}" onclick="basculerLissage()" title="Lisse le crayon et la flèche libre : le trait suit la main avec un léger retard, sans tremblement">Lissage</button>` +
@@ -3854,7 +3898,10 @@ function enregistrerCroquis(){
   if (!dessin) return;
   const p = plan(dessin.planId); if (!p){ fermerCroquis(); return; }
   const sans = l => l.map(o => { const c = Object.assign({}, o); delete c.n; return c; });
-  patch('plan', p.id, { croquis: { w: dessin.w, h: dessin.h, traits: sans(dessin.traits), objets: sans(dessin.objets) } });
+  const c = { w: dessin.w, h: dessin.h, traits: sans(dessin.traits), objets: sans(dessin.objets) }, i = dessin.index || 0;
+  if (!i) patch('plan', p.id, { croquis: c });
+  else { const plus = (p.croquisPlus || []).slice(); plus[i - 1] = c; patch('plan', p.id, { croquisPlus: plus.map(x => x || {}) }); }
+  CROQ_VU[p.id] = i;
   // on reste dans l'editeur : la fiche derriere se met a jour, la fleche ramene quand on veut
   dessin.sale = false;
   redessinerFichePlan(p); renderList();
@@ -3891,7 +3938,7 @@ function fondChoisi(input){
   reduirePhoto(f, 1600, .72).then(url => {
     poserFond(lieu, url);
     toast('Plan du décor « ' + lieu + ' » enregistré');
-    if (dessin && dessin.planId === p.id) ouvrirCroquis(p.id);
+    if (dessin && dessin.planId === p.id) ouvrirCroquis(p.id, dessin.index);
     utiliserFond(p, lieu);
   }).catch(() => toast('Image illisible'));
 }
@@ -3910,6 +3957,78 @@ function retirerFond(id){
   });
 }
 window.addEventListener('resize', () => { if (dessin) tailleCroquis(); });
+/* la zone du croquis peut changer de taille sans que la fenetre change (barre d'outils,
+   conseil, clavier) : le canevas se recale a chaque fois, une fois par image */
+if (window.ResizeObserver){
+  let attente = 0, taille = '';
+  new ResizeObserver(l => {
+    const r = l[0].contentRect, t = Math.round(r.width) + 'x' + Math.round(r.height);
+    if (!dessin || t === taille || attente) { taille = t; return; }
+    taille = t;
+    attente = requestAnimationFrame(() => { attente = 0; if (dessin) tailleCroquis(); });
+  }).observe(document.getElementById('dzone'));
+}
+
+/* Le selecteur de couleur, dans la charte : un carre saturation / luminosite, un rail de
+   teinte, le code, et les dernieres couleurs choisies (gardees sur l'appareil). La couleur
+   s'applique en direct au crayon et aux objets qu'on pose. */
+const PICK = { h: 280, s: .6, v: .8 };
+function hsvHex(h, s, v){
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+function hexHsv(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim()); if (!m) return null;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+  const h = !d ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: h * 60, s: max ? d / max : 0, v: max };
+}
+function ouvrirPick(btn){
+  const pk = $('dpick');
+  if (!pk.hidden){ fermerPick(); return; }
+  const deja = dessin && !CROQUIS_COULEURS.includes(dessin.couleur) && hexHsv(dessin.couleur);
+  if (deja) Object.assign(PICK, deja);
+  pk.hidden = false;
+  // au-dessus de la pastille, sans sortir de l'ecran
+  const r = btn.getBoundingClientRect(), l = pk.offsetWidth, h = pk.offsetHeight;
+  pk.style.left = Math.max(8, Math.min(innerWidth - l - 8, r.left + r.width / 2 - l / 2)) + 'px';
+  pk.style.top = Math.max(8, r.top - h - 10) + 'px';
+  majPick(!deja);
+  setTimeout(() => document.addEventListener('pointerdown', horsPick, true), 0);
+}
+function horsPick(e){ if (!e.target.closest('#dpick, .dperso')) fermerPick(); }
+function fermerPick(){
+  const pk = $('dpick'); if (!pk || pk.hidden) return;
+  pk.hidden = true;
+  document.removeEventListener('pointerdown', horsPick, true);
+  // la couleur rejoint les recentes
+  if (dessin && !CROQUIS_COULEURS.includes(dessin.couleur)){
+    UI.couleurs = [dessin.couleur].concat((UI.couleurs || []).filter(c => c !== dessin.couleur)).slice(0, 8);
+    ecrireUI();
+  }
+}
+/* appliquer : l'outil prend la couleur (sans rien poser), la pastille la montre */
+function majPick(sansAppliquer){
+  const hex = hsvHex(PICK.h, PICK.s, PICK.v);
+  $('dpick-sv').style.background = `linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,hsl(${PICK.h},100%,50%))`;
+  const pt = $('dpick-pt'); pt.style.left = PICK.s * 100 + '%'; pt.style.top = (1 - PICK.v) * 100 + '%'; pt.style.background = hex;
+  $('dpick-h').value = Math.round(PICK.h);
+  $('dpick-ap').style.background = hex;
+  const hx = $('dpick-hex'); if (document.activeElement !== hx) hx.value = hex;
+  $('dpick-rec').innerHTML = (UI.couleurs || []).map(c => `<button type="button" style="background:${c}" onclick="prendrePick('${c}')" aria-label="${c}"></button>`).join('');
+  if (!sansAppliquer && dessin) outilCroquis('couleur', hex);
+}
+function teintePick(v){ PICK.h = +v; majPick(); }
+function hexPick(v){ const c = hexHsv(v.startsWith('#') ? v : '#' + v); if (c){ Object.assign(PICK, c); majPick(); } }
+function prendrePick(c){ Object.assign(PICK, hexHsv(c)); majPick(); }
+(function(){
+  const sv = document.getElementById('dpick-sv'); if (!sv) return;
+  const lire = e => { const r = sv.getBoundingClientRect();
+    PICK.s = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); PICK.v = Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height)); majPick(); };
+  sv.addEventListener('pointerdown', e => { sv.setPointerCapture(e.pointerId); lire(e); });
+  sv.addEventListener('pointermove', e => { if (e.buttons) lire(e); });
+})();
 
 /* La fiche du plan : d'abord les prises et la liste des elements a capter,
    puis le detail VFX, le contexte et les reperes, replies. */
@@ -5573,7 +5692,9 @@ function feuilleVFX(x, jour){
   const nJours = joursConnus().filter(v => v && v !== 'CG').length;
   const mouv = x ? [x.mouv, x.support].concat(pr.map(t => t.mouvement), pr.map(t => t.support)).filter(Boolean).join(' / ') : '';
   const coches = x ? elementsTous(x) : {}, lus = new Set(ELEMENTS_VFX.flatMap(e => e[2]));
-  const cotes = x && x.croquis ? (x.croquis.objets || []).filter(o => o.t === 'cote' && o.txt).map(o => o.txt) : [];
+  const cotes = x ? croquisListe(x).flatMap(c => (c && c.objets || []).filter(o => o.t === 'cote' && o.txt).map(o => o.txt)) : [];
+  // le croquis de la feuille : le premier dessine (a defaut, le plan du decor seul) ; les autres ont leur page
+  const dessines = x ? croquisListe(x).map((c, i) => pleinCroquis(c) ? i : -1).filter(i => i >= 0) : [];
   // une ligne par mesure differente ; les prises qui la partagent se lisent ensemble
   const dist = [];
   pr.filter(t => t.focusStart || t.focusStop || t.mesureDepuis).forEach(t => {
@@ -5619,16 +5740,17 @@ function feuilleVFX(x, jour){
                   .concat(texteDe(x, 'elementsAutre') ? [texteDe(x, 'elementsAutre')] : []).join(', ') : '',
     client: x ? texteDe(x, 'notesClient') : '', interne: x ? x.notesInternes || '' : '', studio: p.vfxStudio || '',
     distances: dist.slice(0, 4).map(r => r.slice()),
-    croquis: x && aCroquis(x) ? x.id : ''
+    croquis: x && aCroquis(x) ? x.id + ':' + (dessines[0] || 0) : '',
+    autresCroquis: x ? dessines.slice(1).map(i => x.id + ':' + i) : []
   };
 }
 
-/* Le croquis d'un plan, son decor dessous, rendu en JPEG pour la feuille. */
-function imageCroquis(p){
+/* Un croquis d'un plan, son decor dessous, rendu en JPEG pour la feuille. */
+function imageCroquis(p, i){
   return chargerImage(fondDecor(lieuFond(p))).catch(() => null).then(img => {
     const garde = dessin;
     try{
-      dessin = etatCroquis(p, img);
+      dessin = etatCroquis(p, img, i || 0);
       const cv = document.createElement('canvas');
       cv.width = 1400; cv.height = Math.round(1400 * dessin.h / dessin.w);
       rendreCroquis(cv);
@@ -5637,8 +5759,10 @@ function imageCroquis(p){
   });
 }
 function imagesVFX(j){
-  const ps = modeleVFX(j).map(f => f.croquis).filter(Boolean).map(plan).filter(Boolean);
-  return Promise.all(ps.map(p => imageCroquis(p).then(im => [p.id, im], () => [p.id, null])))
+  // une cle par croquis : « id du plan:numero »
+  const cles = modeleVFX(j).flatMap(f => [f.croquis].concat(f.autresCroquis)).filter(Boolean);
+  return Promise.all(cles.map(k => { const [id, i] = k.split(':'), p = plan(id);
+    return p ? imageCroquis(p, +i).then(im => [k, im], () => [k, null]) : [k, null]; }))
     .then(l => Object.fromEntries(l.filter(x => x[1])));
 }
 
@@ -5769,14 +5893,14 @@ function pdfVFX(j, images){
 
   // les pages : une feuille, et une suite pour chaque quarantaine de prises au-dela de quatorze
   const SUITE = 38;
-  const pagesDe = f => 1 + Math.ceil(Math.max(0, f.prises.length - VFX_LIGNES) / SUITE);
+  const pagesDe = f => 1 + Math.ceil(Math.max(0, f.prises.length - VFX_LIGNES) / SUITE) + f.autresCroquis.filter(k => images[k]).length;
   const total = feuilles.reduce((a, f) => a + pagesDe(f), 0);
   let page = 0;
-  const entete = (f, suite) => {
+  const entete = (f, suite, sous) => {
     page++;
     const H = doc.hauteur;
-    T(M, H - 42, 'VFX CAMERA REPORT' + (suite ? ' · CONTINUED' : ''), { taille: 17, police: 'HB', couleur: 'encre' });
-    T(M, H - 53, suite ? 'Takes ' + suite : 'Camera sheet · one sheet per setup', { taille: 7, couleur: 'tan' });
+    T(M, H - 42, 'VFX CAMERA REPORT' + (suite || sous ? ' · CONTINUED' : ''), { taille: 17, police: 'HB', couleur: 'encre' });
+    T(M, H - 53, sous || (suite ? 'Takes ' + suite : 'Camera sheet · one sheet per setup'), { taille: 7, couleur: 'tan' });
     doc.rect(M, H - 60, 34, 2, 'caramel');
     const xd = M + W;
     if (LOGO_PDF){
@@ -5903,6 +6027,16 @@ function pdfVFX(j, images){
       entete(f, l[0].n + ' – ' + l[l.length - 1].n);
       tableau(doc.hauteur - 74, l, l.map(t => t.n));
     }
+    // 7. les autres croquis du plan, chacun sur sa page, en grand
+    f.autresCroquis.filter(k => images[k]).forEach((k, q) => {
+      doc.nouvellePage();
+      entete(f, '', 'Set diagram ' + (q + 2));
+      const im = images[k], yh = doc.hauteur - 74, hb = yh - 40 - 11;
+      barre(M, yh, W, 'Diagram of the set ' + (q + 2));
+      cadre(M, 40, W, hb, .5, 'filet');
+      const kk = Math.min((W - 12) / im.l, (hb - 12) / im.h), l = im.l * kk, h = im.h * kk;
+      doc.image(im, M + (W - l) / 2, 40 + (hb - h) / 2, l, h);
+    });
   });
   const d = new Date(), p = DB.prod;
   return doc.fichier([p.titre || '', 'VFX camera report · ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
@@ -6512,7 +6646,7 @@ function heureLue(s){
 }
 /* ce qui a change : une empreinte des prises et des etats, pour ne pas renvoyer le meme journal */
 function empreinteMail(){
-  const s = JSON.stringify(DB.prises) + '|' + DB.plans.map(p => p.etat + (p.croquis ? 'c' : '')).join('');
+  const s = JSON.stringify(DB.prises) + '|' + DB.plans.map(p => p.etat + (p.croquis ? 'c' : '') + (p.croquisPlus || []).length).join('');
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return s.length + ':' + h;
@@ -6993,6 +7127,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key !== 'Escape') return;
+  if (dessin && !$('dpick').hidden){ fermerPick(); return; }
   if (dessin){ fermerCroquis(true); return; }
   if (fermerCalendrier()) return;
   if (fermerMenu()) return;

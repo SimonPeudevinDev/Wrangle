@@ -362,7 +362,14 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   virages, trajets en L) : le tracé est simplifié et lissé, la pointe se pose à l'arrivée.
   **Lissage** (allumé d'office, gardé sur l'appareil) calme le crayon et la flèche libre : le
   trait rattrape la main sans ses tremblements, et finit où elle se lève. La pastille
-  arc-en-ciel, après les cinq couleurs, ouvre le sélecteur pour **une couleur au choix**.
+  arc-en-ciel, après les cinq couleurs, ouvre le sélecteur (dans la charte : carré, teinte,
+  code, dernières couleurs) pour **une couleur au choix**. La barre d'outils tient sur une
+  rangée, qui défile sur téléphone ; le croquis se recale seul quand la place change.
+- **Plusieurs croquis par plan** : dans la fiche, « + Croquis » en ouvre un nouveau (il n'existe
+  qu'une fois enregistré) ; les onglets « Croquis 1, 2… » passent de l'un à l'autre, et
+  « Supprimer le croquis n » le retire (les suivants remontent). Tous partagent le plan du décor.
+  Dans le rapport VFX, le premier va sur la feuille, les autres ont chacun leur page, et leurs
+  cotes rejoignent les distances.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
 ## Divers
