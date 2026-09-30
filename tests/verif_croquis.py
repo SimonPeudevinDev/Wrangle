@@ -118,6 +118,25 @@ with Banc(8786, 9371) as banc:
     tirer((0.20, 0.60), (0.40, 0.63), alt=True)
     m3 = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return o.y1 !== o.y2; })()")
     essais.verifier('avec Alt, a main levee', m3, True)
+
+    # -- la fleche se courbe par son point du milieu, et se redresse en y revenant
+    banc.js("outilCroquis('objet', 'fleche')")
+    tirer((0.20, 0.85), (0.60, 0.85))
+    banc.js("outilCroquis('move'); dessin.selection = dessin.objets[dessin.objets.length - 1]; rendreCroquis()")
+    tirer((0.40, 0.85), (0.40, 0.72))
+    f = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.t, o.mx != null, o.my < o.y1]; })()")
+    essais.verifier('la fleche tiree par son milieu se courbe', f, ['fleche', True, True])
+    essais.verifier('la fleche courbe se saisit sur sa courbe',
+                    banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return touche([o.mx, o.my], o); })()"), True)
+    tirer((0.40, 0.72), (0.402, 0.852))
+    essais.verifier('ramenee sur la droite, elle se redresse',
+                    banc.js("dessin.objets[dessin.objets.length - 1].mx == null"), True)
+
+    # -- le soleil se pose et s'oriente comme une lumiere
+    banc.js("outilCroquis('objet', 'soleil')")
+    tirer((0.80, 0.20), (0.70, 0.35))
+    s = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.t, o.a > 0]; })()")
+    essais.verifier('le soleil se pose, tourne vers ou va sa lumiere', s, ['soleil', True])
     banc.js("fermerCroquis()")
 
     essais.exceptions(banc)

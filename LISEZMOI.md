@@ -350,7 +350,9 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 - **Le croquis** a un aimant : un mur, un fond, un diffuseur ou une orientation proche d'un
   multiple de 45° s'y colle ; un bout qui passe près du bout d'un autre trait s'y accroche. Alt
   pour tracer à main levée. Fond vert, diffuseur blanc (gris) et diffuseur noir se tirent comme
-  un mur.
+  un mur. **Une flèche se courbe** : Déplacer, puis tirer le point du milieu (ramené sur la
+  droite, elle se redresse). **Le soleil** se pose du côté d'où il vient et se tourne vers où va
+  sa lumière, comme un projecteur.
 - Supprimer une prise, un plan ou une carte : « Annuler » dans le bandeau pendant 7 secondes.
 
 ## Divers
@@ -372,24 +374,32 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
 
 ## Ce qu'on transmet à la post
 
-Onglet **Rapport** → **VFX (PDF)**. La fiche est écrite par la page, dans la charte du journal
-DIT, et se télécharge directement. Elle reprend le jour choisi dans la rangée du haut (`Tout` = une
-journée par page) : en tête, le compte de la journée (plans tournés, plans VFX, prises retenues,
-plans avec éléments, cartes) ; puis chaque plan tourné, avec ce qu'il faut au compositing :
+Onglet **Rapport** → **Rapport VFX (PDF)** : le *VFX camera report*, la feuille caméra que le
+plateau remplissait au stylo, une par plan (un « setup »), dans la charte de Wrangle. Elle est en
+anglais, comme la feuille papier : elle part chez le studio. Tout ce que l'app sait y est déjà
+écrit, le reste attend le stylo :
 
-- ce que le DT demande (description VFX, assets, tags VFX / CG), dans un encadré ;
-- les réglages de la prise qui fait foi : ce que tous les plans du jour partagent (caméra, format,
-  cadence, exposition, couleur, objectif, diaph, filtres) s'écrit une fois en tête de journée ; chaque
-  plan garde le sien — **optique** (focale, point…), **matchmove** (hauteur et d'où elle est mesurée,
-  pan / tilt / roll, mouvement, support, météo en extérieur) et **éléments captés** (HDRI, charte,
-  boule chrome, cleanplate, lidar…) ;
-- toutes les prises du plan, comme dans le journal : la retenue en gras sur fond crème, le statut en
-  couleur, la carte, la durée, la note (une plaque ou un plan B s'y cache souvent) et qui l'a saisie.
+- **Project / Shoot / Script** : titre, réalisation, image, 1er assistant, producteur (⚙ Journée) ;
+  date, heures de la première à la dernière prise, jour sur le nombre de jours, décor, superviseur
+  VFX ; séquence, shot, INT / EXT et moment de la journée cochés d'après le plan ;
+- **la caméra** : modèle (Alexa 35 d'office), série d'objectifs, mouvement (STATIC, PAN, TRAVEL,
+  HANDHELD, STEADI, lus dans le mouvement et le support du plan et de ses prises), format, codec et
+  cadence ;
+- **quatorze lignes de prises** : clip, focale, point, F-stop, ISO, WB, shutter, hauteur, pan,
+  tilt, roll (départ et arrivée), OK / NG cochés ; la prise retenue sur fond crème, en gras. Un
+  résultat ni OK ni NG (faux départ, série…) et « Kept for edit » vont dans la note. Au-delà de
+  quatorze prises, la feuille continue sur une page de suite ;
+- **Scene / VFX description**, **Elements** (HDRI, chrome, grey ball, charte, clean plate, scan…
+  cochés ; les autres éléments captés dans « Other »), **Client notes** (au nom du studio VFX) et
+  **Internal notes** ;
+- **Diagram of the set** : le croquis du plan, son décor dessous (feuille pointée s'il n'y en a
+  pas) ; **Distances to note** : le point de chaque prise et d'où l'on mesure, une ligne par mesure
+  différente, et les cotes du croquis.
 
-Les écarts de saisie n'y figurent pas : ils se tranchent avant, sur la fiche data wrangling.
-
-Les plans sans prise ni élément ne sont pas imprimés : la fiche ne contient que ce qui a été tourné.
-Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal.
+La feuille porte sur le jour choisi en haut. Un jour où rien n'est encore tourné donne les
+feuilles de tous ses plans, prêtes pour le plateau ; sans rien du tout, une feuille vierge à
+l'en-tête du projet. Les écarts de saisie n'y figurent pas : ils se tranchent avant, sur la fiche
+data wrangling. Sur « Toute l'équipe », elle porte sur les saisies réunies, comme le journal.
 - Port différent : `py serveur.py 9000`.
 
 ## Vérifier que rien n'est cassé
@@ -409,7 +419,7 @@ py tests/verif_enchainement.py     les lignes de la fiche s'ouvrent l'une après
 py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
 py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues pour le montage, puis écarts entre saisies
-py tests/verif_fiche_vfx.py        la fiche VFX en PDF : par jour, chaque plan tourné avec ce qu'il faut au compositing
+py tests/verif_fiche_vfx.py        le rapport VFX en PDF : une feuille caméra par plan, croquis compris
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_plans_par_jour.py   préparer jour par jour : nombre de plans, jour de plus ou de moins, distribution cochée
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner

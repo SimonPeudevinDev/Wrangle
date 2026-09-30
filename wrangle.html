@@ -3013,6 +3013,7 @@ const PICTO = d => ICO(d, 20, 1.8);
 const CROQUIS_OBJETS = [
   ['cam',     'Caméra',     PICTO('<rect x="3" y="8" width="11" height="9" rx="1.5"/><path d="M14 11l6-3v9l-6-3z"/>')],
   ['lum',     'Lumière',    PICTO('<path d="M4 8h8a3.5 3.5 0 0 1 3.5 3.5v1A3.5 3.5 0 0 1 12 16H4z"/><path d="M17.5 12h3M16.5 8.5l2.5-2M16.5 15.5l2.5 2M7 16v3"/>')],
+  ['soleil',  'Soleil',     PICTO('<circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>')],
   ['perso',   'Personnage', PICTO('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>')],
   ['bloc',    'Bloc',       PICTO('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9h16M9 4v16"/>')],
   ['rond',    'Rond',       PICTO('<circle cx="12" cy="12" r="8"/>')],
@@ -3026,7 +3027,7 @@ const CROQUIS_OBJETS = [
   ['txt',     'Texte',      PICTO('<path d="M5 6h14M12 6v13"/>')]
 ];
 /* trois gestes : poser puis orienter ; tirer d'un bout a l'autre ; tirer coin a coin */
-const OBJ_POSE = ['cam', 'lum', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
+const OBJ_POSE = ['cam', 'lum', 'soleil', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
 let dessin = null;   // l'editeur ouvert
 
 const fondDecor = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
@@ -3159,8 +3160,8 @@ function etatCroquis(p, img){
   const traits = (anc.traits || []).map(t => ({ c:t.c, w:t.w, pts:t.pts.map(q => [q[0] * kx, q[1] * ky]), n:++seq }));
   const objets = (anc.objets || []).map(o => {
     const c = Object.assign({}, o, { n:++seq });
-    ['x', 'x1', 'x2'].forEach(k => { if (o[k] != null) c[k] = o[k] * kx; });
-    ['y', 'y1', 'y2'].forEach(k => { if (o[k] != null) c[k] = o[k] * ky; });
+    ['x', 'x1', 'x2', 'mx'].forEach(k => { if (o[k] != null) c[k] = o[k] * kx; });
+    ['y', 'y1', 'y2', 'my'].forEach(k => { if (o[k] != null) c[k] = o[k] * ky; });
     return c;
   });
   return { planId:p.id, fond:img, w, h, traits, objets, seq, outil:'crayon', couleur:CROQUIS_COULEURS[0], largeur:1, courant:null, sale:false, zoom:1, histo:[] };
@@ -3294,11 +3295,16 @@ function dessinerObjet(g, o, k, u){
     g.fillStyle = 'rgba(58,51,48,.16)'; g.strokeStyle = o.c || '#3a3330'; g.lineWidth = 4 * u;
     g.beginPath(); g.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2); g.fill(); g.stroke();
   } else if (o.t === 'fleche'){
-    // un deplacement : un trait en pointille long, une pointe a l'arrivee
-    const ax = X(o.x1), ay = Y(o.y1), bx = X(o.x2), by = Y(o.y2), ang = Math.atan2(by - ay, bx - ax);
+    // un deplacement : un trait en pointille long, une pointe a l'arrivee ; courbe,
+    // il passe par son point du milieu (o.mx, o.my) et la pointe suit la courbe
+    const ax = X(o.x1), ay = Y(o.y1), bx = X(o.x2), by = Y(o.y2), q = controleFleche(o);
+    const ang = q ? Math.atan2(by - Y(q[1]), bx - X(q[0])) : Math.atan2(by - ay, bx - ax);
     g.strokeStyle = o.c || '#1c1410'; g.fillStyle = o.c || '#1c1410'; g.lineWidth = 5 * u; g.lineCap = 'round';
     g.setLineDash([16 * u, 12 * u]);
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx - Math.cos(ang) * 14 * u, by - Math.sin(ang) * 14 * u); g.stroke();
+    g.beginPath(); g.moveTo(ax, ay);
+    if (q) g.quadraticCurveTo(X(q[0]), Y(q[1]), bx - Math.cos(ang) * 14 * u, by - Math.sin(ang) * 14 * u);
+    else g.lineTo(bx - Math.cos(ang) * 14 * u, by - Math.sin(ang) * 14 * u);
+    g.stroke();
     g.setLineDash([]);
     g.beginPath(); g.moveTo(bx, by);
     g.lineTo(bx - Math.cos(ang - .45) * 26 * u, by - Math.sin(ang - .45) * 26 * u);
@@ -3380,6 +3386,24 @@ function dessinerObjet(g, o, k, u){
       g.lineWidth = 4 * u; g.fillStyle = '#fff';
       g.beginPath(); g.roundRect(-20 * u, -22 * u, 40 * u, 44 * u, 6 * u); g.fill(); g.stroke();
       g.lineWidth = 8 * u; g.beginPath(); g.moveTo(-24 * u, -24 * u); g.lineTo(-24 * u, 24 * u); g.stroke();
+    } else if (o.t === 'soleil'){
+      // le soleil : un disque rayonnant, et trois rayons paralleles dans le sens de sa lumiere
+      g.rotate(-(o.a || 0));
+      g.fillStyle = '#f5b83d'; g.strokeStyle = '#d9861c'; g.lineWidth = 4 * u;
+      g.beginPath(); g.arc(0, 0, 24 * u, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.lineWidth = 5 * u;
+      for (let i = 0; i < 8; i++){
+        const b = i * Math.PI / 4;
+        g.beginPath(); g.moveTo(Math.cos(b) * 32 * u, Math.sin(b) * 32 * u); g.lineTo(Math.cos(b) * 46 * u, Math.sin(b) * 46 * u); g.stroke();
+      }
+      g.rotate(o.a || 0);
+      g.strokeStyle = '#d9861c'; g.fillStyle = '#d9861c'; g.lineWidth = 3.5 * u;
+      [-38, 0, 38].forEach(d => {
+        g.setLineDash([12 * u, 8 * u]);
+        g.beginPath(); g.moveTo(60 * u, d * u); g.lineTo(165 * u, d * u); g.stroke();
+        g.setLineDash([]);
+        g.beginPath(); g.moveTo(180 * u, d * u); g.lineTo(162 * u, (d - 8) * u); g.lineTo(162 * u, (d + 8) * u); g.closePath(); g.fill();
+      });
     } else if (o.t === 'lum'){
       // un projecteur vu de dessus : le faisceau translucide, le corps arrondi,
       // la lentille caramel devant et deux volets ouverts
@@ -3419,14 +3443,29 @@ function rendreCroquis(cv){
 /* Les poignees de l'objet saisi : un anneau au bout d'un bras pour tourner ce qui
    s'oriente, un anneau a chaque bout pour ce qui se tire d'un point a l'autre. */
 // le bras de rotation : juste au-dela du champ de la camera, du cone de la lumiere, du personnage
-const BRAS = { cam:215, lum:200, perso:70 };
+const BRAS = { cam:215, lum:200, soleil:200, perso:70 };
 function poigneesDe(o){
   if (OBJ_POSE.includes(o.t)){
     const l = (BRAS[o.t] || 80) * dessin.w / 1600;
     return [{ x: o.x + Math.cos(o.a || 0) * l, y: o.y + Math.sin(o.a || 0) * l, rot:true }];
   }
-  if (OBJ_SEG.includes(o.t)) return [{ x: o.x1, y: o.y1, bout:1 }, { x: o.x2, y: o.y2, bout:2 }];
+  if (OBJ_SEG.includes(o.t)) return [{ x: o.x1, y: o.y1, bout:1 }, { x: o.x2, y: o.y2, bout:2 }]
+    .concat(o.t === 'fleche' ? [Object.assign({ courbe:true }, milieuFleche(o))] : []);
   return [];
+}
+/* La fleche courbe passe par son point du milieu : le point de controle de la
+   courbe s'en deduit. Sans milieu note, elle est droite. */
+const milieuFleche = o => o.mx != null ? { x: o.mx, y: o.my } : { x: (o.x1 + o.x2) / 2, y: (o.y1 + o.y2) / 2 };
+const controleFleche = o => o.mx == null ? null : [2 * o.mx - (o.x1 + o.x2) / 2, 2 * o.my - (o.y1 + o.y2) / 2];
+/* des points le long de la fleche courbe, pour la toucher ou la gommer */
+function pointsFleche(o){
+  const q = controleFleche(o); if (!q) return [[o.x1, o.y1], [o.x2, o.y2]];
+  const l = [];
+  for (let i = 0; i <= 16; i++){
+    const t = i / 16, a = (1 - t) * (1 - t), b = 2 * t * (1 - t), c = t * t;
+    l.push([a * o.x1 + b * q[0] + c * o.x2, a * o.y1 + b * q[1] + c * o.y2]);
+  }
+  return l;
 }
 /* unites de feuille par pixel d'ecran : les poignees gardent leur taille sous le doigt, quel que soit le zoom */
 function parPixel(){ const r = $('croquis').getBoundingClientRect(); return r.width ? dessin.w / r.width : 1; }
@@ -3436,7 +3475,9 @@ function dessinerPoignees(g, o, k){
   g.setLineDash([]); g.lineWidth = 2 * px * k; g.strokeStyle = '#e7b04a'; g.fillStyle = '#fff';
   poigneesDe(o).forEach(p => {
     if (p.rot){ g.setLineDash([5 * px * k, 5 * px * k]); g.beginPath(); g.moveTo(o.x * k, o.y * k); g.lineTo(p.x * k, p.y * k); g.stroke(); g.setLineDash([]); }
-    g.beginPath(); g.arc(p.x * k, p.y * k, 9 * px * k, 0, Math.PI * 2); g.fill(); g.stroke();
+    // la poignee qui courbe la fleche est pleine : on la distingue des deux bouts
+    g.fillStyle = p.courbe ? '#e7b04a' : '#fff';
+    g.beginPath(); g.arc(p.x * k, p.y * k, (p.courbe ? 7 : 9) * px * k, 0, Math.PI * 2); g.fill(); g.stroke();
   });
   g.restore();
 }
@@ -3460,7 +3501,7 @@ function debutTrait(e){
   if (o === 'gomme'){ dessin.courant = { gomme:true }; gommer(pt); return; }
   if (o === 'move'){
     const pg = poigneeSous(pt);
-    if (pg){ dessin.courant = pg.rot ? { tourne: dessin.selection } : { bout: dessin.selection, quel: pg.bout }; return; }
+    if (pg){ dessin.courant = pg.rot ? { tourne: dessin.selection } : pg.courbe ? { courbe: dessin.selection } : { bout: dessin.selection, quel: pg.bout }; return; }
     const s = saisir(pt);
     dessin.selection = s && s.t ? s : null;
     dessin.courant = s ? { bouge:s, dernier:pt } : null;
@@ -3510,11 +3551,22 @@ function mouvTrait(e){
     if (a === (o.a || 0)) return;
     retenir(c); o.a = a; c.deplace = true; rendreCroquis(); return;
   }
+  if (c && c.courbe){
+    // tirer le milieu courbe la fleche ; ramene sur la ligne droite, elle se redresse
+    const o = c.courbe;
+    retenir(c);
+    if (Math.hypot(pt[0] - (o.x1 + o.x2) / 2, pt[1] - (o.y1 + o.y2) / 2) <= 14 * dessin.w / 1600){ delete o.mx; delete o.my; }
+    else { o.mx = pt[0]; o.my = pt[1]; }
+    c.deplace = true; rendreCroquis(); return;
+  }
   if (c && c.bout){
     const o = c.bout, un = c.quel === 1;
     if (pt[0] === (un ? o.x1 : o.x2) && pt[1] === (un ? o.y1 : o.y2)) return;
     const q = OBJ_SEG.includes(o.t) ? aimanterBout(un ? o.x2 : o.x1, un ? o.y2 : o.y1, pt, o, e.altKey) : pt;
-    retenir(c); if (un){ o.x1 = q[0]; o.y1 = q[1]; } else { o.x2 = q[0]; o.y2 = q[1]; }
+    retenir(c);
+    // une fleche courbe garde sa forme : son milieu suit, de la moitie du chemin
+    if (o.mx != null){ o.mx += (q[0] - (un ? o.x1 : o.x2)) / 2; o.my += (q[1] - (un ? o.y1 : o.y2)) / 2; }
+    if (un){ o.x1 = q[0]; o.y1 = q[1]; } else { o.x2 = q[0]; o.y2 = q[1]; }
     c.deplace = true; rendreCroquis(); return;
   }
   if (c && c.pan){
@@ -3542,7 +3594,7 @@ function finTrait(e){
   if (!dessin || !dessin.courant) return;
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
-  if (c.bouge || c.tourne || c.bout){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  if (c.bouge || c.tourne || c.bout || c.courbe){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
   // ce qui vient d'etre trace rejoint le croquis, une fois son texte connu s'il en faut un
   const poser = () => {
     if (!dessin) return;
@@ -3585,6 +3637,7 @@ const distSeg = (p, a, b) => {
 /* Ce que le point touche : un objet (le dernier pose d'abord), sinon un trait. */
 function touche(pt, o){
   const u = dessin.w / 1600, r = 28 * u;
+  if (o.t === 'fleche' && o.mx != null){ const l = pointsFleche(o); return l.slice(1).some((q, i) => distSeg(pt, l[i], q) <= r); }
   if (OBJ_SEG.includes(o.t)) return distSeg(pt, [o.x1, o.y1], [o.x2, o.y2]) <= r;
   if (OBJ_RECT.includes(o.t)) return pt[0] >= Math.min(o.x1, o.x2) - r && pt[0] <= Math.max(o.x1, o.x2) + r && pt[1] >= Math.min(o.y1, o.y2) - r && pt[1] <= Math.max(o.y1, o.y2) + r;
   const port = { txt:60, table:90, chaise:36, cam:44, lum:44, perso:46 }[o.t] || 44;
@@ -3601,7 +3654,7 @@ function saisir(pt){
 }
 function translater(e, dx, dy){
   if (e.pts) e.pts = e.pts.map(q => [q[0] + dx, q[1] + dy]);
-  else if (e.x1 != null){ e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; }
+  else if (e.x1 != null){ e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; if (e.mx != null){ e.mx += dx; e.my += dy; } }
   else { e.x += dx; e.y += dy; }
 }
 function gommer(pt){
@@ -3674,14 +3727,15 @@ function majOutils(){
     `<button type="button" class="btn sm d" onclick="viderCroquis()">Tout effacer</button>`;
   $('dconseil').textContent =
     o === 'perso' ? 'Posez, puis tirez dans la direction du regard ; un nom peut suivre.' :
+    o === 'soleil' ? 'Posez le soleil du côté d’où il vient, puis tirez vers où va sa lumière.' :
     OBJ_POSE.includes(o) ? 'Posez, puis tirez dans la direction visée.' :
     o === 'cote' ? 'Tirez la flèche d’un point à l’autre, puis tapez la mesure.' :
-    o === 'fleche' ? 'Tirez du départ à l’arrivée du mouvement.' :
+    o === 'fleche' ? 'Tirez du départ à l’arrivée du mouvement. Pour la courber : Déplacer, puis tirez le point du milieu.' :
     OBJ_SEG.includes(o) ? 'Tirez d’un bout à l’autre.' :
     o === 'rond' ? 'Tirez d’un bord à l’autre ; le rond s’inscrit dedans.' :
     OBJ_RECT.includes(o) ? 'Tirez d’un coin à l’autre.' :
     o === 'txt' ? 'Touchez l’endroit du texte.' :
-    o === 'move' ? 'Saisissez et glissez ; l’anneau au bout du bras fait tourner (la molette aussi), les bouts d’un trait se déplacent.' :
+    o === 'move' ? 'Saisissez et glissez ; l’anneau au bout du bras fait tourner (la molette aussi), les bouts d’un trait se déplacent, le point du milieu courbe une flèche.' :
     o === 'main' ? 'Faites glisser la vue. Deux doigts ou la barre d’espace font pareil.' :
     o === 'gomme' ? 'Touchez un trait ou un objet pour le retirer.' : '';
 }
@@ -4802,13 +4856,14 @@ function renderBilan(perimetre, rapprochement){
 
     <div class="btns noprint" style="margin-bottom:30px">
       <button class="btn p" onclick="telechargerDIT()">DIT (PDF)</button>
-      <button class="btn p" onclick="telechargerVFX()">VFX (PDF)</button>
+      <button class="btn p" onclick="telechargerVFX()">Rapport VFX (PDF)</button>
       <button class="btn p" onclick="telechargerWrangling()">Data wrangling (PDF)</button>
     </div>
     <div class="note noprint" style="margin:-18px 0 30px">Les trois PDF reprennent le jour choisi en haut.
       Data wrangling d’abord : les écarts entre les saisies de chacun, à corriger avant d’exporter les
-      deux autres. Le DIT : les prises retenues pour le montage. Le VFX : plan par plan, les réglages,
-      le matchmove, les éléments captés et toutes les prises.</div>`;
+      deux autres. Le DIT : les prises retenues pour le montage. Le rapport VFX : la feuille caméra
+      du plateau, une par plan — les réglages et relevés de chaque prise, les éléments captés, les
+      notes, le croquis du décor et les distances.</div>`;
 }
 
 /* -------------------------------------- Fiche de transmission a la post */
@@ -5042,7 +5097,8 @@ const PDF_TEINTES = {
   filet:   [216, 204, 190],  // les traits fins
   filet2:  [176, 160, 142],  // les traits des en-tetes
   ok:      [72, 138, 90],    // une prise bonne
-  ng:      [188, 84, 76]     // une prise a jeter
+  ng:      [188, 84, 76],    // une prise a jeter
+  blanc:   [255, 255, 255]   // le texte des barres encre
 };
 /* la largeur d'un texte interlettre */
 const largeurEsp = (s, taille, police, esp) => largeurPdf(s, taille, police) + (esp || 0) * Math.max(0, String(s || '').length - 1);
@@ -5118,6 +5174,12 @@ function nouveauPdf(paysage){
     ligne(x1, y1, x2, y2, ep, couleur){
       doc.page.ops.push(`${teintePdf(couleur)} RG ${ep || .5} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
     },
+    /* une image JPEG ({ l, h, octets } : octets en chaine binaire), posee dans (x, y, l, h) */
+    images: [],
+    image(im, x, y, l, h){
+      if (!doc.images.includes(im)) doc.images.push(im);
+      doc.page.ops.push(`q ${l.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im${doc.images.indexOf(im) + 1} Do Q`);
+    },
     rect(x, y, w, h, couleur){ doc.page.ops.push(`${teintePdf(couleur)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); },
     /* un trace ferme, en points de la page, rempli d'une teinte */
     forme(points, couleur){
@@ -5153,7 +5215,13 @@ function nouveauPdf(paysage){
       const ajouter = s => { objets.push(s); return objets.length; };
       const fontes = ['Helvetica', 'Helvetica-Bold', 'Courier', 'Courier-Bold'].map(f =>
         ajouter(`<< /Type /Font /Subtype /Type1 /BaseFont /${f} /Encoding /WinAnsiEncoding >>`));
-      const res = `<< /Font << /H ${fontes[0]} 0 R /HB ${fontes[1]} 0 R /C ${fontes[2]} 0 R /CB ${fontes[3]} 0 R >> >>`;
+      const ims = doc.images.map(im => ajouter(`<< /Type /XObject /Subtype /Image /Width ${im.l} /Height ${im.h} /ColorSpace /DeviceRGB ` +
+        `/BitsPerComponent 8 /Filter /DCTDecode /Length ${im.octets.length} >>
+stream
+${im.octets}
+endstream`));
+      const res = `<< /Font << /H ${fontes[0]} 0 R /HB ${fontes[1]} 0 R /C ${fontes[2]} 0 R /CB ${fontes[3]} 0 R >>` +
+        (ims.length ? ` /XObject << ${ims.map((k, i) => `/Im${i + 1} ${k} 0 R`).join(' ')} >>` : '') + ` >>`;
       const noPages = ajouter('');
       const kids = pages.map(pg => {
         const flux = pg.ops.join('\n');
@@ -5356,214 +5424,387 @@ function telechargerDIT(){
 }
 
 /* ------------------------------------------------------------ Fiche VFX */
-/* Pour le compositing : chaque plan tourne, la prise qui fait foi, et tout ce
-   qu'il faut pour la reprendre — camera, optique, releves du matchmove,
-   elements captes, et toutes les prises (des plaques s'y cachent souvent).
-   Les ecarts de saisie n'y sont pas : ils se tranchent avant, sur la fiche
-   data wrangling. Meme charte que le journal DIT, une journee par page. */
-const COMMUNS_VFX = ['Caméra', 'Format', 'Cadence', 'Exposition', 'Couleur', 'Objectif', 'Filtres', 'Diaph'];
-const planVFX = x => !!(texteDe(x, 'vfxDesc') || x.assets || texteDe(x, 'elementsAutre') || aElements(x) || (x.tags || []).some(t => t === 'VFX' || t === 'CG'));
+/* Le VFX camera report : une feuille par plan (un « setup »), celle que le
+   plateau remplissait au stylo. En tete le projet, le tournage et le script ;
+   la camera ; quatorze lignes de prises aux releves du matchmove ; puis la
+   description, les elements, les notes, le croquis du decor et les distances.
+   Tout ce que l'app sait y est deja ecrit, le reste attend le stylo. Elle est
+   en anglais, comme la feuille : elle part chez le studio. */
+const VFX_LIGNES = 14;
+/* les elements de la feuille, et ceux de l'app qui les cochent ; les autres vont dans « Other » */
+const ELEMENTS_VFX = [
+  ['HDRI', 0, ['hdri']], ['Chrome ball', 0, ['chrome']], ['Grey ball', 0, ['chrome']], ['Color chart', 0, ['chart']],
+  ['Clean plate', 1, ['cleanplate']], ['Environment scan', 1, ['lidar'], 'VFX shot'],
+  ['Witness camera', 1, [], 'side cam'], ['Wide angle camera', 1, [], 'cam on cam']
+];
+/* les mouvements de la feuille, lus dans le mouvement et le support du plan et de ses prises */
+const MOUV_VFX = [['STATIC', /fixe|static/i], ['PAN', /\b(pan|tilt|suivi)/i],
+                  ['TRAVEL', /travel|dolly|rail|slider|grue|drone|v[ée]hicule/i], ['HANDHELD', /[ée]paule|handheld/i],
+                  ['STEADI', /steadi|gimbal/i]];
+const MOMENT_VFX = [['DAY', /jour|day/i], ['NIGHT', /nuit|night/i], ['DAWN', /aube|dawn/i], ['DUSK', /cr[ée]puscule|dusk/i]];
+/* l'unite est dans l'en-tete de la colonne : « 35 mm » s'ecrit 35 */
+const sansUnite = (v, u) => String(v || '').trim().replace(u, '');
+
 function modeleVFX(j){
   const jours = j === '*' ? joursConnus().filter(x => plansDuJour(x).length) : [j];
-  const p = DB.prod, d = new Date();
-  const pied = [p.titre || '', 'fiche VFX éditée le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
-                ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · ');
-  const garder = l => l.filter(x => x[1]);
-  const ligne = (...v) => v.filter(Boolean).join(' · ');
-  return jours.map(jour => {
-    const P = plansDuJour(jour), T = prisesDuJour(jour);
-    const plans = P.filter(x => prisesDe(x.id).length || x.etat === 'done' || aElements(x)).map(x => {
-      const pr = prisesDe(x.id), gardees = pr.filter(t => t.retenue);
-      // les reglages lus sur la prise qui fait foi ; sans prise retenue, la derniere bonne
-      const ref = gardees[0] || pr.filter(t => t.statut === 'OK').pop() || pr[pr.length - 1] || null;
-      const t = ref || {};
-      return {
-        seq: x.seq || '—', plan: x.plan || '—', vfx: planVFX(x),
-        tags: (x.tags || []).filter(g => g === 'VFX' || g === 'CG'),
-        // ni la description du plan ni le titre de sequence : le comp a le decoupage pour ca
-        meta: [x.lieu, x.intExt, x.momentJour, x.cadrage].filter(Boolean).join(' · '),
-        vfxDesc: texteDe(x, 'vfxDesc'), assets: x.assets || '',
-        elements: elementsCoches(x).map(e => e[1]).concat(texteDe(x, 'elementsAutre') ? [texteDe(x, 'elementsAutre')] : []),
-        // toutes les prises du plan ; la retenue fait foi pour les reglages
-        prises: pr.map(g => ({ n: g.n, clip: g.clip || '', carte: g.carte || '', statut: g.statut || '', retenue: !!g.retenue,
-                               duree: g.duree || '', note: g.notes || '', par: g.par || '', heure: g.heure || '' })),
-        ref: ref && !ref.retenue ? { n: ref.n, clip: ref.clip || '' } : null,
-        // tous les reglages de la prise qui fait foi : [colonne, libelle, valeur]
-        champs: ref ? [
-          ['Caméra', 'Caméra', ligne(t.cam, t.camModel)], ['Caméra', 'Format', ligne(t.codec, t.reso)],
-          ['Caméra', 'Cadence', ligne(t.fps && t.fps + ' i/s', t.shutter && 'obturateur ' + t.shutter)],
-          ['Caméra', 'Exposition', ligne(t.ei && 'EI ' + t.ei, t.nd && 'ND ' + t.nd)],
-          ['Caméra', 'Couleur', ligne(t.wb, t.lut && 'LUT ' + t.lut)],
-          ['Optique', 'Objectif', t.objectif], ['Optique', 'Focale', fleche(t.focale, t.focaleStop)], ['Optique', 'Diaph', t.diaph],
-          ['Optique', 'Point', fleche(t.focusStart, t.focusStop)], ['Optique', 'Filtres', t.filtre],
-          // la hauteur dit d'ou elle est mesuree ; la meteo n'a de sens que dehors
-          ['Matchmove', 'Hauteur', ligne(fleche(t.hauteurStart, t.hauteurStop), (t.hauteurStart || t.hauteurStop) && t.mesureDepuis && 'depuis ' + t.mesureDepuis)],
-          ['Matchmove', 'Orientation', relevesDe(t).filter(r => r[0] === 'Orientation').map(r => r[1])[0]],
-          ['Matchmove', 'Mouvement', t.mouvement], ['Matchmove', 'Support', t.support],
-          ['Matchmove', 'Météo', x.intExt !== 'INT' && (t.meteo || x.meteo)]
-        ].filter(c => c[2]) : []
-      };
-    });
-    /* Ce qui ne change pas de la journee — camera, format, objectif, filtres… —
-       s'ecrit une fois en tete ; chaque plan ne garde que ce qui lui est propre.
-       Focale, point et matchmove restent toujours sur le plan. */
-    const avecRef = plans.filter(b => b.champs.length);
-    const communs = avecRef.length < 2 ? [] : avecRef[0].champs.filter(([, k, v]) => COMMUNS_VFX.indexOf(k) >= 0 &&
-      avecRef.every(b => b.champs.some(c => c[1] === k && c[2] === v)));
-    plans.forEach(b => {
-      const propres = b.champs.filter(c => !communs.some(k => k[1] === c[1]));
-      b.groupes = ['Caméra', 'Optique', 'Matchmove'].map(g => [g, propres.filter(c => c[0] === g).map(c => [c[1], c[2]])])
-        .concat(b.elements.length ? [['Éléments captés', b.elements.map(e => ['', e])]] : []).filter(g => g[1].length);
-      delete b.champs;
-    });
-    const gardees = T.filter(t => t.retenue);
-    const cartes = [...new Set(T.map(t => (t.carte || '').trim()).filter(Boolean))];
-    const dec = jour === 'CG' ? 'Full CG' : decorJour(jour);
-    return {
-      jour, titre: p.titre || 'Projet sans titre', plans, pied, communs: communs.map(c => [c[1], c[2]]),
-      sous: ['Fiche VFX', nomJour(jour), dec, p.date, p.vfxSuper && 'Superviseur ' + p.vfxSuper, p.vfxStudio,
-             p.dit && 'DIT ' + p.dit].filter(Boolean).join(' · '),
-      chiffres: [[plans.length, 'plans tournés'], [plans.filter(b => b.vfx).length, 'plans VFX'],
-                 [gardees.length, 'prises retenues'], [plans.filter(b => b.elements.length).length, 'plans avec éléments'],
-                 [cartes.length, 'carte' + plur(cartes.length) + (cartes.length && cartes.length <= 6 ? ' · ' + cartes.join(', ') : '')]]
-    };
+  const feuilles = [];
+  jours.forEach(jour => {
+    const P = plansDuJour(jour).filter(x => x.etat !== 'drop');
+    const tournes = P.filter(x => prisesDe(x.id).length || x.etat === 'done' || aElements(x));
+    // un jour ou rien n'est encore tourne : les feuilles de ses plans, pretes pour le plateau
+    (tournes.length || j === '*' ? tournes : P).forEach(x => feuilles.push(feuilleVFX(x, jour)));
   });
+  // rien du tout : une feuille vierge, l'en-tete du projet rempli
+  return feuilles.length ? feuilles : [feuilleVFX(null, j === '*' ? '' : j)];
+}
+function feuilleVFX(x, jour){
+  const p = DB.prod, pr = x ? prisesDe(x.id) : [];
+  const val = k => ((pr.find(t => String(t[k] || '').trim()) || {})[k] || '').trim();
+  const heures = pr.map(t => t.heure).filter(Boolean).sort();
+  const nJours = joursConnus().filter(v => v && v !== 'CG').length;
+  const mouv = x ? [x.mouv, x.support].concat(pr.map(t => t.mouvement), pr.map(t => t.support)).filter(Boolean).join(' / ') : '';
+  const coches = x ? elementsTous(x) : {}, lus = new Set(ELEMENTS_VFX.flatMap(e => e[2]));
+  const cotes = x && x.croquis ? (x.croquis.objets || []).filter(o => o.t === 'cote' && o.txt).map(o => o.txt) : [];
+  // une ligne par mesure differente ; les prises qui la partagent se lisent ensemble
+  const dist = [];
+  pr.filter(t => t.focusStart || t.focusStop || t.mesureDepuis).forEach(t => {
+    const focus = fleche(sansUnite(t.focusStart, /\s*m$/i), sansUnite(t.focusStop, /\s*m$/i)).replace(' → ', ' > '), d = t.mesureDepuis || '';
+    const l = dist.find(r => r[1] === focus && r[4] === d);
+    if (l) l.prises.push(t.n); else dist.push(Object.assign(['', focus, '', '', d, ''], { prises: [t.n] }));
+  });
+  dist.forEach(r => { r[0] = (r.prises.length > 1 ? 'Takes ' : 'Take ') + r.prises.join(', '); });
+  // quatre lignes sur la feuille : les cotes du croquis gardent la leur
+  if (cotes.length){ dist.length = Math.min(dist.length, 3); dist.push(['Set diagram', '', '', '', '', cotes.join(' · ')]); }
+  return {
+    seq: x ? x.seq || '' : '', plan: x ? x.plan || '' : '', titre: p.titre || '',
+    projet: [['Name', p.titre], ['Director', p.real], ['DOP', p.dop], ['First AD', p.firstAD], ['Producer', p.producer]],
+    tournage: [['Date', jour && jour === jourDuTournage() ? p.date : ''],
+               ['Time', heures.length ? heures[0] + (heures.length > 1 ? ' – ' + heures[heures.length - 1] : '') : ''],
+               ['Shooting day', jour && jour !== 'CG' ? numJour(jour) + ' / ' + nJours : jour === 'CG' ? 'Full CG' : ''],
+               ['Location', jour === 'CG' ? '' : (jour && decorJour(jour)) || p.lieu], ['VFX Sup.', p.vfxSuper]],
+    script: [['Sequence', x ? [x.seq, x.seqTitre].filter(Boolean).join(' · ') : ''], ['Shot', x ? x.plan : ''],
+             ['Int / Ext', { choix: [['INT', /int/i.test(x && x.intExt || '')], ['EXT', /ext/i.test(x && x.intExt || '')]] }],
+             ['Location', x ? x.lieu : ''],
+             ['Time of day', { choix: MOMENT_VFX.map(([n, re]) => [n, !!x && re.test(x.momentJour || '')]) }]],
+    camera: val('camModel') || 'ARRI Alexa 35', lens: val('objectif'), format: val('reso'),
+    codec: [val('codec'), val('fps') && val('fps') + ' fps'].filter(Boolean).join(' / '),
+    mouvements: MOUV_VFX.map(([n, re]) => [n, re.test(mouv)]),
+    prises: pr.map(t => ({
+      n: t.n, clip: t.clip || '', statut: t.statut || '', retenue: !!t.retenue,
+      focale: [sansUnite(t.focale, /\s*mm$/i), sansUnite(t.focaleStop, /\s*mm$/i)],
+      focus: [sansUnite(t.focusStart, /\s*m$/i), sansUnite(t.focusStop, /\s*m$/i)],
+      diaph: t.diaph || '', ei: sansUnite(t.ei, /^(iso|ei)\s*/i), wb: sansUnite(t.wb, /\s*k$/i), shutter: t.shutter || '',
+      hauteur: [sansUnite(t.hauteurStart, /\s*m$/i), sansUnite(t.hauteurStop, /\s*m$/i)],
+      pan: [sansUnite(t.panStart, /\s*°$/), sansUnite(t.panStop, /\s*°$/)],
+      tilt: [sansUnite(t.tiltStart, /\s*°$/), sansUnite(t.tiltStop, /\s*°$/)],
+      roll: [sansUnite(t.rollStart, /\s*°$/), sansUnite(t.rollStop, /\s*°$/)],
+      // le resultat qui n'est ni OK ni NG (Serie, Faux depart…) et le montage se lisent dans la note
+      note: [t.statut && t.statut !== 'OK' && t.statut !== 'NG' ? t.statut : '', t.retenue ? 'Kept for edit' : '', t.notes]
+        .filter(Boolean).join(' · ')
+    })),
+    mesure: val('mesureDepuis'),
+    scene: x ? x.desc || '' : '',
+    vfx: x ? [texteDe(x, 'vfxDesc'), x.assets && 'Assets: ' + x.assets].filter(Boolean).join('\n') : '',
+    elements: ELEMENTS_VFX.map(([nom, col, cles, sous]) => ({ nom, col, sous: sous || '', on: cles.some(k => coches[k]) })),
+    autres: x ? ELEMENTS.filter(e => coches[e[0]] && !lus.has(e[0])).map(e => e[1])
+                  .concat(texteDe(x, 'elementsAutre') ? [texteDe(x, 'elementsAutre')] : []).join(', ') : '',
+    client: x ? texteDe(x, 'notesClient') : '', interne: x ? x.notesInternes || '' : '', studio: p.vfxStudio || '',
+    distances: dist.slice(0, 4).map(r => r.slice()),
+    croquis: x && aCroquis(x) ? x.id : ''
+  };
 }
 
-/* des colonnes de libelles et de valeurs, cote a cote (trois au moins de large) ;
-   une colonne sans libelles — les elements captes — est une simple liste */
-function grillePdf(doc, groupes, o){
-  o = o || {};
-  const L = doc.largeur - 2 * PDF_M, lc = L / Math.max(3, groupes.length), t = o.taille || 8, inter = t * 1.4;
-  const labs = groupes.map(([, kv]) => kv.some(([k]) => k) ? 58 : 0);
-  const cols = groupes.map(([, kv], i) => kv.map(([k, v]) => [k, lignesPdf(v, lc - labs[i] - 12, t, 'HB')]));
-  const titres = groupes.some(([g]) => g);
-  const h = (titres ? 13 : 4) + Math.max(...cols.map(c => c.reduce((a, [, l]) => a + l.length, 0))) * inter + 4;
-  doc.place(h);
-  if (o.fond) doc.rect(PDF_M, doc.y - h, L, h, o.fond);
-  groupes.forEach(([titre], i) => {
-    const x = PDF_M + i * lc + (o.fond ? 8 : 0);
-    if (i) doc.ligne(x - 8, doc.y - 3, x - 8, doc.y - h + 3, .4, 'filet');
-    if (titre) doc.texte(x, doc.y - 7, titre.toUpperCase(), { taille: 6.3, police: 'HB', couleur: 'tan', esp: .5 });
-    let y = doc.y - (titres ? 13 : 4);
-    cols[i].forEach(([k, l]) => {
-      if (k) doc.texte(x, y - t, k, { taille: t, couleur: 'tan' });
-      l.forEach((s, q) => doc.texte(x + labs[i], y - t - q * inter, s, { taille: t, police: 'HB', couleur: 'encre' }));
-      y -= l.length * inter;
-    });
+/* Le croquis d'un plan, son decor dessous, rendu en JPEG pour la feuille. */
+function imageCroquis(p){
+  return chargerImage(fondDecor(lieuFond(p))).catch(() => null).then(img => {
+    const garde = dessin;
+    try{
+      dessin = etatCroquis(p, img);
+      const cv = document.createElement('canvas');
+      cv.width = 1400; cv.height = Math.round(1400 * dessin.h / dessin.w);
+      rendreCroquis(cv);
+      return { l: cv.width, h: cv.height, octets: atob(cv.toDataURL('image/jpeg', .85).split(',')[1]) };
+    } finally { dessin = garde; }
   });
-  doc.y -= h;
+}
+function imagesVFX(j){
+  const ps = modeleVFX(j).map(f => f.croquis).filter(Boolean).map(plan).filter(Boolean);
+  return Promise.all(ps.map(p => imageCroquis(p).then(im => [p.id, im], () => [p.id, null])))
+    .then(l => Object.fromEntries(l.filter(x => x[1])));
 }
 
-function pdfVFX(j){
-  const jours = modeleVFX(j), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M;
-  const initiales = par => String(par || '').split(/\s*,\s*/).filter(Boolean).map(n => n.slice(0, 2)).join(', ');
-  /* les prises d'un plan, comme dans le journal : la retenue en gras sur fond creme */
-  const saisi = t => ({ parts: [{ t: initiales(t.par), police: 'HB', couleur: 'encre' }, { t: t.par && t.heure ? ' · ' : '', couleur: 'tan' },
-                                { t: t.heure, couleur: 'tan' }] });
-  const COLS = [
-    ['Pr.', 22, 'H', t => t.n],
-    ['Clip', 66, 'C', t => t.clip || '—'],
-    ['Statut', 38, 'H', t => ({ t: t.statut, police: 'HB', couleur: t.statut === 'OK' ? 'ok' : t.statut === 'NG' ? 'ng' : 'tan' })],
-    ['Montage', 52, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
-    ['Carte', 40, 'H', t => t.carte],
-    ['Durée', 36, 'H', t => t.duree],
-    ['Note', 0, 'H', t => t.note],
-    ['Saisi par', 60, 'H', saisi]
-  ];
-  const colsPrises = l => {
-    const cols = COLS.filter(c => c[0] !== 'Durée' || l.some(t => t.duree)).map(c => c.slice());
-    const qui = cols[cols.length - 1];
-    qui[1] = Math.max(qui[1], ...l.map(t => largeurPdf(initiales(t.par) + ' · ' + t.heure, 8, 'HB') + 10));
-    cols.find(c => c[0] === 'Note')[1] = Math.max(80, L - cols.reduce((a, c) => a + c[1], 0));
-    return cols;
+function pdfVFX(j, images){
+  const feuilles = modeleVFX(j), doc = nouveauPdf(), M = 24, W = doc.largeur - 2 * M;
+  images = images || {};
+  const T = (x, y, s, o) => doc.texte(x, y, String(s == null ? '' : s), o);
+  const cadre = (x, y, w, h, ep, c) => {
+    doc.ligne(x, y, x + w, y, ep, c); doc.ligne(x + w, y, x + w, y + h, ep, c);
+    doc.ligne(x + w, y + h, x, y + h, ep, c); doc.ligne(x, y + h, x, y, ep, c);
   };
-  /* une ligne de texte courant, coupee a la largeur ; rend la hauteur prise */
-  const para = (s, o) => {
-    const t = o.taille || 8, lignes = lignesPdf(s, L - (o.retrait || 0), t, o.police || 'H').slice(0, o.max || 99);
-    lignes.forEach((l, k) => doc.texte(PDF_M + (o.retrait || 0), doc.y - t - k * t * 1.35, l, o));
-    doc.y -= lignes.length * t * 1.35 + 3;
-  };
-  /* une page qui continue une journee le rappelle en tete */
-  let suite = '';
-  const pageSuivante = doc.nouvellePage;
-  doc.nouvellePage = () => {
-    pageSuivante();
-    if (!suite) return;
-    doc.texte(PDF_M, doc.y - 8, suite, { taille: 7, police: 'HB', couleur: 'tan', esp: .4 });
-    doc.y -= 14;
-  };
-  jours.forEach((m, i) => {
-    suite = '';
-    if (i) doc.nouvellePage();
-    entetePdf(doc, m.titre, m.sous, m.chiffres);
-    // 1. les reglages de toute la journee, une fois
-    if (m.communs.length){
-      sectionPdf(doc, '1. Réglages communs à tous les plans du jour');
-      const n = Math.ceil(m.communs.length / 3);
-      grillePdf(doc, [0, 1, 2].map(k => ['', m.communs.slice(k * n, k * n + n)]).filter(g => g[1].length), { fond: 'creme3' });
-      doc.y -= 4;
+  /* un texte qui tient dans sa case : il rapetisse jusqu'a 5 points, puis se coupe */
+  const ajuste = (s, larg, taille, police) => {
+    s = String(s || ''); let t = taille;
+    while (t > 5 && largeurPdf(s, t, police) > larg) t -= .25;
+    if (largeurPdf(s, t, police) > larg){
+      while (s.length > 1 && largeurPdf(s + '…', t, police) > larg) s = s.slice(0, -1);
+      s += '…';
     }
-    sectionPdf(doc, (m.communs.length ? '2. ' : '') + 'Plan par plan — ' + m.plans.length + ' plan' + plur(m.plans.length) +
-                    ' tourné' + plur(m.plans.length) + ' · ' + m.plans.filter(b => b.vfx).length + ' VFX');
-    suite = ('Fiche VFX · ' + nomJour(m.jour) + ', suite' + (m.communs.length ? ' — réglages communs en tête de journée' : '')).toUpperCase();
-    if (!m.plans.length){ doc.texte(PDF_M, doc.y - 8, 'Aucun plan tourné pour l’instant.', { taille: 8.5, couleur: 'tan' }); doc.y -= 13; }
-    m.plans.forEach(b => {
-      // un plan ne se coupe pas en deux pages, sauf s'il ne tient sur aucune
-      const lignesGrille = Math.max(0, ...b.groupes.map(g => g[1].length));
-      const colsP = b.prises.length ? colsPrises(b.prises) : [], largNote = (colsP.find(c => c[0] === 'Note') || [0, 0])[1];
-      const hPrises = b.prises.reduce((h, t) => h + Math.max(1, lignesPdf(t.note, largNote - 8, 8, t.retenue ? 'HB' : 'H').length) * 11.2 + 5, 0);
-      doc.place(Math.min(560, 50 + (b.vfxDesc || b.assets ? 34 : 0) + (lignesGrille ? 22 + lignesGrille * 11.5 : 0) +
-                              (b.prises.length ? 24 + hPrises : 12)));
-      doc.y -= 10;
-      const titre = 'Séquence ' + b.seq + ' · Plan ' + b.plan;
-      doc.texte(PDF_M, doc.y - 13, titre, { taille: 13, police: 'HB', couleur: 'encre' });
-      // le decor et le cadre a la suite du titre ; les tags VFX / CG a droite
-      if (b.meta) doc.texte(PDF_M + largeurPdf(titre, 13, 'HB') + 10, doc.y - 12.5, b.meta, { taille: 8.5, couleur: 'tan' });
-      let xd = PDF_M + L;
-      b.tags.slice().reverse().forEach(g => {
-        const w = largeurEsp(g, 7, 'HB', .5) + 10;
-        xd -= w;
-        doc.rect(xd, doc.y - 15, w, 12, 'creme2');
-        doc.texte(xd + 5, doc.y - 11.5, g, { taille: 7, police: 'HB', couleur: 'caramel', esp: .5 });
-        xd -= 4;
-      });
-      doc.y -= 20;
-
-      // ce que le plan demande aux VFX, dans un cadre a filet caramel
-      if (b.vfxDesc || b.assets){
-        const lv = b.vfxDesc ? lignesPdf(b.vfxDesc, L - 16, 9, 'HB') : [], la = b.assets ? lignesPdf('Assets : ' + b.assets, L - 16, 8, 'H') : [];
-        const h = 8 + lv.length * 12 + la.length * 11;
-        doc.place(h);
-        doc.rect(PDF_M, doc.y - h, L, h, 'creme3');
-        doc.rect(PDF_M, doc.y - h, 2.5, h, 'caramel');
-        let y = doc.y - 4;
-        lv.forEach(l => { doc.texte(PDF_M + 10, y - 9, l, { taille: 9, police: 'HB', couleur: 'caramel' }); y -= 12; });
-        la.forEach(l => { doc.texte(PDF_M + 10, y - 8.5, l, { taille: 8, couleur: 'brun' }); y -= 11; });
-        doc.y -= h + 5;
-      }
-
-      // les reglages de la prise qui fait foi, puis toutes les prises du plan
-      if (b.ref) para('Aucune prise retenue : réglages de la prise ' + b.ref.n + (b.ref.clip ? ' (' + b.ref.clip + ')' : '') + '.',
-                      { taille: 8, couleur: 'tan' });
-      if (b.groupes.length) grillePdf(doc, b.groupes);
-      else if (b.prises.length) para('Aucun réglage propre à ce plan.', { taille: 8, couleur: 'tan' });
-      if (b.prises.length){
-        doc.y -= 6;
-        tableauPdf(doc, colsP, b.prises.map(t => ({ v: colsP.map(c => c[3](t)), fond: t.retenue, gras: t.retenue })), 8, titre + ', suite');
-      } else para('Aucune prise enregistrée.', { taille: 8, couleur: 'tan' });
-      doc.y -= 6;
-      doc.ligne(PDF_M, doc.y, PDF_M + L, doc.y, .5, 'filet');
+    return [s, t];
+  };
+  const ecrire = (x, y, s, larg, taille, police, couleur, centre) => {
+    const [v, t] = ajuste(s, larg, taille, police);
+    T(centre ? x + (larg - largeurPdf(v, t, police)) / 2 : x, y, v, { taille: t, police, couleur });
+  };
+  // une barre de titre : encre, petites capitales claires ; une mention a droite
+  const barre = (x, yh, w, titre, droite) => {
+    doc.rect(x, yh - 11, w, 11, 'encre');
+    T(x + 5, yh - 7.8, titre.toUpperCase(), { taille: 6.2, police: 'HB', couleur: 'blanc', esp: .6 });
+    if (droite) T(x + w - 5 - largeurPdf(droite, 6, 'H'), yh - 7.8, droite, { taille: 6, couleur: 'or' });
+  };
+  // une case a cocher ; cochee, elle est or avec sa coche
+  const coche = (x, y, on, k) => {
+    k = k || 7;
+    if (!on) return cadre(x, y, k, k, .6, 'filet2');
+    doc.rect(x, y, k, k, 'or');
+    doc.ligne(x + k * .2, y + k * .52, x + k * .42, y + k * .25, 1.1, 'encre');
+    doc.ligne(x + k * .42, y + k * .25, x + k * .82, y + k * .8, 1.1, 'encre');
+  };
+  // des choix sur une ligne (INT / EXT) : le bon en caramel gras, les autres en tan
+  const choix = (x, y, l, taille, sep, larg) => {
+    sep = sep || '/';
+    // trop large pour sa case : tout rapetisse d'autant
+    const tout = l.reduce((a, [n, on], i) => a + largeurPdf(n + ' ', taille, on ? 'HB' : 'H') + 1 + (i ? largeurPdf(sep + ' ', taille, 'H') + 1 : 0), 0);
+    if (larg && tout > larg) taille *= larg / tout;
+    l.forEach(([n, on], i) => {
+    if (i){ T(x, y, sep, { taille, couleur: 'filet2' }); x += largeurPdf(sep + ' ', taille, 'H') + 1; }
+    T(x, y, n, { taille, police: on ? 'HB' : 'H', couleur: on ? 'caramel' : 'tan' });
+    x += largeurPdf(n + ' ', taille, on ? 'HB' : 'H') + 1;
     });
+  };
+  // un bloc de texte sur des lignes reglees, comme la feuille ; le texte s'ecrit dessus
+  const regle = (x, yh, w, n, s) => {
+    const lignes = String(s || '').split('\n').flatMap(l => lignesPdf(l, w - 10, 7, 'H'));
+    if (lignes.length > n){ lignes.length = n; lignes[n - 1] = ajuste(lignes[n - 1] + '…', w - 10, 7, 'H')[0]; }
+    for (let i = 0; i < n; i++){
+      const y = yh - 10 - i * 10;
+      doc.ligne(x + 5, y - 2.5, x + w - 5, y - 2.5, .35, 'filet');
+      if (lignes[i]) T(x + 5, y, lignes[i], { taille: 7, couleur: 'brun' });
+    }
+  };
+
+  /* les colonnes du tableau des prises : [titre, largeur, lecture, sous-titres, police] */
+  const COLS = [
+    ['Take', 18, t => t.n], ['Clipname', 58, t => t.clip, null, 'C'],
+    ['Focal (mm)', 44, t => t.focale, ['Start', 'Stop']], ['Focus (m)', 44, t => t.focus, ['Start', 'Stop']],
+    ['F-stop', 24, t => t.diaph], ['ISO', 24, t => t.ei], ['WB', 26, t => t.wb, ['(K)']], ['Shutter', 28, t => t.shutter],
+    ['Height (m)', 44, t => t.hauteur, ['Start', 'Stop']], ['Pan (°)', 40, t => t.pan, ['Start', 'Stop']],
+    ['Tilt (°)', 40, t => t.tilt, ['Start', 'Stop']], ['Roll (°)', 40, t => t.roll, ['Start', 'Stop']],
+    ['Validated', 32, null, ['OK', 'NG']], ['Notes', 0, t => t.note]
+  ];
+  COLS[COLS.length - 1][1] = W - COLS.reduce((a, c) => a + c[1], 0);
+  const HL = 16.5;   // la hauteur d'une ligne de prise
+  const tableau = (yh, lignes, numeros) => {
+    // l'en-tete : deux etages, le groupe puis Start / Stop
+    doc.rect(M, yh - 22, W, 22, 'encre');
+    let x = M;
+    COLS.forEach(([titre, w, , sous]) => {
+      const deux = sous && sous.length === 2;
+      if (deux){
+        ecrire(x, yh - 8.5, titre.toUpperCase(), w, 5.8, 'HB', 'blanc', true);
+        doc.ligne(x + 3, yh - 11.5, x + w - 3, yh - 11.5, .4, 'tan');
+        sous.forEach((s, k) => ecrire(x + k * w / 2, yh - 18.5, s, w / 2, 5.3, 'H', 'creme', true));
+      } else if (sous){
+        ecrire(x, yh - 10, titre.toUpperCase(), w, 5.8, 'HB', 'blanc', true);
+        ecrire(x, yh - 18, sous[0], w, 5, 'H', 'creme', true);
+      } else ecrire(x, yh - 13.5, titre.toUpperCase(), w, 5.8, 'HB', 'blanc', true);
+      x += w;
+    });
+    const y0 = yh - 22;
+    lignes.forEach((t, i) => {
+      const yl = y0 - i * HL;
+      if (t && t.retenue) doc.rect(M, yl - HL, W, HL, 'creme2');
+      else if (i % 2) doc.rect(M, yl - HL, W, HL, 'creme3');
+      let x = M;
+      COLS.forEach(([titre, w, lire, sous, police]) => {
+        const yb = yl - 11;
+        if (titre === 'Take') ecrire(x, yb, t ? t.n : numeros[i], w, 6.8, t ? 'HB' : 'H', t ? 'encre' : 'tan', true);
+        else if (titre === 'Validated'){
+          coche(x + w / 4 - 3.5, yl - 12, t && t.statut === 'OK', 7); coche(x + 3 * w / 4 - 3.5, yl - 12, t && t.statut === 'NG', 7);
+        } else if (t){
+          const v = lire(t);
+          if (Array.isArray(v)){
+            // un depart sans arrivee n'a rien bouge : la case d'arrivee reste vide
+            ecrire(x, yb, v[0], w / 2, 6.6, t.retenue ? 'HB' : 'H', 'encre', true);
+            if (v[1] && v[1] !== v[0]) ecrire(x + w / 2, yb, v[1], w / 2, 6.6, t.retenue ? 'HB' : 'H', 'encre', true);
+          } else if (titre === 'Notes'){
+            const l = lignesPdf(v, w - 6, 5.8, 'H');
+            if (l.length > 2){ l.length = 2; l[1] = ajuste(l[1] + '…', w - 6, 5.8, 'H')[0]; }
+            l.forEach((s, k) => T(x + 3, yl - (l.length > 1 ? 7 : 11) - k * 6.5, s, { taille: 5.8, couleur: 'brun' }));
+          } else ecrire(x + 2, yb, v, w - 4, 6.6, police === 'C' ? (t.retenue ? 'CB' : 'C') : (t.retenue ? 'HB' : 'H'), 'encre', police !== 'C');
+        }
+        x += w;
+      });
+    });
+    // la grille : un filet entre chaque case, Start et Stop compris
+    const yb = y0 - lignes.length * HL;
+    let xg = M;
+    COLS.forEach(([, w, , sous], k) => {
+      if (k) doc.ligne(xg, y0, xg, yb, .35, 'filet');
+      if (sous && sous.length === 2) doc.ligne(xg + w / 2, y0, xg + w / 2, yb, .25, 'filet');
+      xg += w;
+    });
+    for (let i = 1; i < lignes.length; i++) doc.ligne(M, y0 - i * HL, M + W, y0 - i * HL, .3, 'filet');
+    cadre(M, yb, W, yh - yb, .5, 'filet2');
+    return yb;
+  };
+
+  // les pages : une feuille, et une suite pour chaque quarantaine de prises au-dela de quatorze
+  const SUITE = 38;
+  const pagesDe = f => 1 + Math.ceil(Math.max(0, f.prises.length - VFX_LIGNES) / SUITE);
+  const total = feuilles.reduce((a, f) => a + pagesDe(f), 0);
+  let page = 0;
+  const entete = (f, suite) => {
+    page++;
+    const H = doc.hauteur;
+    T(M, H - 42, 'VFX CAMERA REPORT' + (suite ? ' · CONTINUED' : ''), { taille: 17, police: 'HB', couleur: 'encre' });
+    T(M, H - 53, suite ? 'Takes ' + suite : 'Camera sheet · one sheet per setup', { taille: 7, couleur: 'tan' });
+    doc.rect(M, H - 60, 34, 2, 'caramel');
+    const xd = M + W;
+    if (LOGO_PDF){
+      const hl = 10, kl = hl / LOGO_BOITE.h, lg = LOGO_BOITE.l * kl;
+      const ox = xd - lg - LOGO_BOITE.x * kl, oy = H - 20 + LOGO_BOITE.y * kl;
+      doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
+      doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
+    }
+    const titre = (f.titre || 'Untitled project').toUpperCase(), plan = f.plan ? 'Seq ' + (f.seq || '—') + ' · Shot ' + f.plan : '';
+    T(xd - largeurPdf(titre, 9, 'HB'), H - 40, titre, { taille: 9, police: 'HB', couleur: 'encre' });
+    if (plan) T(xd - largeurPdf(plan, 8, 'HB'), H - 50, plan, { taille: 8, police: 'HB', couleur: 'caramel' });
+    const pg = 'Page ' + page + ' / ' + total;
+    T(xd - largeurPdf(pg, 6.5, 'H'), H - 59, pg, { taille: 6.5, couleur: 'tan' });
+  };
+
+  feuilles.forEach((f, n) => {
+    if (n) doc.nouvellePage();
+    entete(f);
+    const H = doc.hauteur;
+    // 1. projet, tournage, script
+    const w3 = (W - 16) / 3;
+    [['Project', f.projet], ['Shoot', f.tournage], ['Script', f.script]].forEach(([titre, champs], k) => {
+      const x = M + k * (w3 + 8), yh = H - 68;
+      barre(x, yh, w3, titre);
+      cadre(x, yh - 74, w3, 74, .5, 'filet');
+      champs.forEach(([lib, v], i) => {
+        const y = yh - 21 - i * 11.8;
+        T(x + 5, y, lib, { taille: 6, couleur: 'tan' });
+        doc.ligne(x + 52, y - 2.5, x + w3 - 5, y - 2.5, .35, 'filet');
+        if (v && v.choix) choix(x + 54, y, v.choix, 6.8);
+        else if (v) ecrire(x + 54, y, v, w3 - 60, 7, 'HB', 'encre');
+      });
+    });
+    // 2. la camera, sur une barre
+    let x = M;
+    const yc = H - 150, hc = 16;
+    [['Camera', 36, f.camera, 66], ['Lens set', 36, f.lens, 44], ['Movement', 42, f.mouvements, 126],
+     ['Sensor / format', 58, f.format, 0], ['Codec / fps', 44, f.codec, 58]].forEach(([lib, wl, v, wv], k, l) => {
+      if (!wv) wv = W - l.reduce((a, c) => a + c[1] + c[3], 0);
+      doc.rect(x, yc - hc, wl, hc, 'encre');
+      ecrire(x + 4, yc - 10.3, lib.toUpperCase(), wl - 6, 5.6, 'HB', 'blanc');
+      cadre(x + wl, yc - hc, wv, hc, .5, 'filet2');
+      if (Array.isArray(v)) choix(x + wl + 5, yc - 10.3, v, 5.6, '·', wv - 8);
+      else ecrire(x + wl + 5, yc - 10.5, v, wv - 9, 7, 'HB', 'encre');
+      x += wl + wv;
+    });
+    // 3. les prises : quatorze lignes, les premieres remplies ; les autres numerotees a la suite
+    const pr = f.prises.slice(0, VFX_LIGNES), dernier = Math.max(0, ...f.prises.map(t => parseInt(t.n, 10) || 0));
+    const lignes = Array.from({ length: VFX_LIGNES }, (_, i) => pr[i] || null);
+    const numeros = lignes.map((t, i) => t ? t.n : dernier + i - pr.length + 1);
+    let y = tableau(H - 174, lignes, numeros);
+    T(M, y - 8, 'Focus = distance from camera to subject.  Height measured ' + (f.mesure ? 'from: ' + f.mesure : 'from the ground to the lens centre') +
+      '.  Clipname = camera file name.  OK / NG = validated takes' + (f.prises.some(t => t.retenue) ? ' · shaded row = kept for edit.' : '.'),
+      { taille: 5.6, couleur: 'tan' });
+
+    // 4. en bas a gauche : descriptions, elements, notes
+    const yB = y - 16, wg = 172, xg = M;
+    const bloc = (yh, titre, h, droite) => { barre(xg, yh, wg, titre, droite); cadre(xg, yh - h, wg, h, .5, 'filet'); return yh - 11; };
+    let yh = yB;
+    regle(xg, bloc(yh, 'Scene description', 67), wg, 5, f.scene); yh -= 73;
+    regle(xg, bloc(yh, 'VFX description', 67), wg, 5, f.vfx); yh -= 73;
+    const ye = bloc(yh, 'Elements', 85);
+    T(xg + 6, ye - 9, 'ALWAYS', { taille: 5.6, police: 'HB', couleur: 'caramel', esp: .4 });
+    T(xg + wg / 2 + 2, ye - 9, 'WHEN NEEDED', { taille: 5.6, police: 'HB', couleur: 'caramel', esp: .4 });
+    [0, 1].forEach(col => {
+      let yy = ye - 20;
+      f.elements.filter(e => e.col === col).forEach(e => {
+        const xe = col ? xg + wg / 2 + 2 : xg + 6;
+        coche(xe, yy - 1, e.on, 6.5);
+        T(xe + 10, yy, e.nom, { taille: 6.6, police: e.on ? 'HB' : 'H', couleur: e.on ? 'encre' : 'brun' });
+        if (e.sous) T(xe + 10, yy - 5.5, e.sous, { taille: 4.6, couleur: 'tan' });
+        yy -= e.sous || col ? 12.5 : 11;
+      });
+    });
+    coche(xg + 6, ye - 69, !!f.autres, 6.5);
+    T(xg + 16, ye - 68, 'Other :', { taille: 6.6, couleur: 'brun' });
+    doc.ligne(xg + 42, ye - 70.5, xg + wg - 6, ye - 70.5, .35, 'filet');
+    if (f.autres) ecrire(xg + 44, ye - 68, f.autres, wg - 52, 6.6, 'HB', 'encre');
+    yh -= 91;
+    regle(xg, bloc(yh, 'Client notes', 57, f.studio), wg, 4, f.client); yh -= 63;
+    regle(xg, bloc(yh, 'Internal notes', 57, 'between us'), wg, 4, f.interne);
+
+    // 5. a droite : le croquis du decor, puis les distances
+    const xd = M + wg + 8, wd = W - wg - 8, yBas = yB - 357;
+    const hDist = 11 + 11 + 4 * 12, yDist = yBas + hDist, hDia = yB - yDist - 6 - 11;
+    barre(xd, yB, wd, 'Diagram of the set');
+    cadre(xd, yB - 11 - hDia, wd, hDia, .5, 'filet');
+    const im = f.croquis && images[f.croquis];
+    if (im){
+      // le croquis entier, a l'echelle, au milieu du cadre
+      const k = Math.min((wd - 8) / im.l, (hDia - 8) / im.h), l = im.l * k, h = im.h * k;
+      doc.image(im, xd + (wd - l) / 2, yB - 11 - hDia + (hDia - h) / 2, l, h);
+    } else {
+      // une feuille pointee, a dessiner au stylo, et sa legende
+      for (let gx = xd + 9; gx < xd + wd - 4; gx += 12)
+        for (let gy = yB - 20; gy > yB - 11 - hDia + 16; gy -= 12) doc.disque(gx, gy, .45, 'filet2');
+      let xl = xd + 6;
+      [['CAM', 'camera'], ['L', 'light'], ['B', 'bounce'], ['A', 'actor'], ['N', 'north']].forEach(([a, b]) => {
+        T(xl, yB - 11 - hDia + 6, a, { taille: 6, police: 'HB', couleur: 'encre' }); xl += largeurPdf(a + ' ', 6, 'HB');
+        T(xl, yB - 11 - hDia + 6, b, { taille: 6, couleur: 'tan' }); xl += largeurPdf(b, 6, 'H') + 10;
+      });
+    }
+    barre(xd, yDist, wd, 'Distances to note (m)');
+    const CD = [['Setup / Take', 58], ['Focus x Camera', 62], ['Light x Actor', 56], ['Bounce x Actor', 58], ['Measured from', 60], ['Notes', 0]];
+    CD[CD.length - 1][1] = wd - CD.reduce((a, c) => a + c[1], 0);
+    let yd = yDist - 11;
+    doc.rect(xd, yd - 11, wd, 11, 'creme');
+    let xc = xd;
+    CD.forEach(([t, w]) => { ecrire(xc, yd - 7.6, t, w, 5.6, 'HB', 'encre', true); xc += w; });
+    yd -= 11;
+    for (let i = 0; i < 4; i++){
+      const r = f.distances[i], yl = yd - i * 12;
+      doc.ligne(xd, yl - 12, xd + wd, yl - 12, .3, 'filet');
+      if (r){ xc = xd; CD.forEach(([, w], k) => { if (r[k]) ecrire(xc + 3, yl - 8.5, r[k], w - 6, 6.4, k ? 'H' : 'HB', 'encre', k > 0 && k < 5); xc += w; }); }
+    }
+    xc = xd;
+    CD.forEach(([, w], k) => { if (k) doc.ligne(xc, yDist - 11, xc, yBas, .3, 'filet'); xc += w; });
+    cadre(xd, yBas, wd, hDist - 11, .5, 'filet');
+
+    // 6. les prises au-dela de quatorze, sur des pages de suite
+    for (let d = VFX_LIGNES; d < f.prises.length; d += SUITE){
+      const l = f.prises.slice(d, d + SUITE);
+      doc.nouvellePage();
+      entete(f, l[0].n + ' – ' + l[l.length - 1].n);
+      tableau(doc.hauteur - 74, l, l.map(t => t.n));
+    }
   });
-  return doc.fichier(jours.length ? jours[0].pied : '');
+  const d = new Date(), p = DB.prod;
+  return doc.fichier([p.titre || '', 'VFX camera report · ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+                      ' ' + hhmm(d) + (UI.nom ? ' · ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · '));
 }
 function telechargerVFX(){
   const j = fJourR;
-  chargerLogo().then(() => avecEquipeAJour(() => {
-    surLePerimetre(() => download(fname('fiche-VFX' + (j === '*' ? '' : '-' + j), 'pdf'), pdfVFX(j), 'application/pdf'));
-    direPerimetre('Fiche VFX exportée');
-  }));
+  chargerLogo().then(() => avecEquipeAJour(() => surLePerimetre(() => imagesVFX(j)).then(ims => {
+    surLePerimetre(() => download(fname('VFX-camera-report' + (j === '*' ? '' : '-' + j), 'pdf'), pdfVFX(j, ims), 'application/pdf'));
+    direPerimetre('VFX camera report exporté');
+  })));
 }
 
 /* --------------------------------------------- Les saisies de l'equipe */
