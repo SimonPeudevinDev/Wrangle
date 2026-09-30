@@ -1287,7 +1287,11 @@ const LISTES = {
                '8192x4320 (8K)'],
   'dl-fps':   ['23.976', '24', '25', '29.97', '48', '50', '60', '100', '120'],
   'dl-shut':  ['180°', '172.8°', '90°', '45°', '1/50'],
-  'dl-wb':    ['3200 K', '4300 K', '5600 K', '6500 K'],
+  // la balance de l'ARRI Alexa 35 (2 000 a 11 000 K), les valeurs courantes, et celles deja
+  // posees sur le tournage (une valeur personnalisee revient dans le menu)
+  'dl-wb':    () => fusion(['2000 K', '2500 K', '2800 K', '3000 K', '3200 K', '3400 K', '3600 K', '4000 K', '4300 K', '4700 K',
+                            '5000 K', '5300 K', '5600 K', '6000 K', '6500 K', '7000 K', '7500 K', '8000 K', '9000 K', '10000 K', '11000 K'],
+                           connus(DB.prises, 'wb')),
   'dl-lut':   ['Rec709', 'LogC3 to Rec709', 'LogC4 to Rec709', 'Show LUT', 'Aucune'],
   'dl-obj':   ['Sigma Classic Prime', 'NiSi Athena Prime', 'Cooke S4', 'Zeiss Supreme Prime', 'ARRI Signature Prime', 'Angénieux Optimo',
                'Canon K35', 'Panavision C Series']
@@ -1335,7 +1339,12 @@ function clicHorsMenu(e){
 }
 /* Les listes qui s'allongent depuis leur menu : le nom du bouton, et ce qu'il fait
    (une promesse de la valeur ajoutee, vide si on renonce). */
-const AJOUTS = { 'dl-lieu': { nom: '+ Ajouter un décor…', faire: () => ajouterDecor() } };
+const AJOUTS = {
+  'dl-lieu': { nom: '+ Ajouter un décor…', faire: () => ajouterDecor() },
+  // une balance hors liste : « 4850 » devient « 4850 K » ; « 5600 K +3 CC » reste tel quel
+  'dl-wb':   { nom: '+ Valeur personnalisée…', faire: () => demanderTexte('Balance des blancs', { aide:'4850 K, 5600 K +3 CC…', im:'text', ok:'Poser' })
+                 .then(v => { v = String(v || '').trim(); return /^\d+$/.test(v) ? v + ' K' : v; }) }
+};
 function ajoutMenu(cle, b){
   const input = b.closest('.spec, .pc').querySelector('input');
   fermerMenu();
@@ -1498,12 +1507,12 @@ const CHAMPS_PLAN = () => [
   CHAMP_SUPPORT(),
   CHAMP_FOCALE('focale', 'Focale prévue')
 ];
-/* Les memes lignes pour une prise. La focale d'arrivee est toujours la : un zoom en cours de
-   prise se note sans changer de mode ; des qu'elle est remplie, l'autre devient « depart ». */
+/* Les memes lignes pour une prise. Focale debut et focale fin : un zoom en cours de prise
+   se note sans changer de mode ; sans zoom, la fin reste vide. */
 const CHAMPS_PRISE = () => [
   CHAMP_METEO(),
-  CHAMP_FOCALE('focale', (prise(openId) || {}).focaleStop ? 'Focale départ' : 'Focale'),
-  CHAMP_FOCALE('focaleStop', 'Focale arrivée'),
+  CHAMP_FOCALE('focale', 'Focale début'),
+  CHAMP_FOCALE('focaleStop', 'Focale fin'),
   CHAMP_MOUV('mouvement'),
   CHAMP_SUPPORT()
 ];
@@ -2623,7 +2632,7 @@ function openPrise(id, y){
       <div class="specs suite">
         ${F(t, 'F-stop / diaph', 'diaph', {ph:'T2.8', refresh:1})}
         ${DUO(t, 'Distance de point', 'focusStart', 'focusStop', '2.40 m')}
-        ${F(t, 'Balance (WB)', 'wb', {dl:'dl-wb'})}
+        ${F(t, 'Balance (WB)', 'wb', {dl:'dl-wb', ph:'5600 K'})}
         ${F(t, 'ISO / EI', 'ei', {ph:'800', im:'numeric'})}
         ${F(t, 'Shutter', 'shutter', {dl:'dl-shut'})}
         ${DUO(t, 'Hauteur', 'hauteurStart', 'hauteurStop', '1.45 m')}
@@ -5701,7 +5710,7 @@ function reprendreAutre(espace, cles){
 const RAP = { sources: [], equipier: [], equipe: !!UI.equipe, tente: false, chargement: false };   // equipe : le bilan porte sur l'equipe ; equipier : chacun des autres sur le serveur, choisi ou non
 const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
   ['tcIn', 'TC in'], ['tcOut', 'TC out'], ['duree', 'Durée'], ['heure', 'Heure'], ['notes', 'Note'], ['focale', 'Focale'],
-  ['focaleStop', 'Focale arrivée'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
+  ['focaleStop', 'Focale fin'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
   ['codec', 'Codec'], ['reso', 'Résolution'], ['fps', 'Cadence'], ['shutter', 'Obturateur'], ['ei', 'EI'], ['wb', 'Balance'],
   ['nd', 'ND'], ['lut', 'LUT'], ['objectif', 'Objectif'], ['filtre', 'Filtres'], ['sonRoll', 'Bande son'], ['sync', 'Synchro'],
   ['sonFile', 'Fichier son']];
@@ -6293,7 +6302,7 @@ function exportCSVDe(kind){
   if (kind === 'prises' || kind === 'montage'){
     const src = kind === 'montage' ? DB.prises.filter(t => t.retenue) : DB.prises;
     head = ['Jour','Séquence','Plan','Prise','Statut','À monter','Clip','Caméra','Modèle caméra','Carte',
-            'TC début','TC fin','Durée','Heure','Météo','Focale','Focale arrivée','Diaph','Map départ','Map arrivée',
+            'TC début','TC fin','Durée','Heure','Météo','Focale début','Focale fin','Diaph','Map départ','Map arrivée',
             'Hauteur départ','Hauteur arrivée','Mesuré depuis','Pan départ','Pan arrivée','Tilt départ','Tilt arrivée','Roll départ','Roll arrivée','Mouvement','Support',
             'Codec','Résolution','Cadence','Obturateur','EI','Balance','ND','LUT','Objectif','Filtres',
             'Bande son','Synchro','Fichier son','Note de prise',
