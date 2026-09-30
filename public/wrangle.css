@@ -564,8 +564,13 @@ nav button i{display:none}
   height:52px;padding:0 22px;border-radius:var(--rp);border:none;
   background:var(--ng);color:var(--ng-txt);
   font-weight:700;font-size:15px;cursor:pointer;
-  display:flex;align-items:center;gap:8px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  /* une largeur fixe : « Moteur … » et « Coupez … » n'ont pas la meme longueur,
+     le bouton ne doit pas changer de taille sous le doigt */
+  width:260px;white-space:nowrap;overflow:hidden;outline:none;
 }
+.fab em{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.fab:focus-visible{box-shadow:0 0 0 3px var(--bg),0 0 0 5px rgba(var(--acc-rgb),.8)}
 .fab:hover{background:var(--ng-g1)}
 .fab:active{background:var(--ng-g2)}
 .fab em{font-style:normal;font-weight:600;opacity:.7;font-size:12.5px}
@@ -575,12 +580,13 @@ nav button i{display:none}
 /* pendant la prise : le bouton respire, lentement et en douceur (pas d'onde qui part) */
 .fab.rec{
   background:var(--ng);color:var(--ng-txt);
-  animation:respire 2s ease-in-out infinite alternate;
+  animation:respire 1.6s ease-in-out infinite alternate;
 }
-/* voulu meme quand le systeme reduit les animations : c'est le signe que ca tourne */
+/* voulu meme quand le systeme reduit les animations : c'est le signe que ca tourne ;
+   franc et doux a la fois : le rouge s'eteint presque, un halo large s'allume */
 @keyframes respire{
-  from{opacity:1;box-shadow:0 0 0 0 rgba(var(--ng-rgb),0)}
-  to{opacity:.6;box-shadow:0 0 22px 4px rgba(var(--ng-rgb),.5)}
+  from{background:var(--ng);box-shadow:0 0 0 0 rgba(var(--ng-rgb),0)}
+  to{background:rgba(var(--ng-rgb),.35);box-shadow:0 0 30px 8px rgba(var(--ng-rgb),.7)}
 }
 .fab.rec:hover{background:var(--ng-g1)}
 .fab.rec em{opacity:.9;font-variant-numeric:tabular-nums}
@@ -1349,7 +1355,7 @@ select option{background:var(--surface);color:var(--txt)}
 }
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 /* sauf la respiration du bouton « Coupez » : c'est le signe que la camera tourne */
-@media (prefers-reduced-motion:reduce){.fabs .fab.rec{animation-duration:2s!important}}
+@media (prefers-reduced-motion:reduce){.fabs .fab.rec{animation-duration:1.6s!important}}
 :focus-visible{outline:2px solid rgba(var(--acc-rgb),.8);outline-offset:2px}
 
 /* =========================================================================
