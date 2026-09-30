@@ -2187,6 +2187,7 @@ function majFicheEnPlace(){
     if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === s)) el.add(new Option(s, s));
     if (el.value !== s){ el.value = s; if (el.classList.contains('auto')) autoHauteur(el); }
   });
+  document.querySelectorAll('#sbody .wb-val').forEach(majCurseurWb);   // le curseur suit la valeur venue d'ailleurs
   if (openType === 'prise'){
     const t = prise(openId);
     $('stitle').textContent = 'Plan ' + (t.plan || '?') + ' · prise ' + t.n;
@@ -2433,6 +2434,19 @@ function clipSuitCarte(t){
   patch('prise', t.id, { clip });
   const i = $('clip-in'); if (i && i !== document.activeElement && i.dataset.o === t.id) i.value = clip;
 }
+/* La balance des blancs au curseur : 2 000 a 11 000 K (la plage de l'ARRI
+   Alexa 35), par pas de 100 K. La valeur se tape aussi a la main, a cote (une
+   valeur exacte, une teinte « 5600 K +3 CC ») ; le curseur la suit. */
+const kelvinDe = v => { const m = String(v || '').match(/\d{4,5}/); return m ? Math.min(11000, Math.max(2000, +m[0])) : 0; };
+function curseurWb(r){
+  const i = r.parentNode.querySelector('.wb-val'); if (!i) return;
+  i.value = r.value + ' K';
+  live(i);
+}
+function majCurseurWb(i){
+  const r = i.parentNode.querySelector('.curseur-wb'), k = kelvinDe(i.value);
+  if (r && k) r.value = k;
+}
 function appliquerClip(id){
   const t = prise(id); const s = t && clipSuivant(t);
   if (!s) return;
@@ -2632,7 +2646,10 @@ function openPrise(id, y){
       <div class="specs suite">
         ${F(t, 'F-stop / diaph', 'diaph', {ph:'T2.8', refresh:1})}
         ${DUO(t, 'Distance de point', 'focusStart', 'focusStop', '2.40 m')}
-        ${F(t, 'Balance (WB)', 'wb', {dl:'dl-wb', ph:'5600 K'})}
+        <div class="spec wb"><label>Balance (WB)</label>
+          <input class="wb-val" ${liaison(t, 'wb', ';majCurseurWb(this)')} value="${esc(t.wb)}" placeholder="5600 K">
+          <input type="range" class="curseur-wb" min="2000" max="11000" step="100" value="${kelvinDe(t.wb) || 5600}"
+            oninput="curseurWb(this)" aria-label="Balance des blancs, en kelvins"></div>
         ${F(t, 'ISO / EI', 'ei', {ph:'800', im:'numeric'})}
         ${F(t, 'Shutter', 'shutter', {dl:'dl-shut'})}
         ${DUO(t, 'Hauteur', 'hauteurStart', 'hauteurStop', '1.45 m')}

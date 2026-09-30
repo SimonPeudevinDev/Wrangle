@@ -1488,3 +1488,14 @@ select option{background:var(--surface);color:var(--txt)}
 .prises-replier i{width:7px;height:7px;border-left:1.5px solid currentColor;border-top:1.5px solid currentColor;transform:rotate(45deg);margin-top:4px}
 .prises-replier:hover{color:var(--txt)}
 .pno-plus{margin-left:.28em}
+
+/* La balance des blancs : la valeur, et un curseur du chaud (orange) au froid (bleu) */
+.spec.wb > input.wb-val{flex:0 0 96px;width:96px}
+.curseur-wb{flex:1;min-width:0;height:30px;margin:0;background:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+.curseur-wb::-webkit-slider-runnable-track{height:6px;border-radius:6px;
+  background:linear-gradient(to right,#ff8a2b,#ffc27a 18%,#fff1dc 40%,#f4f6ff 60%,#bcd3ff 82%,#8fb3ff)}
+.curseur-wb::-moz-range-track{height:6px;border-radius:6px;
+  background:linear-gradient(to right,#ff8a2b,#ffc27a 18%,#fff1dc 40%,#f4f6ff 60%,#bcd3ff 82%,#8fb3ff)}
+.curseur-wb::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;
+  background:var(--bg);border:2px solid var(--txt);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.curseur-wb::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--bg);border:2px solid var(--txt)}
