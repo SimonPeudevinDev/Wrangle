@@ -2050,6 +2050,8 @@ function htmlAccord(t){
          (oui.length ? `<span class="accord oui" title="Même clip et même focale chez ${esc(oui.map(v => v.a.nom).join(', '))}">&#10003; ${oui.map(v => pt(v.a)).join('')}</span>` : '');
 }
 function ligne(t, sansActions){
+  // « non saisie », « saisie differee » : devant les boutons, a leur hauteur
+  const marque = t.pasSaisie ? `<span class="tstat pas non">non saisie</span>` : t.differee ? `<span class="tstat pas diff">saisie différée</span>` : '';
   const map = fleche(t.focusStart, t.focusStop), haut = fleche(t.hauteurStart, t.hauteurStop);
   const ptr = [fleche(t.panStart, t.panStop), fleche(t.tiltStart, t.tiltStop), fleche(t.rollStart, t.rollStop)].filter(Boolean).join(' / ');
   const enCours = chrono && chrono.priseId === t.id;
@@ -2082,11 +2084,11 @@ function ligne(t, sansActions){
         ${t.notes ? `<span class="tnote" title="${esc(t.notes)}">${esc(t.notes)}</span>` : ''}
         ${t.statut && t.statut !== 'OK' && t.statut !== 'NG'
           ? `<span class="tstat">${esc(t.statut)}</span>` : ''}
-        ${t.pasSaisie ? `<span class="tstat pas non">non saisie</span>` : t.differee ? `<span class="tstat pas diff">saisie différée</span>` : ''}
+        ${sansActions ? marque : ''}
       </div>
       ${meta || rel ? `<div class="tmeta">${meta}${rel}</div>` : ''}
     </div>
-    ${sansActions ? '' : `<div class="tact" onclick="event.stopPropagation()">
+    ${sansActions ? '' : `<div class="tact" onclick="event.stopPropagation()">${marque}
       <button class="kp ${t.retenue ? 'on' : ''}" onclick="basculerEtoile('${t.id}')"
         title="Prise à monter" aria-label="Prise à monter">${ICONES.etoile}</button>
       <button class="ok ${t.statut === 'OK' ? 'on' : ''}" onclick="marquer('${t.id}','OK')" title="Bonne" aria-label="Bonne">${ICONES.coche}</button>

@@ -1453,3 +1453,4 @@ select option{background:var(--surface);color:var(--txt)}
 /* les boutons des deux marques, dans la fiche : pleins quand la marque est posee */
 .btn.btn-marque.on{background:var(--surface3);border-color:var(--dim2);color:var(--txt)}
 .btn.btn-marque.diff.on{background:var(--tag-orange);border-color:var(--tag-orange);color:#1f1409}
+.tact .tstat.pas{align-self:center;margin:0 6px 0 0}
