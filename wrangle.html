@@ -99,13 +99,14 @@
       <button type="button" class="ico" onclick="zoomCroquis(1 / 1.25)" aria-label="Réduire" title="Réduire (Ctrl + molette)">&minus;</button>
       <button type="button" class="dzoom" id="dzoom" onclick="zoomCroquis(null)" title="Revenir à la vue entière">100 %</button>
       <button type="button" class="ico" onclick="zoomCroquis(1.25)" aria-label="Agrandir" title="Agrandir (Ctrl + molette)">+</button>
+      <button type="button" class="ico" onclick="pivoterCroquis()" aria-label="Pivoter la feuille" title="Pivoter la feuille d'un quart de tour (la vue seule, le dessin ne bouge pas)">&#8635;</button>
     </div>
-    <button type="button" class="btn sm" onclick="choisirFond()">Plan du décor</button>
+    <button type="button" class="btn sm" onclick="choisirFond()" title="Plan du décor"><span class="long">Plan du décor</span><span class="court">Décor</span></button>
     <button type="button" class="btn sm p" onclick="enregistrerCroquis()">Enregistrer</button>
   </div>
   <div class="dpal" id="dpal"></div>
   <div class="dzone" id="dzone" onwheel="moletteCroquis(event)">
-    <canvas id="croquis" onpointerdown="debutTrait(event)" onpointermove="mouvTrait(event)" onpointerup="finTrait(event)" onpointercancel="finTrait(event)"></canvas>
+    <div id="dpivot"><canvas id="croquis" onpointerdown="debutTrait(event)" onpointermove="mouvTrait(event)" onpointerup="finTrait(event)" onpointercancel="finTrait(event)"></canvas></div>
   </div>
   <div class="doutils" id="doutils"></div>
   <div class="dconseil" id="dconseil"></div>
@@ -676,9 +677,24 @@ if (RESEAU.possible){
 }
 
 /* Modifie des champs d'une fiche : ici tout de suite, chez les autres ensuite. */
+/* Un shot valide (coche verte) est verrouille : ni lui, ni ses prises ne se modifient tant
+   qu'on ne l'a pas rouvert. Seul le decocher passe. */
+function shotDe(kind, id){ return kind === 'plan' ? plan(id) : kind === 'prise' ? (p => p && plan(p.planId))(prise(id)) : null; }
+function verrouille(kind, id, data){
+  const p = shotDe(kind, id);
+  if (!p || !p.termine) return false;
+  if (kind === 'plan' && data && Object.keys(data).every(k => k === 'termine' || k === 'auteurs')) return false;
+  return true;
+}
+function prevenirVerrou(p){
+  toast('Shot ' + ((p && p.plan) || '') + ' validé : décochez-le pour le modifier');
+  // ce qui a ete tape a l'ecran reprend la valeur gardee
+  if (openType === 'plan' || openType === 'prise') setTimeout(rouvrirFiche, 0);
+}
 function patch(kind, id, data){
   const o = kind === 'prod' ? DB.prod : cible(id);
   if (!o) return;
+  if (verrouille(kind, id, data)) return prevenirVerrou(shotDe(kind, id));
   if (kind === 'plan') data = avecAuteurs(o, data);
   Object.assign(o, data);
   save();
@@ -691,7 +707,8 @@ function patch(kind, id, data){
 /* Qui a pose quoi sur un plan. Le plan est partage : ce qu'un seul coche
    arrive chez tout le monde ; la fiche ne montre la pastille que de celui qui
    l'a coche ou change (p.auteurs : { 'el:hdri': 'Romain', etat: 'Simon' }). */
-const AUTEURS_SUIVIS = ['etat', 'meteo'];
+// l'etat, et tout le contexte du shot : chaque champ garde le nom de qui l'a saisi
+const AUTEURS_SUIVIS = ['etat', 'meteo', 'lieu', 'intExt', 'momentJour', 'acteurs', 'figu', 'cadrage', 'mouv', 'support', 'focale', 'duree'];
 function avecAuteurs(o, data){
   if (!UI.nom || 'auteurs' in data) return data;
   const au = Object.assign({}, o.auteurs || {});
@@ -1371,6 +1388,7 @@ const LISTES = {
                            connus(DB.prises, 'wb')),
   // l'Alexa 35 enregistre en LogC4 ; le look sur le retour
   'dl-sync':  () => ['Clap', 'Jam TC', 'MOS / muet'],
+  'dl-prio':  () => ['1', '2', '3', '4', '5'],
   'dl-lut':   () => fusion(['Aucune (LogC4)', 'ARRI LogC4 to Gamma24 Rec709 D65 v1', 'ARRI Rec 709', 'Rec 2100 PQ (HDR)', 'Rec 2100 HLG (HDR)', 'Show LUT'], connus(DB.prises, 'lut')),
   // la serie du tournage seule ; une autre optique passe par « + Custom… » et revient ensuite dans le menu
   'dl-obj':   () => fusion(['Sigma Classic Prime'], connus(DB.prises, 'objectif')),
@@ -1409,6 +1427,7 @@ function ouvrirMenu(btn){
 /* Une explication a cote d'un choix du menu, sans toucher a la valeur notee */
 const INDICES_MENU = {
   'dl-nd': { 'Aucun':'pas de filtre', '0.6':'2 diaphs de moins', '1.2':'4 diaphs de moins', '1.8':'6 diaphs de moins' },
+  'dl-prio': { '1':'la plus haute', '2':'haute', '3':'moyenne', '4':'basse', '5':'la plus basse' },
   'dl-sync': { 'Clap':'le clap à l’image', 'Jam TC':'timecode partagé caméra / son', 'MOS / muet':'sans son' }
 };
 function fermerMenu(){
@@ -2097,10 +2116,18 @@ function calerPrises(racine){
    notee est sur un autre shot. Le shot qu'on tourne encore ne le dit pas. */
 /* Un shot termine (toutes ses prises faites) : coche sur sa carte, pour toute l'equipe ; son nom passe au vert. */
 const ICO_FINI = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+/* Le bandeau d'un shot valide, en tete de sa fiche et de celles de ses prises */
+const bandeauVerrou = p => p && p.termine ? `<div class="verrou-shot">${ICO_FINI}<span>Shot validé : il ne se modifie plus.</span>
+  <button type="button" class="btn sm" onclick="terminerShot('${p.id}')">Rouvrir le shot</button></div>` : '';
 /* Valider un shot demande confirmation (la double validation) ; le rouvrir, non. */
 function terminerShot(id){
   const p = plan(id); if (!p) return;
-  const appliquer = v => { patch('plan', id, { termine: v }); renderList(); toast('Shot ' + (p.plan || '') + (v ? ' validé : terminé' : ' rouvert')); };
+  const appliquer = v => {
+    patch('plan', id, { termine: v });
+    if (v && UI.vise === id){ UI.vise = null; ecrireUI(); }   // un shot valide ne se tourne plus
+    renderList(); if (openType === 'plan' || openType === 'prise') rouvrirFiche();
+    toast('Shot ' + (p.plan || '') + (v ? ' validé : verrouillé' : ' rouvert'));
+  };
   if (p.termine) return appliquer(false);
   confirmer('Valider le shot ' + (p.plan || 'sans n°') + ' ?', { detail: 'Toutes ses prises sont faites : il passe en vert, pour toute l’équipe.', ok: 'Valider' })
     .then(oui => { if (oui && plan(id)) appliquer(true); });
@@ -2149,22 +2176,22 @@ function blocPlan(p, seulementRetenues, qui){
     (p.acteurs || []).length && `<span>${esc(p.acteurs.join(', '))}</span>`,
     p.figu && `<span>Figuration</span>`,
     p.focale && `<span>${esc(p.focale)}</span>`,
-    p.duree && `<span>${esc(p.duree)}</span>`,
+    (d => d && `<span title="${d.prevue ? 'Durée prévue' : 'Durée de la prise ' + esc(d.prise)}">${esc(d.v)}${d.prevue ? ' prévus' : ''}</span>`)(dureeShot(p)),
     p.intExt && `<span>${esc(p.intExt)}</span>`,
     p.momentJour && `<span>${esc(p.momentJour)}</span>`
   ].filter(Boolean).join('');
 
-  return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}${p.termine ? ' termine' : ''}" data-id="${p.id}">
+  return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}${p.termine ? ' termine' : ''}${p.fusionDans ? ' fusionne' : ''}" data-id="${p.id}">
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
         <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}${plusFusion(p)}</span>${
           p.termine ? '<span class="ptourne">Terminé</span>' : estTourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
-          ${estTourne(p) || p.termine ? `<button type="button" class="fini${p.termine ? ' on' : ''}" onclick="event.stopPropagation();terminerShot('${p.id}')"
+          <span class="pactions">${estTourne(p) || p.termine ? `<button type="button" class="fini${p.termine ? ' on' : ''}" onclick="event.stopPropagation();terminerShot('${p.id}')"
             title="${p.termine ? 'Shot terminé : toucher pour le rouvrir' : 'Marquer le shot terminé, pour toute l’équipe'}" aria-pressed="${!!p.termine}"
             aria-label="Shot terminé">${ICO_FINI}</button>` : ''}
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
-            title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
+            title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></span></div>
         ${p.desc ? `<div class="pdesc">${esc(p.desc)}</div>` : ''}
         ${ctx ? `<div class="pctx">${ctx}</div>` : ''}
         ${el ? `<div class="pelem">${el}</div>` : ''}
@@ -2354,6 +2381,20 @@ function majFab(){
 /* --------------------------------------------------------------- Chrono */
 
 const fmtDuree = s => s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + deuxCh(s % 60) + 's';
+function secondesDe(d){
+  const v = String(d || '').trim().toLowerCase(); if (!v) return null;
+  let m = v.match(/^(\d+)\s*m\s*(\d+)\s*s?$/); if (m) return +m[1] * 60 + +m[2];
+  m = v.match(/^(\d+):(\d{2})$/); if (m) return +m[1] * 60 + +m[2];
+  m = v.match(/^(\d+)\s*s?$/); if (m) return +m[1];
+  return null;
+}
+/* La duree d'un shot : celle de sa prise a monter, sinon de sa derniere prise chronometree ;
+   a defaut, la duree prevue en Preparation */
+function dureeShot(p){
+  const pr = prisesDe(p.id).filter(t => String(t.duree || '').trim());
+  const t = pr.filter(x => x.retenue).pop() || pr.pop();
+  return t ? { v: t.duree, prise: t.n } : p.duree ? { v: p.duree, prevue: true } : null;
+}
 const fmtChrono = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return deuxCh(Math.floor(s / 60)) + ':' + deuxCh(s % 60); };
 
 /* Le plan vise : celui que le Moteur et + Prise vont tourner. L'anneau d'une
@@ -2375,6 +2416,7 @@ function planVise(){
    meme si celui du dessus se replie. `garder` : viser sans basculer. */
 function viser(id, garder){
   if (!plan(id)) return;
+  if (plan(id).termine && UI.vise !== id) return prevenirVerrou(plan(id));
   const avant = document.querySelector('#l-shoot .plan[data-id="' + id + '"]');
   const y0 = avant ? avant.getBoundingClientRect().top : null;
   UI.vise = UI.vise === id && !garder ? null : id; ecrireUI();
@@ -2475,6 +2517,7 @@ function nouvellePrise(){
    plan au meme moment, le serveur tranche et le numero est corrige. */
 function ajouterPrise(planId, ouvrir, extra){
   const p = plan(planId); if (!p) return null;
+  if (p.termine){ prevenirVerrou(p); return null; }
   const sœurs = prisesDe(planId);
   const modele = sœurs[sœurs.length - 1] || DB.prises[DB.prises.length - 1];
   const n = sœurs.reduce((m, x) => Math.max(m, x.n || 0), 0) + 1;
@@ -2519,6 +2562,26 @@ function ajouterPrise(planId, ouvrir, extra){
 
 /* Le nom du clip qui suit le dernier clip saisi : A001C003 devient A001C004.
    Une suggestion a verifier sur la camera, jamais remplie d'office. */
+/* Le fantome du clip : pendant la saisie, la suite du nom attendu en gris (« A_0001C0 » → « 002 ») ;
+   si le debut tape s'en ecarte, seulement la forme (des zeros) pour savoir combien de chiffres mettre.
+   Tab ou → au bout du texte reprennent la suggestion. */
+function majFantome(i){
+  const f = i && i.parentNode.querySelector('.fantome'); if (!f) return;
+  const sug = i.dataset.sug || '', v = i.value || '';
+  let reste = '';
+  if (v && sug){
+    if (sug.toUpperCase().startsWith(v.toUpperCase())) reste = sug.slice(v.length);
+    else { const forme = sug.replace(/\d/g, '0'); if (v.length < forme.length) reste = forme.slice(v.length); }
+  }
+  f.innerHTML = reste ? `<i>${esc(v)}</i>${esc(reste)}` : '';
+}
+document.addEventListener('input', e => { if (e.target && e.target.id === 'clip-in') majFantome(e.target); });
+document.addEventListener('keydown', e => {
+  const i = e.target; if (!i || i.id !== 'clip-in' || (e.key !== 'Tab' && e.key !== 'ArrowRight')) return;
+  const sug = i.dataset.sug || '', v = i.value || '';
+  if (!v || !sug || v.length >= sug.length || i.selectionStart !== v.length || !sug.toUpperCase().startsWith(v.toUpperCase())) return;
+  e.preventDefault(); i.value = sug; live(i); majFantome(i);
+});
 function clipSuivant(t){
   const autres = DB.prises.filter(x => x.id !== t.id && x.clip);
   const memeCam = t.cam ? autres.filter(x => x.cam === t.cam) : [];
@@ -2732,7 +2795,7 @@ function openPrise(id, y){
     ['Shot ' + (t.plan || '?'), p && ('Séq ' + p.seq), t.jour && nomJour(t.jour), p && p.lieu].filter(Boolean).join(' · ');
   majNavPrise();
 
-  $('sbody').innerHTML = `
+  $('sbody').innerHTML = bandeauVerrou(p) + `
     ${p ? `<a class="fplan" href="#" onclick="event.preventDefault();openPlan('${p.id}')">
       <span class="ftxt">
         <span class="fdesc">${esc(p.desc || 'Shot ' + (p.plan || ''))}</span>
@@ -2754,8 +2817,9 @@ function openPrise(id, y){
       <div class="clip-duo">
         <div class="clip-col"><div class="clip">
           <div class="clip-ligne"><label for="clip-in">Clip</label></div>
-          <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1"
+          <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1" data-sug="${esc(sug || '')}"
             value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C007')}" autocapitalize="characters" autocomplete="off">
+          <span class="fantome" aria-hidden="true"></span>
         </div></div>
         <div class="clip-col"><div class="clip">
           <div class="clip-ligne"><label for="carte-in">Carte</label></div>
@@ -3087,6 +3151,9 @@ function htmlPtags(p){
         onclick="event.stopPropagation();menuTag(this, '${p.id}')">${g[0]}</button>`);
   });
   tags.filter(t => rangTag(t) === 9).forEach(t => out.push(`<span class="ptag">${esc(t)}</span>`));
+  // la priorite du shot (1 la plus haute, 5 la plus basse), reglee en Preparation
+  const pr = String(p.prio || '').trim();
+  if (/^[1-5]$/.test(pr)) out.push(`<span class="ptag prio p${pr}" title="Priorité ${pr} sur 5">P${pr}</span>`);
   return out.join('');
 }
 /* Le petit menu sous la puce : les etiquettes de sa famille, celle en place cochee. */
@@ -3348,6 +3415,7 @@ function ouvrirCroquis(id, i){
   i = i == null ? croquisVu(p) : i;
   chargerImage(fondDecor(lieuFond(p))).catch(() => null).then(img => {
     dessin = etatCroquis(p, img, i);
+    dessin.rot = UI.rotCroquis || 0;   // le sens de la feuille choisi sur cet appareil
     envoyerPresence(); majDejaCroquis();
     { const l = quiDessine(p.id); if (l.length) toast(texteDessine(l) + ' : le dernier enregistré l’emporte'); }
     // l'editeur a sa marque dans l'historique : le Retour du telephone le ferme (en enregistrant), pas la fiche
@@ -3418,19 +3486,23 @@ function fermerCroquis(enregistrer){
 /* ancre : un point de l'ecran (clientX/Y) qui doit rester sous le doigt apres le zoom */
 function tailleCroquis(ancre){
   if (!dessin) return;
-  const c = $('croquis'), zone = $('dzone'), z = zone.getBoundingClientRect();
-  const fit = Math.min((z.width - 24) / dessin.w, (z.height - 24) / dessin.h), k = fit * (dessin.zoom || 1);
+  const c = $('croquis'), zone = $('dzone'), z = zone.getBoundingClientRect(), rot = dessin.rot || 0, debout = rot % 180 !== 0;
+  // la feuille tournee d'un quart de tour echange sa largeur et sa hauteur a l'ecran
+  const lw = debout ? dessin.h : dessin.w, lh = debout ? dessin.w : dessin.h;
+  const fit = Math.min((z.width - 24) / lw, (z.height - 24) / lh), k = fit * (dessin.zoom || 1);
   let fx = .5, fy = .5, sx = z.width / 2, sy = z.height / 2;
   if (ancre){
-    const r = c.getBoundingClientRect();
+    const r = $('dpivot').getBoundingClientRect();
     fx = ancre.fx != null ? ancre.fx : (ancre.x - r.left) / r.width; fy = ancre.fy != null ? ancre.fy : (ancre.y - r.top) / r.height;
     sx = ancre.x - z.left; sy = ancre.y - z.top;
   }
   c.width = dessin.w; c.height = dessin.h;
-  const cw = Math.floor(dessin.w * k), ch = Math.floor(dessin.h * k);
+  const cw = Math.floor(dessin.w * k), ch = Math.floor(dessin.h * k), dw = debout ? ch : cw, dh = debout ? cw : ch;
   c.style.width = cw + 'px'; c.style.height = ch + 'px';
+  const pv = $('dpivot'); pv.style.width = dw + 'px'; pv.style.height = dh + 'px';
+  c.style.left = (dw - cw) / 2 + 'px'; c.style.top = (dh - ch) / 2 + 'px'; c.style.transform = rot ? 'rotate(' + rot + 'deg)' : '';
   // le canevas commence a 12 px du bord de la zone quand il deborde
-  zone.scrollLeft = Math.max(0, fx * cw + 12 - sx); zone.scrollTop = Math.max(0, fy * ch + 12 - sy);
+  zone.scrollLeft = Math.max(0, fx * dw + 12 - sx); zone.scrollTop = Math.max(0, fy * dh + 12 - sy);
   const e = $('dzoom'); if (e) e.textContent = Math.round((dessin.zoom || 1) * 100) + ' %';
   rendreCroquis();
 }
@@ -3444,7 +3516,7 @@ function moletteCroquis(e){
   if (!dessin) return;
   if (e.ctrlKey || e.metaKey){ e.preventDefault(); zoomCroquis(e.deltaY < 0 ? 1.15 : 1 / 1.15, { x:e.clientX, y:e.clientY }); return; }
   const o = dessin.selection;
-  if (dessin.outil === 'move' && o && OBJ_POSE.includes(o.t)){
+  if (dessin.outil === 'move' && o && (OBJ_POSE.includes(o.t) || o.t === 'txt' || (OBJ_RECT.includes(o.t) && !e.shiftKey))){
     e.preventDefault();
     souvenir('molette' + o.n);
     // Maj + molette : la taille ; la molette seule : l'orientation
@@ -3459,7 +3531,7 @@ let pince = null;
 function doigtPose(e){
   doigts.set(e.pointerId, { x:e.clientX, y:e.clientY });
   if (doigts.size === 2 && dessin){
-    const [a, b] = [...doigts.values()], r = $('croquis').getBoundingClientRect();
+    const [a, b] = [...doigts.values()], r = $('dpivot').getBoundingClientRect();
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     // on garde sous les deux doigts le point du croquis qu'ils tenaient : pincer zoome, glisser deplace
     pince = { d0: Math.hypot(a.x - b.x, a.y - b.y), z0: dessin.zoom || 1, fx: (mx - r.left) / r.width, fy: (my - r.top) / r.height };
@@ -3490,16 +3562,18 @@ function dessinerObjet(g, o, k, u){
   g.save();
   if (o.t === 'bloc'){
     // un rectangle tire coin a coin : praticable, caisse, meuble
-    const x = Math.min(o.x1, o.x2), y = Math.min(o.y1, o.y2), w = Math.abs(o.x2 - o.x1), h = Math.abs(o.y2 - o.y1);
+    // tourne autour de son centre (o.a), comme une camera
+    const w = Math.abs(o.x2 - o.x1), h = Math.abs(o.y2 - o.y1);
+    g.translate(X((o.x1 + o.x2) / 2), Y((o.y1 + o.y2) / 2)); g.rotate(o.a || 0);
     // le contour de la couleur choisie, l'interieur de la meme couleur, translucide
     g.fillStyle = g.strokeStyle = o.c || '#3a3330'; g.lineWidth = 4 * u; g.lineJoin = 'miter';
-    g.globalAlpha = .18; g.fillRect(X(x), Y(y), X(w), Y(h));
-    g.globalAlpha = 1; g.strokeRect(X(x), Y(y), X(w), Y(h));
+    g.globalAlpha = .18; g.fillRect(-X(w) / 2, -Y(h) / 2, X(w), Y(h));
+    g.globalAlpha = 1; g.strokeRect(-X(w) / 2, -Y(h) / 2, X(w), Y(h));
   } else if (o.t === 'rond'){
     // un rond (ou un ovale) inscrit dans le rectangle tire : table ronde, tapis, zone
     const cx = X((o.x1 + o.x2) / 2), cy = Y((o.y1 + o.y2) / 2), rx = Math.abs(X(o.x2 - o.x1)) / 2, ry = Math.abs(Y(o.y2 - o.y1)) / 2;
     g.fillStyle = g.strokeStyle = o.c || '#3a3330'; g.lineWidth = 4 * u;
-    g.beginPath(); g.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
+    g.beginPath(); g.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), o.a || 0, 0, Math.PI * 2);
     g.globalAlpha = .18; g.fill(); g.globalAlpha = 1; g.stroke();
   } else if (o.t === 'fleche'){
     // un deplacement : un trait en pointille long, une pointe a l'arrivee ; courbe,
@@ -3569,10 +3643,12 @@ function dessinerObjet(g, o, k, u){
       g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
     }
   } else if (o.t === 'txt'){
+    // tourne (o.a) et grossit (o.s) autour de son debut, comme un objet pose
+    g.translate(X(o.x), Y(o.y)); g.rotate(o.a || 0); if (o.s && o.s !== 1) g.scale(o.s, o.s);
     g.font = '700 ' + Math.round(40 * u) + 'px Figtree, "Segoe UI", sans-serif';
     g.textBaseline = 'middle'; g.lineJoin = 'round';
-    g.lineWidth = 8 * u; g.strokeStyle = 'rgba(255,255,255,.9)'; g.strokeText(o.txt, X(o.x), Y(o.y));
-    g.fillStyle = o.c || '#1c1410'; g.fillText(o.txt, X(o.x), Y(o.y));
+    g.lineWidth = 8 * u; g.strokeStyle = 'rgba(255,255,255,.9)'; g.strokeText(o.txt, 0, 0);
+    g.fillStyle = o.c || '#1c1410'; g.fillText(o.txt, 0, 0);
   } else {
     g.translate(X(o.x), Y(o.y)); g.rotate(o.a || 0);
     if (o.s && o.s !== 1) g.scale(o.s, o.s);   // sa taille, choisie a la poignee carree
@@ -3684,11 +3760,21 @@ function rendreCroquis(cv){
 /* Les poignees de l'objet saisi : un anneau au bout d'un bras pour tourner ce qui
    s'oriente, un anneau a chaque bout pour ce qui se tire d'un point a l'autre. */
 // le bras de rotation : juste au-dela du champ de la camera, du cone de la lumiere, du personnage
+/* la largeur d'un texte du croquis, a sa taille d'origine (police de 40 sur une feuille de 1600) */
+const MESURE_TXT = document.createElement('canvas').getContext('2d');
+function largeurTexte(t){ MESURE_TXT.font = '700 40px Figtree, "Segoe UI", sans-serif'; return MESURE_TXT.measureText(String(t || '')).width; }
+/* le centre d'un objet : son point pour ce qui se pose, le milieu pour un bloc ou un rond */
+const centreObjet = o => OBJ_RECT.includes(o.t) ? [(o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2] : [o.x, o.y];
 const BRAS = { cam:215, chrono:85, lum:200, soleil:200, perso:70 };
 /* la poignee carree de la taille : de cote, a cette distance de l'objet (a sa taille d'origine) */
-const PORTEE_TAILLE = { cam:60, chrono:55, lum:60, soleil:60, perso:55, table:85, chaise:40 };
+const PORTEE_TAILLE = { txt:50, cam:60, chrono:55, lum:60, soleil:60, perso:55, table:85, chaise:40 };
 const TAILLE_MIN = .3, TAILLE_MAX = 4;
 function poigneesDe(o){
+  if (o.t === 'txt'){
+    const u = dessin.w / 1600, s = o.s || 1, a = o.a || 0, l = (largeurTexte(o.txt) + 40) * u * s, t = 50 * u * s, b = a - 3 * Math.PI / 4;
+    return [{ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l, rot:true },
+            { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
+  }
   if (OBJ_POSE.includes(o.t)){
     const u = dessin.w / 1600, s = o.s || 1, l = (BRAS[o.t] || 80) * u * s, a = o.a || 0, t = (PORTEE_TAILLE[o.t] || 60) * u * s;
     // le carre de la taille : en haut a droite a l'ecran (le nom d'un personnage est dessous),
@@ -3697,6 +3783,11 @@ function poigneesDe(o){
     const b = ecart < Math.PI / 4 ? -3 * Math.PI / 4 : -Math.PI / 4;
     return [{ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l, rot:true },
             { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
+  }
+  if (OBJ_RECT.includes(o.t)){
+    // un bloc, un rond : l'anneau au bout d'un bras, juste au-dela de son bord
+    const [cx, cy] = centreObjet(o), l = Math.max(Math.abs(o.x2 - o.x1), Math.abs(o.y2 - o.y1)) / 2 + 45 * dessin.w / 1600, a = o.a || 0;
+    return [{ x: cx + Math.cos(a) * l, y: cy + Math.sin(a) * l, rot:true }];
   }
   if (OBJ_SEG.includes(o.t)) return [{ x: o.x1, y: o.y1, bout:1 }, { x: o.x2, y: o.y2, bout:2 }]
     .concat(o.t === 'fleche' ? [Object.assign({ courbe:true }, milieuFleche(o))] : []);
@@ -3744,13 +3835,13 @@ function pointsFleche(o){
   return l;
 }
 /* unites de feuille par pixel d'ecran : les poignees gardent leur taille sous le doigt, quel que soit le zoom */
-function parPixel(){ const r = $('croquis').getBoundingClientRect(); return r.width ? dessin.w / r.width : 1; }
+function parPixel(){ const w = $('croquis').offsetWidth; return w ? dessin.w / w : 1; }
 function dessinerPoignees(g, o, k){
   const px = parPixel();
   g.save();
   g.setLineDash([]); g.lineWidth = 2 * px * k; g.strokeStyle = '#e7b04a'; g.fillStyle = '#fff';
   poigneesDe(o).forEach(p => {
-    if (p.rot){ g.setLineDash([5 * px * k, 5 * px * k]); g.beginPath(); g.moveTo(o.x * k, o.y * k); g.lineTo(p.x * k, p.y * k); g.stroke(); g.setLineDash([]); }
+    if (p.rot){ const [cx, cy] = centreObjet(o); g.setLineDash([5 * px * k, 5 * px * k]); g.beginPath(); g.moveTo(cx * k, cy * k); g.lineTo(p.x * k, p.y * k); g.stroke(); g.setLineDash([]); }
     // la poignee qui courbe la fleche est pleine : on la distingue des deux bouts ; celle de la taille est carree
     g.fillStyle = p.courbe || p.taille ? '#e7b04a' : '#fff';
     if (p.taille){ const c = 8 * px * k; g.fillRect(p.x * k - c, p.y * k - c, 2 * c, 2 * c); g.strokeStyle = '#fff'; g.strokeRect(p.x * k - c, p.y * k - c, 2 * c, 2 * c); g.strokeStyle = '#e7b04a'; return; }
@@ -3764,8 +3855,16 @@ function poigneeSous(pt){
   return poigneesDe(o).find(p => Math.hypot(p.x - pt[0], p.y - pt[1]) <= r) || null;
 }
 function pointCroquis(e){
-  const r = $('croquis').getBoundingClientRect();
-  return [Math.round((e.clientX - r.left) / r.width * dessin.w), Math.round((e.clientY - r.top) / r.height * dessin.h)];
+  const r = $('dpivot').getBoundingClientRect(), u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
+  const [a, b] = ({ 90: [v, 1 - u], 180: [1 - u, 1 - v], 270: [1 - v, u] })[dessin.rot || 0] || [u, v];
+  return [Math.round(a * dessin.w), Math.round(b * dessin.h)];
+}
+/* Pivoter la feuille d'un quart de tour : la vue seule (le dessin garde son sens) ; l'appareil s'en souvient. */
+function pivoterCroquis(){
+  if (!dessin) return;
+  dessin.rot = ((dessin.rot || 0) + 90) % 360;
+  UI.rotCroquis = dessin.rot; ecrireUI();
+  tailleCroquis();
 }
 const estObjet = o => OBJ_POSE.includes(o) || OBJ_SEG.includes(o) || OBJ_RECT.includes(o) || OBJ_TRACE.includes(o) || o === 'txt';
 function debutTrait(e){
@@ -3844,7 +3943,7 @@ function mouvTrait(e){
   e.preventDefault();
   const pt = pointCroquis(e), c = dessin.courant;
   if (c && c.tourne){
-    const o = c.tourne, a0 = Math.atan2(pt[1] - o.y, pt[0] - o.x), a = e.altKey ? a0 : aimanterAngle(a0);
+    const o = c.tourne, [cx, cy] = centreObjet(o), a0 = Math.atan2(pt[1] - cy, pt[0] - cx), a = e.altKey ? a0 : aimanterAngle(a0);
     if (a === (o.a || 0)) return;
     retenir(c); o.a = a; c.deplace = true; rendreCroquis(); return;
   }
@@ -3956,7 +4055,17 @@ function touche(pt, o){
   if (OBJ_TRACE.includes(o.t)) return (o.pts || []).slice(1).some((q, i) => distSeg(pt, o.pts[i], q) <= r);
   if (o.t === 'fleche' && o.mx != null){ const l = pointsFleche(o); return l.slice(1).some((q, i) => distSeg(pt, l[i], q) <= r); }
   if (OBJ_SEG.includes(o.t)) return distSeg(pt, [o.x1, o.y1], [o.x2, o.y2]) <= r;
-  if (OBJ_RECT.includes(o.t)) return pt[0] >= Math.min(o.x1, o.x2) - r && pt[0] <= Math.max(o.x1, o.x2) + r && pt[1] >= Math.min(o.y1, o.y2) - r && pt[1] <= Math.max(o.y1, o.y2) + r;
+  if (OBJ_RECT.includes(o.t)){
+    const [cx, cy] = centreObjet(o), a = -(o.a || 0), dx = pt[0] - cx, dy = pt[1] - cy;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    return Math.abs(lx) <= Math.abs(o.x2 - o.x1) / 2 + r && Math.abs(ly) <= Math.abs(o.y2 - o.y1) / 2 + r;
+  }
+  if (o.t === 'txt'){
+    // tout le texte se touche, meme tourne : le point ramene dans son sens de lecture
+    const sc = o.s || 1, a = -(o.a || 0), dx = pt[0] - o.x, dy = pt[1] - o.y;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    return lx >= -r && lx <= largeurTexte(o.txt) * u * sc + r && Math.abs(ly) <= 26 * u * sc + r / 2;
+  }
   const port = { txt:60, table:90, chaise:36, cam:44, chrono:44, lum:44, perso:46 }[o.t] || 44;
   return Math.hypot(o.x - pt[0], o.y - pt[1]) <= port * u * (o.s || 1);
 }
@@ -4210,6 +4319,8 @@ function openPlan(id, y){
   // la fenetre des prises : on la retrouve ou elle etait si la fiche se redessine (y), au debut si on l'ouvre
   if (y == null){
     delete defilPrises['fiche:' + id]; choixFondOuvert = false;
+    // « Jour, numero, sequence » s'ouvre replie a chaque fiche ; ouvert, il le reste tant qu'on y travaille
+    delete UI.plie.preperes;
     // le contexte s'ouvre sur la premiere case d'ambiance encore vide : il n'y a plus qu'a toucher
     champOuvert = AMBIANCE.find(a => !p[a]) || ''; champSaisie = false;
   } else memoDefilPrises('#fiche-prises');
@@ -4227,7 +4338,7 @@ function openPlan(id, y){
     [p.jour && nomJour(p.jour), 'Séquence ' + (p.seq || ''), p.seqTitre].filter(Boolean).join(' · ');
   majNavPlan();
 
-  $('sbody').innerHTML = `
+  $('sbody').innerHTML = bandeauVerrou(p) + `
     <div class="bandeau">
       <div class="btxt">
         <div class="fiche-tete"><div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div></div>
@@ -4280,9 +4391,9 @@ function openPlan(id, y){
     ${sectionFiche('preperes', 'Jour, numéro, séquence', p, `
       <div class="specs">
         ${F(p, 'Jour', 'jour', {dl:'dl-jour', ph:'J1', refresh:1, cap:'characters'})}
-        ${F(p, 'N° de plan', 'plan', {refresh:1})}
+        ${F(p, 'N° de shot', 'plan', {refresh:1})}
         ${F(p, 'Séquence', 'seq', {refresh:1, dl:'dl-seq'})}
-      </div>`)}
+      </div>`, true)}
 
     <div class="sec">
       <h3>État</h3>
@@ -4371,6 +4482,7 @@ function supprimerPlan(p){
 }
 /* Demande confirmation, supprime, propose Annuler. Tient vrai si c'est fait. */
 function supprimerPlanConfirme(p){
+  if (p.termine){ prevenirVerrou(p); return Promise.resolve(false); }
   const pr = prisesDe(p.id);
   return confirmer('Supprimer le shot ' + (p.plan || 'sans n°') + (pr.length ? ' et ses ' + pr.length + ' prise(s)' : '') + ' ?',
                    { ok:'Supprimer', danger:true }).then(oui => {
@@ -4498,6 +4610,7 @@ function rangPrep(p){
         ${champPrep(p, 'seq', 'Séq', {cls:'w-seq', ph:'01', dl:'dl-seq'})}
         ${champPrep(p, 'plan', 'Shot', {cls:'w-num', ph:'05', cap:'characters'})}
         ${champPrep(p, 'jour', 'Jour', {cls:'w-jour', ph:'J1', dl:'dl-jour', cap:'characters'})}
+        ${champPrep(p, 'prio', 'Prio', {cls:'w-prio', ph:'—', dl:'dl-prio', im:'numeric'})}
         ${champPrep(p, 'lieu', 'Décor', {cls:'w-lieu', ph:'Royal Academy', dl:'dl-lieu'})}
         ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
         <div class="haut">
@@ -6499,6 +6612,13 @@ function decorerPlan(sb, p){
     .map(n => ({ a: personneA2(n), el: elementsDe(p, n, false) }));
   sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!mes[b.dataset.el], autres.filter(x => x.el[b.dataset.el]).map(x => x.a)));
   sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
+  // le contexte du shot est commun : chaque ligne porte le rond de qui l'a saisie, si ce n'est pas soi
+  sb.querySelectorAll('.champ[data-champ]').forEach(c => {
+    const nom = c.querySelector('.champ-nom'); if (!nom) return;
+    nom.querySelectorAll('.a2-pt.auteur').forEach(x => x.remove());
+    const k = c.dataset.champ, qui = de(k).concat(k === 'acteurs' && !de(k).length ? de('figu') : []);
+    if (qui.length) nom.insertAdjacentHTML('beforeend', ' ' + pastilleA2(qui[0]).replace('class="a2-pt"', 'class="a2-pt auteur" title="Saisi par ' + esc(qui[0].nom) + '"'));
+  });
   // mon texte a moi porte aussi mon rond, des qu'il est rempli : on voit qui a ecrit quoi
   sb.querySelectorAll('.spec > .a2-pt.moi').forEach(x => x.remove());
   if (UI.nom) sb.querySelectorAll('.spec [data-k*="@"]').forEach(el => {
@@ -6670,6 +6790,12 @@ function fusionRap(sources){
         if (ha != null && hb != null && ha !== hb && Math.abs(ha - hb) <= 10){
           const v = Math.round((ha + hb) / 2);
           tb.heure = String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+        }
+        // deux chronos de la meme prise : leur moyenne
+        const da = secondesDe(tb.duree), db = secondesDe(t.duree);
+        if (da != null && db != null && da !== db){
+          tb.nDurees = (tb.nDurees || 1) + 1;
+          tb.duree = fmtDuree(Math.round((da * (tb.nDurees - 1) + db) / tb.nDurees));
         }
         if (t.par && (tb.par || '').split(', ').indexOf(t.par) < 0) tb.par = tb.par ? tb.par + ', ' + t.par : t.par;
         combler(tb, t, ['id', 'planId', 'ecarts']);

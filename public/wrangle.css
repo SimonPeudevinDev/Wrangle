@@ -636,7 +636,7 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 }
 .pchamps{min-width:0;display:flex;flex-direction:column;gap:12px}
 .pl{display:grid;gap:0 14px;align-items:end}
-.pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) minmax(0,1.4fr) auto}
+.pl1{grid-template-columns:56px 78px 68px 78px 64px minmax(0,1fr) minmax(0,1.4fr) auto}
 .pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px 236px}   /* le cadrage peut en porter plusieurs ; la distribution ferme la ligne */
 /* la ligne VFX : la description sous la description, le mouvement sous le cadrage, « On set » au bout */
 .pl3{grid-template-columns:minmax(0,1fr) 176px 104px 60px 236px}
@@ -693,7 +693,7 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .pmove:hover{color:var(--txt);border-color:var(--txt)}
 #l-prep .jour{margin-bottom:16px}
 @media(max-width:1200px){
-  .pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) auto}
+  .pl1{grid-template-columns:56px 78px 68px 78px 64px minmax(0,1fr) auto}
   .pl1 .w-flex{grid-column:1 / -1}
   .pl2,.pl3{grid-template-columns:minmax(0,1fr) 124px 96px 56px 200px}
 }
@@ -787,10 +787,11 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .doutils .btn.sm svg{width:15px;height:15px;margin-right:5px}
 @media(max-width:900px){
   .voile-dessin{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto}
-  /* sur telephone : le canevas d'abord, la bande d'objets sous lui, puis les outils */
+  /* sur telephone : le canevas d'abord, les outils sous lui (crayon, deplacer, main, gomme, annuler),
+     puis la bande d'objets (camera… fond vert…) */
   .voile-dessin > .dzone{grid-row:2}
-  .voile-dessin > .dpal{grid-row:3}
-  .voile-dessin > .doutils{grid-row:4}
+  .voile-dessin > .doutils{grid-row:3}
+  .voile-dessin > .dpal{grid-row:4}
   .voile-dessin > .dconseil{grid-row:5}
   .dpal{flex-direction:row;gap:6px;padding:8px 12px;border-right:none;border-top:1px solid var(--line2);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
   .dpal::-webkit-scrollbar{display:none}
@@ -807,7 +808,8 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .deja[hidden],.croq-deja[hidden]{display:none}
 /* la zone defile quand le croquis est zoome ; centre tant qu'il tient */
 .dzone{min-height:0;min-width:0;display:flex;padding:12px;background:var(--surface);touch-action:none;overflow:auto;overscroll-behavior:contain}
-#croquis{display:block;flex:none;margin:auto;background:#fff;border-radius:4px;box-shadow:0 12px 34px rgba(0,0,0,.45);touch-action:none;cursor:crosshair}
+#dpivot{position:relative;flex:none;margin:auto}
+#croquis{display:block;position:absolute;transform-origin:center center;background:#fff;border-radius:4px;box-shadow:0 12px 34px rgba(0,0,0,.45);touch-action:none;cursor:crosshair}
 .dzone.main #croquis{cursor:grab}
 .dzone.main #croquis:active{cursor:grabbing}
 .dzoomb{display:flex;align-items:center;gap:4px;margin-right:6px}
@@ -854,6 +856,20 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
   .dtete{gap:8px;padding-left:12px;padding-right:12px}
   .dtete .btn.sm{padding:0 10px;font-size:12px}
 }
+/* sur telephone : pas de titre (il passait sous les boutons), le zoom sur une ligne, des boutons ronds
+   un peu plus petits pour que retour, zoom, pivoter, plan du decor et enregistrer tiennent ensemble */
+@media(max-width:700px){
+  .dtete .dtitre{display:none}
+  .dtete{gap:6px;justify-content:space-between}
+  .dzoomb{gap:3px;margin-right:0}
+  .dzoomb .ico{width:34px;height:34px;font-size:17px}
+  .dzoomb .dzoom{min-width:0;padding:0 7px;white-space:nowrap;height:34px}
+  .dtete > .ico{width:38px;height:38px;flex:none}
+  .dtete .btn.sm{padding:0 9px;font-size:11.5px;line-height:1.15;max-width:96px}
+}
+/* le bouton du plan du decor : « Décor » tout court sur les plus petits ecrans */
+.dtete .court{display:none}
+@media(max-width:400px){ .dtete .long{display:none} .dtete .court{display:inline} }
 
 /* ------------------------------- Feuille ------------------------------- */
 /* la fiche recouvre la liste et s arrete au-dessus de la barre du bas :
@@ -1687,3 +1703,36 @@ nav button[hidden]{display:none}
   .toast.on{transform:none}
 }
 .btns.centre{justify-content:center}
+/* la priorite d'un shot : P1 (rouge, la plus haute) a P5 (gris) */
+.ptag.prio{border:1px solid currentColor;background:none}
+.ptag.prio.p1{color:var(--ng);background:rgba(var(--ng-rgb),.14)}
+.ptag.prio.p2{color:var(--tag-orange);background:rgba(217,160,102,.12)}
+.ptag.prio.p3{color:var(--acc);background:rgba(231,176,74,.10)}
+.ptag.prio.p4{color:var(--tag-bleu);background:rgba(134,165,201,.10)}
+.ptag.prio.p5{color:var(--dim2)}
+/* le fantome du clip : la suite attendue en gris, derriere ce qu'on tape */
+.clip-col > .clip{position:relative}
+.clip-col > .clip > .fantome{position:absolute;left:0;top:36px;font:600 23px/1.25 var(--font-titre);letter-spacing:.01em;font-variant-numeric:tabular-nums;
+  color:var(--dim2);opacity:.6;pointer-events:none;white-space:pre}
+.clip-col > .clip > .fantome i{font-style:normal;color:transparent}
+/* valider et Moteur, toujours cote a cote a droite du titre du shot */
+.pnum .pactions{order:3;margin-left:auto;margin-right:var(--gouttiere);display:flex;align-items:center;gap:10px;flex:none}
+.pnum .pactions .viser,.pnum .pactions .fini{margin:0;order:0}
+@media(max-width:560px){
+  .plan.termine .ptourne{display:none}   /* la coche verte et le nom en vert le disent deja */
+  .plan.termine .pnum{font-size:22px}
+  .pnum .pactions{gap:8px}
+}
+/* un shot valide : un bandeau vert en tete de sa fiche (et de ses prises), le reste grise et inerte */
+.verrou-shot{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding:10px 12px;border-radius:var(--r);
+  background:rgba(var(--ok-rgb),.12);border:1px solid rgba(var(--ok-rgb),.45);color:var(--ok);font-size:13.5px;font-weight:600}
+.verrou-shot svg{flex:none;width:18px;height:18px}
+.verrou-shot span{flex:1}
+.verrou-shot .btn{flex:none}
+#sbody:has(.verrou-shot) > :not(.verrou-shot):not(.fplan){opacity:.55;pointer-events:none}
+/* un shot fusionne dans un autre : la meme carte a part que le shot valide, en orange, compacte */
+.plan.fusionne{opacity:1;margin:10px -12px 10px -16px;padding:14px 12px 12px 16px;border:1px solid rgba(217,160,102,.5);border-radius:14px;
+  background:linear-gradient(90deg,rgba(217,160,102,.16),rgba(217,160,102,.04) 70%)}
+.plan.fusionne .pno{color:var(--tag-orange);text-decoration:none}
+.plan.fusionne .pfusion{color:#1c1410;background:var(--tag-orange);padding:3px 9px;border-radius:var(--rp);font-weight:700}
+.plan.fusionne .pdesc,.plan.fusionne .pctx,.plan.fusionne .pelem,.plan.fusionne .addtake{display:none}
