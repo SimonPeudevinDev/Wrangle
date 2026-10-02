@@ -40,7 +40,7 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('une feuille par plan tourne, pas les autres', [f['plan'] for f in m], banc.js('DB.plans.slice(0, 2).map(p => p.plan)'))
     f = m[0]
     essais.verifier('le projet, pre-rempli', dict(f['projet']),
-                    {'Director': 'Loïs', 'DOP': 'Corentin', 'First AD': 'Loïse', 'Producer': 'Romain'})
+                    {'Director': 'Loïs', 'DOP': 'Corentin', 'First AD': 'Loïse', 'Production': '', 'Producer': 'Romain'})
     champs = lambda l: {c[i]: c[i + 1] for c in l for i in range(0, len(c), 2)}   # une ligne peut porter deux champs
     t = champs(f['tournage'])
     essais.verifier('le tournage : les heures des prises, le jour sur le nombre de jours, le superviseur',
@@ -117,6 +117,6 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('le bouton Rapport VFX du rapport',
                     banc.js("""(document.querySelector('#report button[onclick="telechargerVFX()"]') || {}).textContent"""), 'Rapport VFX (PDF)')
     banc.js('telechargerVFX()'); time.sleep(1.0)
-    essais.verifier('et dit sur quoi il porte', banc.js("$('toast-msg').textContent"), 'VFX camera report exporté : vos saisies')
+    essais.verifier('et dit sur quoi il porte', banc.js("$('toast-msg').textContent"), 'VFX camera report exporté : vos saisies seulement, personne d’autre n’a encore saisi')
     essais.exceptions(banc)
 essais.bilan()

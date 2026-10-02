@@ -162,8 +162,9 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     # -- la presence : Romain sur deux onglets (un navigateur relance) ne compte qu'une fois
     for c in ('romain-ancien', 'romain-neuf'):
         api('presence.php', {'client': c, 'nom': 'Romain', 'actif': 'plan:' + pid2, 'espace': 'romain'})
-    essais.verifier('deux onglets de Romain : un seul rond sur le plan',
-                    patienter(lambda: banc.js("document.querySelectorAll('.plan[data-id=\"%s\"] .pnum .qui').length" % pid2) == 1, tours=40), True)
+    time.sleep(1.5)
+    essais.verifier('la carte du shot ne porte plus l initiale de qui l a ouvert',
+                    banc.js("document.querySelectorAll('.plan[data-id=\"%s\"] .pnum .qui').length" % pid2), 0)
     essais.verifier('et le compte dit des personnes, pas des onglets', banc.js("personnesConnectees().map(x => x.nom).filter(Boolean).sort()"), ['Romain', 'Simon'])
     api('presence.php', {'client': 'romain-ancien', 'quitte': True, 'espace': 'romain'})
     essais.verifier('un onglet ferme sort de la liste tout de suite',

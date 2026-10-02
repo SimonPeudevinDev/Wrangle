@@ -30,6 +30,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {   // la question prealab
     http_response_code(204);
     exit;
 }
+// sans le laissez-passer du mot de passe (s'il y en a un), l'API ne repond rien
+// (la jauge du stockage ne donne que des tailles : elle reste lisible, meme depuis le PC)
+require __DIR__ . '/acces.php';
+if (!acces_ok() && basename($_SERVER['SCRIPT_FILENAME'] ?? '') !== 'stockage.php') {
+    http_response_code(401);
+    echo json_encode(['erreur' => 'mot de passe attendu']);
+    exit;
+}
 
 define('DONNEES', __DIR__ . '/donnees');
 define('JOURNAL_GARDE', 400);        // operations gardees pour les appareils en retard

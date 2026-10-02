@@ -66,7 +66,7 @@
 <nav>
   <button data-v="prep"><i>&#9679;</i>Préparation</button>
   <button class="on" data-v="shoot"><i>&#9679;</i>Tournage</button>
-  <button data-v="report"><i>&#9679;</i>Rapport</button>
+  <button data-v="report"><i>&#9679;</i>Rapports</button>
 </nav>
 
 <aside class="sheet" id="sheet">
@@ -1001,7 +1001,9 @@ function majMarqueurs(){
     const cle = (x.nom || x.client) + '|' + f;
     if (poses.has(cle)) return;   // la meme personne sur deux onglets : un seul rond
     poses.add(cle);
-    const sel = type === 'prise' ? `.prise[data-id="${id}"] .trow` : `.plan[data-id="${id}"] .pnum`;
+    // sur une prise seulement : la carte d'un shot ne porte plus l'initiale de qui l'a ouvert
+    if (type !== 'prise') return;
+    const sel = `.prise[data-id="${id}"] .trow`;
     document.querySelectorAll(sel).forEach(el => el.insertAdjacentHTML('beforeend',
       `<span class="qui" title="${esc(x.nom || 'appareil')}">${esc(initiale(x.nom))}</span>`));
   });
@@ -1048,7 +1050,7 @@ function changerDePersonne(n){
       .then(r => { if (r.ok) try{ sessionStorage.removeItem(saCle); localStorage.removeItem(saCle); }catch(e){} }).catch(() => {});
   setNom(n);
   DB = load();
-  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipier = []; oublierAutres(); RAP.equipe = false; RAP.tente = false; UI.equipe = false;
+  dernierPlan = null; chrono = null; corbeille = null; fQui = ''; RAP.sources = []; RAP.equipier = []; oublierAutres(); RAP.equipe = true; RAP.tente = false; UI.equipe = true;
   if (fJour !== '*' && joursConnus().indexOf(fJour) < 0){ fJour = '*'; UI.jour = '*'; ecrireUI(); }
   // les reponses parties sous l'ancien prenom ne valent plus rien : on change de session
   nouvelleSession(lireAttente());
@@ -2089,6 +2091,18 @@ function calerPrises(racine){
 
 /* « Tourne » s'affiche une fois qu'on est passe a la suite : la derniere prise
    notee est sur un autre shot. Le shot qu'on tourne encore ne le dit pas. */
+/* Un shot termine (toutes ses prises faites) : coche sur sa carte, pour toute l'equipe ; son nom passe au vert. */
+const ICO_FINI = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+/* Valider un shot demande confirmation (la double validation) ; le rouvrir, non. */
+function terminerShot(id){
+  const p = plan(id); if (!p) return;
+  const appliquer = v => { patch('plan', id, { termine: v }); renderList(); toast('Shot ' + (p.plan || '') + (v ? ' validé : terminé' : ' rouvert')); };
+  if (p.termine) return appliquer(false);
+  confirmer('Valider le shot ' + (p.plan || 'sans n°') + ' ?', { detail: 'Toutes ses prises sont faites : il passe en vert, pour toute l’équipe.', ok: 'Valider' })
+    .then(oui => { if (oui && plan(id)) appliquer(true); });
+}
+/* Tourne : marque a la main dans la fiche, ou passe tout seul quand on enchaine sur un autre shot */
+const estTourne = p => tourne(p) || (p.etat === 'done' && !!p.tourneMain);
 function tourne(p){
   if (p.etat !== 'done') return false;
   const derniere = DB.prises[DB.prises.length - 1];
@@ -2136,11 +2150,14 @@ function blocPlan(p, seulementRetenues, qui){
     p.momentJour && `<span>${esc(p.momentJour)}</span>`
   ].filter(Boolean).join('');
 
-  return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}" data-id="${p.id}">
+  return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}${p.termine ? ' termine' : ''}" data-id="${p.id}">
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
         <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}${plusFusion(p)}</span>${
-          tourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
+          p.termine ? '<span class="ptourne">Terminé</span>' : estTourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
+          ${estTourne(p) || p.termine ? `<button type="button" class="fini${p.termine ? ' on' : ''}" onclick="event.stopPropagation();terminerShot('${p.id}')"
+            title="${p.termine ? 'Shot terminé : toucher pour le rouvrir' : 'Marquer le shot terminé, pour toute l’équipe'}" aria-pressed="${!!p.termine}"
+            aria-label="Shot terminé">${ICO_FINI}</button>` : ''}
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
@@ -3135,8 +3152,8 @@ let dessin = null;   // l'editeur ouvert
 const PLANS_DECOR = [
   ['Atelier', 'atelier'], ['Atelier (vide)', 'atelier-vide'],
   ['Royal Academy', 'royal-academy'], ['Royal Academy (vide)', 'royal-academy-vide'],
-  // la rue et la cour : leurs plans portent le nom du decor (Rue des Brigittines, rue Coquerez, a Lille)
-  ['La rue', 'rue-des-brigittines'], ['La cour', 'rue-des-coquerez']
+  // la rue et la cour : leurs plans portent le nom du decor
+  ['La rue', 'rue-des-coquerez'], ['La cour', 'rue-des-brigittines']
 ];
 const planIntegre = lieu => { const x = PLANS_DECOR.find(d => memeVal(d[0], (lieu || '').trim())); return x ? 'public/maps/' + x[1] + '.webp' : ''; };
 const fondImporte = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
@@ -4328,7 +4345,8 @@ function toggleElement(k){
 
 function setEtatPlan(e){
   const p = plan(openId); if (!p) return;
-  patch('plan', p.id, { etat: e });
+  // « Tourne » choisi a la main vaut tout de suite, meme sur le shot qui a la derniere prise
+  patch('plan', p.id, { etat: e, tourneMain: e === 'done' });
   majBoutonsPlan();
   renderList();
 }
@@ -5108,9 +5126,10 @@ function avecProjet(db, fn){ const mien = DB; DB = db; try{ return fn(); } final
 const surLePerimetre = fn => equipeReunie() ? avecProjet(projetEquipe(), fn) : fn();
 /* Le choix « Toute l'equipe » est garde sur l'appareil : le DIT le retrouve
    apres un rechargement, et le rapport va chercher les saisies tout seul. */
-function voirEquipe(oui){
-  RAP.equipe = !!oui; UI.equipe = RAP.equipe; ecrireUI();
-  if (oui && !RAP.sources.length && RESEAU.possible) return actualiserEquipe();
+function voirEquipe(){
+  // le rapport porte toujours sur toute l'equipe : il n'y a plus de « Mes saisies »
+  RAP.equipe = true; UI.equipe = true; ecrireUI();
+  if (!RAP.sources.length && RESEAU.possible) return actualiserEquipe();
   renderReport();
 }
 /* Le bouton du rapprochement fait la meme chose que « Toute l'equipe » : on va
@@ -5147,14 +5166,9 @@ function htmlPerimetre(){
       : RAP.equipier.some(aSaisi)
         ? 'Personne n’est coché dans « Rapprocher les saisies », plus bas : le bilan ne porte que sur vos saisies.'
         : 'Personne d’autre n’a encore saisi : le bilan ne porte que sur vos saisies. Actualiser ira revoir.';
-  return `<div class="bloc noprint" id="perimetre">
-      <div class="choix">
-        <button class="btn sm${RAP.equipe ? '' : ' p'}" onclick="voirEquipe(false)">Mes saisies</button>
-        <button class="btn sm${RAP.equipe ? ' p' : ''}" onclick="voirEquipe(true)">Toute l’équipe</button>
-        ${RAP.equipe ? '<button class="btn sm" onclick="actualiserEquipe()">Actualiser</button>' : ''}
-      </div>
-      <div class="note" style="margin-top:10px">${note}</div>
-    </div>`;
+  // plus de choix « Mes saisies / Toute l'equipe » : le rapport porte toujours sur toute l'equipe
+  void note;
+  return '';
 }
 
 function renderReport(){
@@ -5197,11 +5211,11 @@ function renderBilan(perimetre, rapprochement){
   T.filter(t => t.clip && !t.carte).forEach(t =>
     al.push(['o', `Clip <b>${esc(t.clip)}</b> sans carte renseignée : introuvable à l’offload.`]));
   P.filter(x => x.etat === 'done' && !prisesDe(x.id).length).forEach(x =>
-    al.push(['o', `Plan <b>${esc(x.plan)}</b> marqué tourné mais sans aucune prise.`]));
+    al.push(['o', `Shot <b>${esc(x.plan)}</b> marqué tourné mais sans aucune prise.`]));
   P.filter(x => aElements(x) && !prisesDe(x.id).length).forEach(x =>
-    al.push(['o', `Plan <b>${esc(x.plan)}</b> : des éléments sont cochés mais aucune prise n’est enregistrée.`]));
+    al.push(['o', `Shot <b>${esc(x.plan)}</b> : des éléments sont cochés mais aucune prise n’est enregistrée.`]));
   P.filter(x => prisesDe(x.id).length && !prisesDe(x.id).some(t => t.retenue)).forEach(x =>
-    al.push(['o', `Plan <b>${esc(x.plan)}</b> : ${prisesDe(x.id).length} prise(s), aucune retenue pour le montage.`]));
+    al.push(['o', `Shot <b>${esc(x.plan)}</b> : ${prisesDe(x.id).length} prise(s), aucune retenue pour le montage.`]));
   if (!al.length && T.length) al.push(['g', 'Rien à signaler : clips et prises retenues sont cohérents.']);
 
   const compte = ELEMENTS.map(e => [e[1], P.filter(x => elementsTous(x)[e[0]]).length]).filter(x => x[1]);
@@ -5210,45 +5224,29 @@ function renderBilan(perimetre, rapprochement){
   const parQui = frequences(T.map(t => t.par || '—'));
 
   $('report').innerHTML = perimetre + `
-    <div class="bloc">
-      <div style="font-size:21px;font-weight:800">${esc(p.titre) || 'Projet sans titre'}${tous ? '' : ' <span style="color:var(--dim2);font-weight:600">· ' + esc(nomJour(fJourR)) + '</span>'}</div>
-      ${equipeReunie() ? '<div style="color:var(--acc);font-size:13.5px;margin-top:6px;font-weight:600">Toute l’équipe</div>' : ''}
-      <div style="color:var(--dim);font-size:13.5px;margin-top:8px;line-height:1.8">
-        ${[!tous && dateJourFr(fJourR), !tous && decorJour(fJourR), p.unit].filter(Boolean).map(esc).join(' · ')}
-        ${[p.prod && 'Production : ' + p.prod, p.real && 'Réalisation : ' + p.real,
-           p.dop && 'Image : ' + p.dop, p.vfxSuper && 'Superviseur VFX : ' + p.vfxSuper,
-           p.wrangler && 'Data wrangler : ' + p.wrangler, p.dit && 'DIT : ' + p.dit]
-          .filter(Boolean).map(esc).map(x => '<br>' + x).join('')}
-      </div>
-    </div>
-
     <div class="kpis">
       <div class="kpi"><div class="v">${T.length}</div><div class="l">Prises</div></div>
       <div class="kpi"><div class="v" style="color:var(--acc)">${keep}</div><div class="l">À monter</div></div>
       <div class="kpi"><div class="v" style="color:var(--ok)">${ok}</div><div class="l">OK</div></div>
       <div class="kpi"><div class="v" style="color:var(--ng)">${ng}</div><div class="l">NG</div></div>
-      <div class="kpi"><div class="v">${done}<small>/${P.length}</small></div><div class="l">Plans tournés</div></div>
+      <div class="kpi"><div class="v">${done}<small>/${P.length}</small></div><div class="l">Shots tournés</div></div>
       <div class="kpi"><div class="v">${avecEl}</div><div class="l">Avec éléments</div></div>
     </div>
 
-    <div class="bloc">
-      <h3>À vérifier avant de rendre la journée</h3>
-      <div class="cinq">${al.length ? al.map(a => `<div class="alert ${a[0]}"><i>${a[0] === 'g' ? '&#10003;' : '&#9888;'}</i><div>${a[1]}</div></div>`).join('')
-                  : '<div style="color:var(--dim2);font-size:13.5px">Rien d’enregistré pour l’instant.</div>'}</div>
-    </div>
+    ${blocRepli('verifier', 'À vérifier avant de rendre la journée', al.filter(a => a[0] !== 'g').length,
+      `<div class="cinq">${al.length ? al.map(a => `<div class="alert ${a[0]}"><i>${a[0] === 'g' ? '&#10003;' : '&#9888;'}</i><div>${a[1]}</div></div>`).join('')
+                  : '<div style="color:var(--dim2);font-size:13.5px">Rien d’enregistré pour l’instant.</div>'}</div>`)}
 
-    ${compte.length ? `<div class="bloc"><h3>Éléments captés</h3>
-      <div class="cinq">${compte.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div></div>` : ''}
+    ${compte.length ? blocRepli('elements', 'Éléments captés', compte.length,
+      `<div class="cinq">${compte.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div>`) : ''}
 
-    <div class="bloc">
-      <h3>Prises par jour</h3>
-      <div class="cinq">${parJour.map(([j, n]) => `<div class="ligne"><span>${nomJour(j)}</span>
+    ${blocRepli('parjour', 'Prises par jour', parJour.reduce((a, x) => a + x[1], 0),
+      `<div class="cinq">${parJour.map(([j, n]) => `<div class="ligne"><span>${nomJour(j)}</span>
           <span class="jauge"><i style="width:${n / maxJ * 100}%"></i></span>
-          <b>${n}</b></div>`).join('') || '<div style="color:var(--dim2);font-size:13.5px">Aucun plan.</div>'}</div>
-    </div>
+          <b>${n}</b></div>`).join('') || '<div style="color:var(--dim2);font-size:13.5px">Aucun plan.</div>'}</div>`)}
 
-    ${parQui.length > 1 || (parQui.length && parQui[0][0] !== '—') ? `<div class="bloc"><h3>Prises saisies par</h3>
-      <div class="cinq">${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div></div>` : ''}
+    ${parQui.length > 1 || (parQui.length && parQui[0][0] !== '—') ? blocRepli('parqui', 'Prises saisies par', parQui.length,
+      `<div class="cinq">${parQui.map(x => `<div class="ligne"><span>${esc(x[0])}</span><b>${x[1]}</b></div>`).join('')}</div>`) : ''}
 
     <div class="bloc" id="rapprocher">
       <h3>Rapprocher les saisies</h3>
@@ -5264,6 +5262,7 @@ function renderBilan(perimetre, rapprochement){
       <button class="btn p" onclick="telechargerDIT()">DIT (PDF)</button>
       <button class="btn p" onclick="telechargerVFX()">Rapport VFX (PDF)</button>
       <button class="btn p" onclick="telechargerWrangling()">Data wrangling (PDF)</button>
+      <button class="btn rouge droite" onclick="telechargerBackup()" title="Tous les jours, chacun avec ses trois PDF, dans un seul fichier ZIP sur cet appareil">Backup (ZIP)</button>
     </div>
     <div class="note noprint" style="margin:-18px 0 30px">Les trois PDF reprennent le jour choisi en haut.
       Data wrangling d’abord : les écarts entre les saisies de chacun, à corriger avant d’exporter les
@@ -5500,6 +5499,7 @@ const PDF_TEINTES = {
   creme:   [241, 232, 220],  // --surface2 en clair : les fonds
   creme2:  [232, 220, 205],  // --surface3 en clair : la prise retenue
   creme3:  [247, 243, 237],  // une rangee sur deux des tableaux
+  creme4:  [239, 233, 224],  // le croisement d'une rangee et d'une colonne teintees
   filet:   [216, 204, 190],  // les traits fins
   filet2:  [176, 160, 142],  // les traits des en-tetes
   ok:      [72, 138, 90],    // une prise bonne
@@ -5610,9 +5610,9 @@ function nouveauPdf(paysage){
     /* assez de place pour `h` points, sinon page suivante */
     place(h){ if (doc.y - h < PDF_M) doc.nouvellePage(); },
     /* le fichier : les objets, la table des adresses, le pied de chaque page */
-    fichier(pied){
+    fichier(pied, numero){
       pages.forEach((pg, i) => {
-        const s = (i + 1) + ' / ' + pages.length;
+        const s = numero ? numero(i + 1, pages.length) : (i + 1) + ' / ' + pages.length;
         pg.ops.push(`${teintePdf('filet2')} RG 0.5 w ${PDF_M} ${PDF_M - 10} m ${(largeur - PDF_M).toFixed(2)} ${PDF_M - 10} l S`);
         pg.ops.push(`BT /H 7 Tf 0 Tc ${teintePdf('tan')} rg ${PDF_M} ${PDF_M - 20} Td (${chainePdf(pied)}) Tj ET`);
         pg.ops.push(`BT /H 7 Tf 0 Tc ${teintePdf('tan')} rg ${(largeur - PDF_M - largeurPdf(s, 7, 'H')).toFixed(2)} ${PDF_M - 20} Td (${chainePdf(s)}) Tj ET`);
@@ -5821,6 +5821,14 @@ function pdfDIT(j){
   });
   return doc.fichier(jours.length ? jours[0].pied : '');
 }
+/* Un bloc du rapport qui se replie (ferme d'office) : son titre et un compte ; ouvert ou ferme,
+   il le reste sur cet appareil, meme quand le rapport se redessine. */
+function blocRepli(cle, titre, nb, corps){
+  const ouvert = !!(UI.rapOuvert || {})[cle];
+  return `<details class="bloc repli"${ouvert ? ' open' : ''} ontoggle="replierRap('${cle}', this.open)">
+    <summary><h3>${esc(titre)}${nb ? ` <em>${nb}</em>` : ''}</h3></summary>${corps}</details>`;
+}
+function replierRap(cle, ouvert){ UI.rapOuvert = Object.assign({}, UI.rapOuvert, { [cle]: ouvert }); ecrireUI(); }
 function telechargerDIT(){
   const j = fJourR;
   chargerLogo().then(() => avecEquipeAJour(() => {
@@ -5889,7 +5897,7 @@ function feuilleVFX(x, jour){
   return {
     seq: x ? x.seq || '' : '', plan: x ? x.plan || '' : '', titre: p.titre || '',
     // le titre est en tete de page
-    projet: [['Director', p.real], ['DOP', p.dop], ['First AD', p.firstAD], ['Producer', p.producer]],
+    projet: [['Director', p.real], ['DOP', p.dop], ['First AD', p.firstAD], ['Production', p.prod], ['Producer', p.producer]],
     // la date : celle de l'export de la feuille ; elle partage sa ligne avec le jour de tournage
     tournage: [['Date', deuxCh(auj.getDate()) + '/' + deuxCh(auj.getMonth() + 1) + '/' + auj.getFullYear(),
                 'Shooting day', jour && jour !== 'CG' ? numJour(jour) + ' / ' + nJours : jour === 'CG' ? 'Full CG' : ''],
@@ -5954,8 +5962,10 @@ function imagesVFX(j){
     .then(l => Object.fromEntries(l.filter(x => x[1])));
 }
 
-function pdfVFX(j, images){
-  const feuilles = modeleVFX(j), doc = nouveauPdf(), M = 24, W = doc.largeur - 2 * M;
+function pdfVFX(j, images, imposees){
+  const feuilles = imposees || modeleVFX(j), doc = nouveauPdf(), M = 24, W = doc.largeur - 2 * M;
+  // la feuille vierge, a remplir au stylo : ni nom, ni date, le numero de page a la main
+  const vierge = feuilles.some(f => f.vierge), BLANC = '_____ / _____';
   images = images || {};
   const T = (x, y, s, o) => doc.texte(x, y, String(s == null ? '' : s), o);
   const cadre = (x, y, w, h, ep, c) => {
@@ -6041,10 +6051,17 @@ function pdfVFX(j, images){
       x += w;
     });
     const y0 = yh - 22;
+    // une colonne sur deux teintee, sur toute la hauteur : on suit une valeur de prise en prise ;
+    // la prise gardee pour le montage passe par-dessus
+    // et une rangee sur deux aussi : leur croisement est un peu plus fonce
+    { let xb = M; COLS.forEach(([, w], k) => { if (k % 2) doc.rect(xb, y0 - lignes.length * HL, w, lignes.length * HL, 'creme3'); xb += w; }); }
     lignes.forEach((t, i) => {
       const yl = y0 - i * HL;
       if (t && t.retenue) doc.rect(M, yl - HL, W, HL, 'creme2');
-      else if (i % 2) doc.rect(M, yl - HL, W, HL, 'creme3');
+      else if (i % 2){
+        doc.rect(M, yl - HL, W, HL, 'creme3');
+        let xb = M; COLS.forEach(([, w], k) => { if (k % 2) doc.rect(xb, yl - HL, w, HL, 'creme4'); xb += w; });
+      }
       let x = M;
       COLS.forEach(([titre, w, lire, sous, police]) => {
         const yb = yl - 11;
@@ -6099,7 +6116,7 @@ function pdfVFX(j, images){
     T(xd - largeurPdf(titre, 19, 'HB'), haut - 16, titre, { taille: 19, police: 'HB', couleur: 'encre' });
     const ligne = ['VFX camera report' + (suite || sous ? ' · continued' : ''),
                    f.plan ? 'Seq ' + (f.seq || '—') + ' · Shot ' + f.plan : '', sous || (suite ? 'Takes ' + suite : ''),
-                   'Page ' + page + ' / ' + total].filter(Boolean).join(' · ');
+                   'Page ' + (vierge ? BLANC : page + ' / ' + total)].filter(Boolean).join(' · ');
     T(xd - largeurPdf(ligne, 8.5, 'H'), haut - 29, ligne, { taille: 8.5, couleur: 'tan' });
     doc.ligne(M, haut - 40, xd, haut - 40, 1, 'caramel');
   };
@@ -6109,7 +6126,7 @@ function pdfVFX(j, images){
     entete(f);
     const H = doc.hauteur;
     // 1. projet, tournage, script : quatre lignes serrees ; une ligne peut porter deux champs
-    const w3 = (W - 16) / 3, LH = 9.5, hb = 11 + 4 * LH + 5;
+    const w3 = (W - 16) / 3, LH = 9.5, hb = 11 + Math.max(f.projet.length, f.tournage.length, f.script.length) * LH + 5;
     const champ = (xg, xdr, y, lib, v, lw) => {
       T(xg, y, lib, { taille: 6, couleur: 'tan' });
       doc.ligne(xg + lw - 2, y - 2.5, xdr, y - 2.5, .35, 'filet');
@@ -6123,8 +6140,9 @@ function pdfVFX(j, images){
       champs.forEach(([lib, v, lib2, v2], i) => {
         const y = yh - 19 - i * LH;
         if (!lib2) return champ(x + 5, x + w3 - 5, y, lib, v, 44);
-        // le second champ a la place de son libelle et d'une valeur courte (01, 1 / 5), le premier le reste
-        const l2 = largeurPdf(lib2, 6, 'H') + 7, m = x + w3 - 5 - l2 - 30;
+        // Sequence | Shot (et, sur la vierge, Date | Shooting day) : deux moities egales ; ailleurs le second
+        // champ a la place de son libelle et d'une valeur courte (1 / 5), le premier le reste
+        const l2 = largeurPdf(lib2, 6, 'H') + 7, m = k === 2 || f.vierge ? x + 5 + (w3 - 10) / 2 : x + w3 - 5 - l2 - 30;
         champ(x + 5, m - 4, y, lib, v, 44);
         champ(m + 4, x + w3 - 5, y, lib2, v2, l2);
       });
@@ -6136,7 +6154,8 @@ function pdfVFX(j, images){
     const yc = H - HAUT - 4 - hb - 6, hc = 16, TL = 5.2, PAD = 9;
     let TV = 6.5;
     const cam = [['Camera', f.camera], ['Lens set', f.lens], ['Movement', f.mouvement]]
-      .concat(f.format ? [['Sensor / format', f.format]] : [], f.codec ? [['Codec / fps', f.codec]] : [])
+      // remplis, ou sur la feuille vierge (a ecrire au stylo)
+      .concat(f.format || f.vierge ? [['Sensor / format', f.format]] : [], f.codec || f.vierge ? [['Codec / fps', f.codec]] : [])
       .map(([lib, v]) => [lib.toUpperCase(), v || '', largeurPdf(lib.toUpperCase(), TL, 'HB') + 8]);
     const libres = W - cam.reduce((a, c) => a + c[2], 0) - cam.length * PAD;
     const textes = cam.reduce((a, c) => a + largeurPdf(c[1], TV, 'HB'), 0);
@@ -6188,7 +6207,8 @@ function pdfVFX(j, images){
 
     // 5. a droite : le croquis du decor, puis les distances
     const xd = M + wg + 8, wd = W - wg - 8, yBas = yh - hI;
-    const hDist = 11 + 11 + 4 * 12, yDist = yBas + hDist, hDia = yB - yDist - 6 - 11;
+    // les distances commencent et finissent a la hauteur des notes internes, a gauche
+    const yDist = yh, hDist = yDist - yBas, hDia = yB - yDist - 6 - 11, rh = (hDist - 22) / 4;
     barre(xd, yB, wd, 'Diagram of the set');
     cadre(xd, yB - 11 - hDia, wd, hDia, .5, 'filet');
     const im = f.croquis && images[f.croquis];
@@ -6197,14 +6217,9 @@ function pdfVFX(j, images){
       const k = Math.min((wd - 8) / im.l, (hDia - 8) / im.h), l = im.l * k, h = im.h * k;
       doc.image(im, xd + (wd - l) / 2, yB - 11 - hDia + (hDia - h) / 2, l, h);
     } else {
-      // une feuille pointee, a dessiner au stylo, et sa legende
+      // une feuille pointee, a dessiner au stylo
       for (let gx = xd + 9; gx < xd + wd - 4; gx += 12)
-        for (let gy = yB - 20; gy > yB - 11 - hDia + 16; gy -= 12) doc.disque(gx, gy, .45, 'filet2');
-      let xl = xd + 6;
-      [['CAM', 'camera'], ['L', 'light'], ['B', 'bounce'], ['A', 'actor'], ['N', 'north']].forEach(([a, b]) => {
-        T(xl, yB - 11 - hDia + 6, a, { taille: 6, police: 'HB', couleur: 'encre' }); xl += largeurPdf(a + ' ', 6, 'HB');
-        T(xl, yB - 11 - hDia + 6, b, { taille: 6, couleur: 'tan' }); xl += largeurPdf(b, 6, 'H') + 10;
-      });
+        for (let gy = yB - 20; gy > yB - 11 - hDia + 6; gy -= 12) doc.disque(gx, gy, .45, 'filet2');
     }
     barre(xd, yDist, wd, 'Distances to note (m)');
     const CD = [['Setup / Take', 58], ['Focus x Camera', 62], ['Light x Actor', 56], ['Bounce x Actor', 58], ['Measured from', 60], ['Notes', 0]];
@@ -6215,9 +6230,9 @@ function pdfVFX(j, images){
     CD.forEach(([t, w]) => { ecrire(xc, yd - 7.6, t, w, 5.6, 'HB', 'encre', true); xc += w; });
     yd -= 11;
     for (let i = 0; i < 4; i++){
-      const r = f.distances[i], yl = yd - i * 12;
-      doc.ligne(xd, yl - 12, xd + wd, yl - 12, .3, 'filet');
-      if (r){ xc = xd; CD.forEach(([, w], k) => { if (r[k]) ecrire(xc + 3, yl - 8.5, r[k], w - 6, 6.4, k ? 'H' : 'HB', 'encre', k > 0 && k < 5); xc += w; }); }
+      const r = f.distances[i], yl = yd - i * rh;
+      if (i < 3) doc.ligne(xd, yl - rh, xd + wd, yl - rh, .3, 'filet');
+      if (r){ xc = xd; CD.forEach(([, w], k) => { if (r[k]) ecrire(xc + 3, yl - rh / 2 - 2.3, r[k], w - 6, 6.4, k ? 'H' : 'HB', 'encre', k > 0 && k < 5); xc += w; }); }
     }
     xc = xd;
     CD.forEach(([, w], k) => { if (k) doc.ligne(xc, yDist - 11, xc, yBas, .3, 'filet'); xc += w; });
@@ -6242,8 +6257,24 @@ function pdfVFX(j, images){
     });
   });
   const d = new Date(), p = DB.prod;
+  if (vierge) return doc.fichier([p.titre || '', 'VFX camera report', 'Wrangle'].filter(Boolean).join(' · '), () => BLANC);
   return doc.fichier([p.titre || '', 'VFX camera report · ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
                       ' ' + hhmm(d) + (UI.nom ? ' · ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · '));
+}
+/* La feuille vierge : l'en-tete du projet rempli (equipe, camera, objectif), tout le reste au stylo. */
+function feuilleVierge(){
+  const f = feuilleVFX(null, '');
+  f.tournage[0][1] = '';   // la date aussi s'ecrit a la main
+  // ni INT / EXT ni DAY / NIGHT imprimes : une ligne a remplir
+  f.script = f.script.map(c => c[1] && c[1].choix ? [c[0], ''] : c);
+  f.vierge = true;
+  return f;
+}
+function telechargerVFXVierge(){
+  chargerLogo().then(() => {
+    download(fname('VFX-camera-report-vierge', 'pdf'), pdfVFX('*', {}, [feuilleVierge()]), 'application/pdf');
+    toast('Feuille vierge téléchargée');
+  });
 }
 function telechargerVFX(){
   const j = fJourR;
@@ -6491,7 +6522,7 @@ function reprendreAutre(espace, cles){
    ce qu'un seul a saisi (une prise chez un seul). La fusion garde tout : la
    premiere source, ce navigateur, fait foi sur les ecarts ; les autres
    comblent les vides et apportent leurs prises en plus. */
-const RAP = { sources: [], equipier: [], equipe: !!UI.equipe, tente: false, chargement: false };   // equipe : le bilan porte sur l'equipe ; equipier : chacun des autres sur le serveur, choisi ou non
+const RAP = { sources: [], equipier: [], equipe: true, tente: false, chargement: false };   // le rapport porte toujours sur toute l'equipe   // equipe : le bilan porte sur l'equipe ; equipier : chacun des autres sur le serveur, choisi ou non
 const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
   ['tcIn', 'TC in'], ['tcOut', 'TC out'], ['duree', 'Durée'], ['heure', 'Heure'], ['notes', 'Note'], ['focale', 'Focale'],
   ['focaleStop', 'Focale fin'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
@@ -6685,28 +6716,34 @@ function htmlRapprochement(){
   // ce navigateur, puis chacun des autres sur le serveur, a cocher ; les
   // sauvegardes deposees a la main se retirent d'une croix
   const tous = !UI.choixEquipe;
-  const equipier = RAP.equipier.length ? `<button type="button" class="rsource coche${tous ? ' on' : ''}" onclick="choisirTous()" aria-pressed="${tous}">Tous</button>` +
-    // un ancien profil qui n'a rien saisi (Georges, Marie…) ne s'affiche plus
-    RAP.equipier.filter(e => e.db.prises.length || EQUIPE.some(n => memeVal(n, e.nom))).map(e => { const on = choisi(e), n = e.db.prises.length;
-      return `<button type="button" class="rsource coche${on ? ' on' : ''}${n ? '' : ' vide'}" onclick="basculerChoix('${esc(e.espace)}')" aria-pressed="${on}">${
-        esc(e.nom)} <em>${n ? n + ' prise' + plur(n) : 'rien saisi'}</em></button>`; }).join('') : '';
-  const puces = `<span class="rsource ici">${esc(s[0].nom)} <em>ce navigateur</em></span>` + equipier +
+  // l'ordre : Tous, puis soi (ce navigateur), puis les autres par nom, « Autres » en dernier
+  const bouton = e => { const on = choisi(e), n = e.db.prises.length;
+    return `<button type="button" class="rsource coche${on ? ' on' : ''}${n ? '' : ' vide'}" onclick="basculerChoix('${esc(e.espace)}')" aria-pressed="${on}">${
+      esc(e.nom)} <em>${n ? n + ' prise' + plur(n) : 'rien saisi'}</em></button>`; };
+  // un ancien profil qui n'a rien saisi (Georges, Marie…) ne s'affiche plus
+  const autresGens = RAP.equipier.filter(e => e.db.prises.length || EQUIPE.some(n => memeVal(n, e.nom)))
+    .sort((a, b) => (memeVal(a.nom, 'Autres') ? 1 : 0) - (memeVal(b.nom, 'Autres') ? 1 : 0) || a.nom.localeCompare(b.nom, 'fr'));
+  const puces = (RAP.equipier.length ? `<button type="button" class="rsource coche${tous ? ' on' : ''}" onclick="choisirTous()" aria-pressed="${tous}">Tous</button>` : '') +
+    `<span class="rsource ici">${esc(s[0].nom)} <em>ce navigateur</em></span>` + autresGens.map(bouton).join('') +
     RAP.sources.map((x, i) => x.espace ? '' : `<span class="rsource">${esc(x.nom)}${x.quand ? ` <em>${esc(quandDepot(x.quand))}</em>` : ''}
       <button type="button" onclick="retirerSource(${i})" aria-label="Retirer ${esc(x.nom)}">&times;</button></span>`).join('');
   let corps = '';
   if (s.length > 1){
     const r = rapprocher(s);
-    corps = `<div class="rresume">${resumeRap(r.total)}</div>` +
+    // le bilan en titre ; la liste se deroule d'un appui, et le reste sur cet appareil
+    const ouvert = !!(UI.rapOuvert || {}).rapprocher;
+    corps = (r.plans.length ? `<details class="repli-rap"${ouvert ? ' open' : ''} ontoggle="replierRap('rapprocher', this.open)">
+      <summary class="rresume">${resumeRap(r.total)}</summary>` : `<div class="rresume">${resumeRap(r.total)}</div>`) +
       (r.plans.length ? '<div class="rliste">' + r.plans.map(b => `<div class="rplan"><b>Séquence ${esc(b.seq || '—')} · Shot ${esc(b.plan || '—')}</b>${
           b.planSeul ? ` <em>seulement chez ${esc(b.planSeul.join(', '))}</em>` : ''}
-          ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('') + '</div>'
+          ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('') + '</div></details>'
         : '<div class="alert g"><i>&#10003;</i><div>Rien ne se contredit : les saisies concordent.</div></div>') +
       (RESEAU.possible ? '' : `<div class="btns" style="margin-top:14px">
         <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button></div>`);
   }
-  return `<div class="rsources">${puces}${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="reunirEquipe()">${
-      RAP.equipier.length ? 'Actualiser' : 'Récupérer les saisies de l’équipe'}</button>` : ''}
-    <button type="button" class="btn sm" onclick="$('rap-in').click()">+ Déposer des sauvegardes</button></div>${corps}`;
+  // Actualiser en premier ; plus de depot de sauvegardes a la main (le serveur reunit tout le monde)
+  return `<div class="rsources">${RESEAU.possible ? `<button type="button" class="btn sm p" onclick="reunirEquipe()">${
+      RAP.equipier.length ? 'Actualiser' : 'Récupérer les saisies de l’équipe'}</button>` : ''}${puces}</div>${corps}`;
 }
 function garderFusion(){
   const s = sourcesRap();
@@ -7110,6 +7147,60 @@ const plat = v => String(v == null ? '' : v).replace(/[\t\r\n]+/g, ' ').trim();
 const listeElements = p => !p ? '' :
   elementsCoches(p).map(e => e[1]).concat(texteDe(p, 'elementsAutre') ? [texteDe(p, 'elementsAutre')] : []).join(', ');
 
+/* Un ZIP sans compression (les PDF le sont deja) : les fichiers les uns apres les autres,
+   puis leur sommaire. Assez pour ranger trois PDF d'un geste. */
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u){ let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC_TABLE[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(fichiers){
+  const enc = new TextEncoder(), morceaux = [], centraux = [];
+  const d = new Date(), heure = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+        jour = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  let pos = 0;
+  fichiers.forEach(([nom, octets]) => {
+    const n = enc.encode(nom), crc = crc32(octets), t = octets.length;
+    const local = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, heure, 2], [12, jour, 2], [14, crc, 4],
+     [18, t, 4], [22, t, 4], [26, n.length, 2], [28, 0, 2]].forEach(([o, v, l]) => l === 4 ? local.setUint32(o, v, true) : local.setUint16(o, v, true));
+    const central = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, heure, 2], [14, jour, 2], [16, crc, 4],
+     [20, t, 4], [24, t, 4], [28, n.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, pos, 4]]
+      .forEach(([o, v, l]) => l === 4 ? central.setUint32(o, v, true) : central.setUint16(o, v, true));
+    morceaux.push(new Uint8Array(local.buffer), n, octets);
+    centraux.push(new Uint8Array(central.buffer), n);
+    pos += 30 + n.length + t;
+  });
+  const tailleC = centraux.reduce((a, u) => a + u.length, 0), fin = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [4, 0, 2], [6, 0, 2], [8, fichiers.length, 2], [10, fichiers.length, 2], [12, tailleC, 4], [16, pos, 4], [20, 0, 2]]
+    .forEach(([o, v, l]) => l === 4 ? fin.setUint32(o, v, true) : fin.setUint16(o, v, true));
+  const tout = morceaux.concat(centraux, [new Uint8Array(fin.buffer)]), out = new Uint8Array(tout.reduce((a, u) => a + u.length, 0));
+  let o = 0; tout.forEach(u => { out.set(u, o); o += u.length; });
+  return out;
+}
+/* Le backup : tous les jours de tournage, chacun dans son dossier avec ses trois PDF (DIT,
+   rapport VFX, data wrangling s'il y a de quoi comparer), dans un seul ZIP telecharge sur cet appareil. */
+function telechargerBackup(){
+  const d = new Date();
+  toast('Backup en préparation…');
+  const octets = x => x instanceof Uint8Array ? x : new TextEncoder().encode(String(x));
+  chargerLogo().then(() => (RESEAU.possible ? recupererEspaces() : Promise.resolve())).then(() => avecEquipeAJour(() => {
+    const jours = surLePerimetre(() => joursConnus().filter(j => j && plansDuJour(j).length));
+    const fichiers = [], deux = sourcesRap().length >= 2;
+    // un jour apres l'autre : les croquis du rapport VFX se rendent en images, en asynchrone
+    return jours.reduce((suite, j) => suite.then(() => surLePerimetre(() => imagesVFX(j)).then(ims => {
+      const dossier = nomJour(j) + '/', sfx = '-' + j;
+      surLePerimetre(() => {
+        fichiers.push([dossier + fname('journal-DIT' + sfx, 'pdf'), octets(pdfDIT(j))]);
+        fichiers.push([dossier + fname('VFX-camera-report' + sfx, 'pdf'), octets(pdfVFX(j, ims))]);
+      });
+      if (deux) fichiers.push([dossier + fname('data-wrangling' + sfx, 'pdf'), octets(pdfWrangling(j))]);
+    })), Promise.resolve()).then(() => {
+      if (!fichiers.length) return prevenir('Rien à sauvegarder pour l’instant.');
+      download(fname('backup-' + deuxCh(d.getDate()) + '-' + deuxCh(d.getMonth() + 1) + '-' + deuxCh(d.getHours()) + 'h' + deuxCh(d.getMinutes()), 'zip'),
+               zipStore(fichiers), 'application/zip');
+      toast('Backup téléchargé : ' + jours.length + ' jour' + plur(jours.length) + ', ' + fichiers.length + ' PDF');
+    });
+  }));
+}
 function download(name, content, mime){
   const b = new Blob([content], { type: mime });
   const a = document.createElement('a');

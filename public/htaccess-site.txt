@@ -30,3 +30,12 @@ RedirectMatch 404 ^/(api/donnees|depot/saisies|depot/comptes)(/|$)
   RewriteCond %{HTTP:X-Forwarded-Proto} !=https
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 </IfModule>
+
+# La porte du site (index.php, pose par construire_site.py --php) passe avant la
+# page : le mot de passe du tournage, puis la page. La page ne se sert pas en direct.
+DirectoryIndex index.php index.html
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f
+  RewriteRule ^index\.html$ index.php [L]
+</IfModule>

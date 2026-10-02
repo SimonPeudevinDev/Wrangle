@@ -172,15 +172,12 @@ with Banc(PORT, 9376, taille=(1200, 900)) as banc:
     essais.verifier('le bouton est dans le rapport', banc.js("!!document.querySelector('#rapprocher button[onclick=\"reunirEquipe()\"]')"), True)
 
     # -- « Toute l'equipe » : le bilan et les exports du DIT portent sur tous, sans toucher a son projet
-    essais.verifier('le bilan porte d abord sur mes saisies', banc.js("$('report').querySelector('.kpi .v').textContent"), '1')
     banc.js('voirEquipe(true)'); time.sleep(0.4)
     essais.verifier('« Toute l equipe » : le bilan compte les prises de tous', banc.js("$('report').querySelector('.kpi .v').textContent"), '3')
     essais.verifier('les exports lisent le projet reuni', banc.js('surLePerimetre(() => DB.prises.map(t => t.par + " " + t.clip).sort())'), ['Romain B001C001', 'Romain B001C002', 'Simon A001C001'])
     essais.verifier('le projet de cet appareil n a pas bouge', banc.js('DB.prises.map(t => t.clip)'), ['A001C001'])
     essais.verifier('les fichiers exportes le disent', banc.js("fname('journal-DIT', 'pdf')").endswith('_equipe.pdf'), True)
-    essais.verifier('le bilan dit qui est reuni', 'Romain' in banc.js("$('perimetre').textContent") and 'Simon (ici)' in banc.js("$('perimetre').textContent"), True)
-    banc.js('voirEquipe(false)'); time.sleep(0.3)
-    essais.verifier('« Mes saisies » : retour a mon bilan', [banc.js("$('report').querySelector('.kpi .v').textContent"), banc.js("fname('x', 'csv')").endswith('_equipe.csv')], ['1', False])
+    essais.verifier('plus de « Mes saisies » : le rapport reste sur toute l equipe', [banc.js("!$('perimetre')"), banc.js('RAP.equipe')], [True, True])
     # -- le bouton du rapprochement fait la meme chose : tout le rapport passe sur l'equipe
     banc.js("document.querySelector('#rapprocher button[onclick=\"reunirEquipe()\"]').click()")
     essais.verifier('« Récupérer les saisies de l equipe » met aussi le bilan sur toute l equipe',

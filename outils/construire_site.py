@@ -98,6 +98,10 @@ def construire(sortie, vide=False, php=False, api=''):
     shutil.copytree(os.path.join(ICI, 'api'), os.path.join(sortie, 'api'),
                     ignore=shutil.ignore_patterns('donnees'))
     os.makedirs(os.path.join(sortie, 'api', 'donnees'), exist_ok=True)
+    # chez l'hebergeur, la porte du site : le mot de passe du tournage avant la page
+    # (sans api/acces-config.php, elle laisse passer tout le monde)
+    if php:
+        shutil.copy(os.path.join(ICI, 'outils', 'index-ovh.php'), os.path.join(sortie, 'index.php'))
     with open(os.path.join(sortie, 'api', 'donnees', '.htaccess'), 'w') as f:
         f.write('Require all denied\n')
 

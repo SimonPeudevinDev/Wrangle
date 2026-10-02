@@ -586,14 +586,13 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
    C'est a cela, et au mot, qu'on distingue « ca tourne » de « prêt a tourner ». */
 /* pendant la prise : comme sur une camera, un fond noir borde de rouge, le point
    REC qui clignote (net, une fois par seconde), le chrono, le carre pour couper */
-.fab.rec{background:#120b0a;color:#fff;box-shadow:inset 0 0 0 2px #ff3b30}
+.fab.rec{background:#120b0a;color:#fff;box-shadow:inset 0 0 0 2px var(--ng)}   /* le rouge du site, comme le Moteur */
 .fab.rec:hover{background:#1d1110}
-.fab .rec-point{width:12px;height:12px;border-radius:50%;flex:none;background:#ff3b30;box-shadow:0 0 10px 1px rgba(255,59,48,.8);
+.fab .rec-point{width:12px;height:12px;border-radius:50%;flex:none;background:var(--ng);box-shadow:0 0 10px 1px rgba(var(--ng-rgb),.8);
   animation:rec-clig 1s linear infinite}
 @keyframes rec-clig{0%,48%{opacity:1}52%,96%{opacity:.12}100%{opacity:1}}
-.fab .rec-mot{font-weight:800;letter-spacing:.1em;color:#ff3b30}
+.fab .rec-mot{font-weight:800;letter-spacing:.1em;color:var(--ng)}
 .fab .rec-stop{display:inline-flex;margin-left:6px;opacity:.85}
-.fab.rec:hover{background:var(--ng-g1)}
 .fab.rec em{opacity:.9;font-variant-numeric:tabular-nums;color:#fff}
 @keyframes rec{
   from{box-shadow:0 0 0 0 rgba(var(--ng-rgb),.55)}
@@ -1367,7 +1366,7 @@ select option{background:var(--surface);color:var(--txt)}
   nav,.top,.fbar,.sheet,.fabs,.voile,.addplan,.addtake,.btns,.noprint{display:none!important}
   body{background:#fff;color:#000;background-image:none}
   .plan,.kpi,.specs{border-color:#ccc;background:#fff}
-  .prises.defile,.cinq{max-height:none!important;overflow:visible}
+  .prises.defile,.cinq,.rliste{max-height:none!important;overflow:visible}
   .jour b{color:#000}
   main{padding:0}
 }
@@ -1620,8 +1619,11 @@ select option{background:var(--surface);color:var(--txt)}
 .spec.verrou .verrou-ico:hover{color:var(--acc);border-color:var(--line2)}
 nav button[hidden]{display:none}
 /* le rapprochement : environ cinq lignes, le reste defile dans sa boite */
-.rliste{max-height:236px;overflow-y:auto;padding-right:6px;border:1px solid var(--line);border-radius:var(--r);padding:4px 10px;margin-top:8px}
-.rliste .rplan > b{position:sticky;top:-4px;background:var(--bg);display:block;padding:6px 0 4px;z-index:1}
+.rliste{max-height:216px;overflow-y:auto;overscroll-behavior:contain;padding-right:10px;margin-top:8px;
+  scroll-snap-type:y proximity;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+/* comme « A verifier » : le defilement s'arrete sur une ligne entiere, jamais au milieu */
+.rliste .alert,.rliste .rplan > b{scroll-snap-align:start}
+.rliste .rplan > b{position:sticky;top:0;background:var(--bg);display:block;padding:6px 0 4px;z-index:1}
 .rliste .rplan:first-child{margin-top:0}
 /* l'adresse d'un decor, collee a sa ligne */
 .spec.decor + .spec{border-top:none;min-height:40px}
@@ -1629,3 +1631,58 @@ nav button[hidden]{display:none}
 /* deux jauges sur le PC : le site (toute l'equipe), puis ce PC */
 .stock-carte + .stock-carte{margin-top:12px}
 .stock-titre{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2);margin-bottom:6px}
+/* le backup : en rouge, cale a droite de la rangee des PDF */
+.btn.rouge{background:var(--ng);border-color:var(--ng);color:var(--ng-txt)}
+.btn.rouge:hover{background:var(--ng-g2);border-color:var(--ng-g2)}
+.btns .droite{margin-left:auto}
+/* un bloc du rapport replie : son titre se touche, un chevron dit s'il est ouvert */
+.bloc.repli>summary{list-style:none;cursor:pointer}
+.bloc.repli>summary::-webkit-details-marker{display:none}
+.bloc.repli>summary h3{display:flex;align-items:center;gap:8px}
+.bloc.repli>summary h3 em{font-style:normal;font:600 12px var(--font);color:var(--acc);background:rgba(231,176,74,.14);border-radius:var(--rp);padding:1px 8px}
+.bloc.repli>summary h3::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--dim2);border-bottom:2px solid var(--dim2);transform:rotate(45deg);transition:transform .15s}
+.bloc.repli[open]>summary h3::after{transform:rotate(-135deg)}
+.bloc.repli:not([open]){margin-bottom:14px}
+/* le rapprochement : le bilan se touche pour derouler la liste */
+.repli-rap>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px}
+.repli-rap>summary::-webkit-details-marker{display:none}
+.repli-rap>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--dim2);border-bottom:2px solid var(--dim2);transform:rotate(45deg);transition:transform .15s;margin-left:4px}
+.repli-rap[open]>summary::after{transform:rotate(-135deg)}
+/* le shot termine : une coche ronde avant le Moteur ; cochee, le nom du shot passe au vert */
+.pnum .fini{order:3;margin-left:auto}
+.pnum .fini + .viser{margin-left:0}
+.fini{display:grid;place-items:center;width:42px;height:42px;padding:0;border-radius:50%;border:1px solid var(--line2);background:none;color:var(--dim2);cursor:pointer}
+.fini:hover{color:var(--ok);border-color:var(--ok)}
+.fini.on{background:var(--ok);border-color:var(--ok);color:var(--ok-txt)}
+/* valide : une carte verte a part, compacte (le nom, ses etiquettes, le compte des prises) ;
+   la rouvrir rend tout le reste */
+.plan.termine{margin:10px -12px 10px -16px;padding:14px 12px 12px 16px;border:1px solid rgba(var(--ok-rgb),.45);border-radius:14px;
+  background:linear-gradient(90deg,rgba(var(--ok-rgb),.16),rgba(var(--ok-rgb),.04) 70%)}
+.plan.termine .pnum{font-size:25px;min-height:38px}
+.plan.termine .pno{color:var(--ok)}
+.plan.termine .ptourne{color:var(--ok-txt);background:var(--ok);padding:3px 9px;border-radius:var(--rp)}
+.plan.termine .pdesc,.plan.termine .pctx,.plan.termine .pelem,.plan.termine .addtake{display:none}
+.plan.termine .prises-repliees,.plan.termine .prises-replier{margin-top:8px}
+/* l'en-tete du rapport, compact : le titre et le jour sur une ligne, le generique a la suite */
+.rap-tete{margin-bottom:14px}
+.rap-titre{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.rap-titre b{font:800 21px var(--font-titre)}
+.rap-titre span{font-size:13.5px;font-weight:600;color:var(--dim)}
+.rap-titre span + span::before{content:"·";margin-right:12px;color:var(--dim2)}
+.rap-titre em{font-style:normal;font-size:12.5px;font-weight:700;color:var(--acc);background:rgba(231,176,74,.14);padding:2px 10px;border-radius:var(--rp)}
+.rap-generique{display:flex;flex-wrap:wrap;gap:2px 22px;margin-top:6px;font-size:13px;color:var(--txt);line-height:1.6}
+.rap-generique i{font-style:normal;color:var(--dim2)}
+/* les chiffres : une rangee, plus petits */
+.kpis{grid-template-columns:repeat(3,1fr);gap:0 16px;margin-bottom:20px;border-top:none}
+.kpi{padding:9px 2px 8px}
+.kpi .v{font-size:26px}
+.kpi .v small{font-size:13px}
+.kpi .l{font-size:9.5px;margin-top:4px}
+@media(min-width:900px){ .kpis{grid-template-columns:repeat(6,1fr)} }
+/* les notifications, loin des boutons d'action : sur ordinateur en bas a gauche de la page
+   (Moteur et + Prise sont a droite) ; sur telephone en haut, comme avant (le bas est a eux) */
+.toast{padding:10px 18px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+@media(min-width:1100px){
+  .toast{top:auto;bottom:28px;left:calc(var(--cote) + 28px);right:auto;width:auto;max-width:420px;transform:translateY(8px)}
+  .toast.on{transform:none}
+}

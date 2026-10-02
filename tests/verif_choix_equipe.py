@@ -85,7 +85,7 @@ with Banc(PORT, 9399, taille=(1200, 900)) as banc:
     # -- personne, puis Tous
     banc.js("basculerChoix('bob'); basculerChoix('zoe')")
     essais.verifier('personne de coche : vos saisies seulement', [sources(banc), banc.js("equipeReunie()")], [[], False])
-    essais.verifier('la note le dit', 'Personne n’est coché' in banc.js("$('perimetre').textContent"), True)
+    essais.verifier('plus de choix « Mes saisies / Toute l equipe » : toujours toute l equipe', [banc.js("!$('perimetre')"), banc.js('RAP.equipe')], [True, True])
     banc.js("choisirTous()")
     essais.verifier('Tous : de nouveau Alice et Bob', [sources(banc), banc.js("UI.choixEquipe")], [['Alice', 'Bob'], None])
     essais.exceptions(banc)
