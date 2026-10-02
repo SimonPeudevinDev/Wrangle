@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#171110">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- ajoutee a l'ecran d'accueil, la page s'ouvre en plein ecran comme une app, sans la barre du navigateur -->
+<meta name="apple-mobile-web-app-title" content="Wrangle">
+<link rel="apple-touch-icon" href="public/icone-180.png">
+<link rel="manifest" href="public/manifest.json">
 <title>Wrangle</title>
 <!-- Le signe sert d'icone d'onglet et d'ecran d'accueil, en SVG dans l'adresse :
      l'icone s'affiche avant meme que public/ soit charge. -->
@@ -4289,7 +4293,10 @@ function openPlan(id, y){
         : `<button type="button" class="btn fusion" onclick="choisirFusion('${p.id}')">Fusionner avec un autre shot…</button>`}
     </div>
 
-    <div class="note centre">Pour retirer ce plan du découpage, ou en ajouter un : Préparation. Depuis le tournage, on ne supprime pas un plan.</div>`;
+    ${prepare() ? `<div class="btns centre" style="margin-top:6px">
+        <button type="button" class="btn d" onclick="supprimerShotTournage('${p.id}')">Supprimer ce shot</button></div>
+      <div class="note centre">Il disparaît du découpage pour toute l’équipe, avec ses prises.</div>`
+      : `<div class="note centre">Pour retirer ce shot du découpage, ou en ajouter un : Préparation.</div>`}`;
 
   const f = $('sfoot');
   f.innerHTML = `<button type="button" class="btn" id="moteur-fiche">&#9679; Moteur</button>
@@ -4790,6 +4797,11 @@ function fixerNombreJour(j, input){
     return;
   }
   input.value = ps.length;
+}
+/* Depuis Tournage, le preparateur (Simon) peut supprimer un shot : la fiche se ferme ensuite. */
+function supprimerShotTournage(id){
+  const p = plan(id); if (!p || !prepare()) return;
+  supprimerPlanConfirme(p).then(fait => { if (fait){ closeSheet(); renderAll(); } });
 }
 function supprimerPlanPrep(id){
   const p = plan(id);

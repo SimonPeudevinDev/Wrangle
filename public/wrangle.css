@@ -1686,3 +1686,4 @@ nav button[hidden]{display:none}
   .toast{top:auto;bottom:28px;left:calc(var(--cote) + 28px);right:auto;width:auto;max-width:420px;transform:translateY(8px)}
   .toast.on{transform:none}
 }
+.btns.centre{justify-content:center}
