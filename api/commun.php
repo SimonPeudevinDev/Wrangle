@@ -34,7 +34,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {   // la question prealab
 define('DONNEES', __DIR__ . '/donnees');
 define('JOURNAL_GARDE', 400);        // operations gardees pour les appareils en retard
 define('SAUV_TOUTES_LES', 10 * 60);  // secondes entre deux sauvegardes horodatees
-define('SAUV_CONSERVEES', 60);
+define('SAUV_CONSERVEES', 5);        // les dernieres copies gardees (environ une heure de saisie)
+define('SAUV_JOURS', 30);            // plus la derniere de chaque jour, sur trente jours
 define('PRESENCE_EXPIRE', 90);       // secondes sans nouvelle d'un appareil avant retrait
 define('JSON_SORTIE', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -236,7 +237,8 @@ function ecrire_projet($db) {
     ecrire_json(dossier_espace() . '/projet.json', $db);
 }
 
-// une copie horodatee toutes les dix minutes des qu'il y a du nouveau, 60 gardees
+// une copie horodatee toutes les dix minutes des qu'il y a du nouveau ; on garde
+// les dernieres (SAUV_CONSERVEES) et la derniere de chaque jour, pour revenir a la veille
 function sauvegarder_si_besoin($db) {
     $f = dossier_espace() . '/derniere_sauv.txt';
     $derniere = file_exists($f) ? (int) file_get_contents($f) : 0;
@@ -245,10 +247,25 @@ function sauvegarder_si_besoin($db) {
     }
     ecrire_json(dossier_espace() . '/sauvegardes/projet_' . date('Y-m-d_His') . '.json', $db);
     file_put_contents($f, (string) time());
-    $anciennes = glob(dossier_espace() . '/sauvegardes/projet_*.json') ?: [];
-    sort($anciennes);
-    foreach (array_slice($anciennes, 0, max(0, count($anciennes) - SAUV_CONSERVEES)) as $x) {
-        @unlink($x);
+    // le menage passe dans tous les espaces : ceux qui ne saisissent plus gardent aussi peu
+    foreach (glob(DONNEES . '/espaces/*/sauvegardes', GLOB_ONLYDIR) ?: [] as $d) {
+        elaguer_sauvegardes($d);
+    }
+}
+
+function elaguer_sauvegardes($dossier) {
+    $toutes = glob($dossier . '/projet_*.json') ?: [];
+    sort($toutes);   // le nom porte la date : l'ordre des noms est l'ordre du temps
+    $garder = array_slice($toutes, -SAUV_CONSERVEES);
+    $jours = [];
+    foreach ($toutes as $x) {   // la derniere de chaque jour l'emporte
+        $jours[substr(basename($x), 7, 10)] = $x;
+    }
+    $garder = array_merge($garder, array_slice(array_values($jours), -SAUV_JOURS));
+    foreach ($toutes as $x) {
+        if (!in_array($x, $garder, true)) {
+            @unlink($x);
+        }
     }
 }
 

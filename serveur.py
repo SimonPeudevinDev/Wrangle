@@ -67,7 +67,8 @@ DATA = ESPACES = ''
 ranger_donnees(os.path.join(ICI, 'data'))
 
 SAUV_TOUTES_LES = 10 * 60      # secondes entre deux sauvegardes horodatées
-SAUV_CONSERVEES = 60
+SAUV_CONSERVEES = 5            # les dernières copies gardées (environ une heure de saisie)
+SAUV_JOURS = 30                # plus la dernière de chaque jour, sur trente jours
 PRESENCE_EXPIRE = 90           # secondes sans nouvelle d'un client avant retrait
 COOKIE = 'wrangle_acces'       # le laissez-passer gardé par le navigateur
 COOKIE_DUREE = 90 * 24 * 3600  # un tournage entier sans redemander le mot de passe
@@ -250,6 +251,85 @@ def noter_nom(e, nom):
         pass
 
 
+"""Les plans de décor importés : un fichier chacun dans data/fonds, nommé d'après
+son contenu ; le projet n'en garde que le nom (« fond:… »). Une image n'est ainsi
+qu'une fois sur le disque, et ni les espaces ni les sauvegardes ne la recopient."""
+FOND_NOM = re.compile(r'^[0-9a-f]{20}\.(webp|jpg|png)$')
+FOND_TYPES = {'image/webp': '.webp', 'image/jpeg': '.jpg', 'image/png': '.png'}
+
+
+def enregistrer_fond(url):
+    m = re.match(r'^data:(image/(?:webp|jpeg|png));base64,(.+)$', str(url or ''), re.S)
+    if not m:
+        return ''
+    try:
+        octets = base64.b64decode(m.group(2), validate=True)
+    except Exception:
+        return ''
+    if not octets or len(octets) > 4 * 1024 * 1024:
+        return ''
+    nom = hashlib.sha1(octets).hexdigest()[:20] + FOND_TYPES[m.group(1)]
+    dossier = os.path.join(DATA, 'fonds')
+    os.makedirs(dossier, exist_ok=True)
+    chemin = os.path.join(dossier, nom)
+    if not os.path.isfile(chemin):
+        with open(chemin, 'wb') as f:
+            f.write(octets)
+    return nom
+
+
+def stockage():
+    """La place des données sur ce PC, pour la jauge des réglages : pas de quota
+    ici (le disque du PC), seulement le détail. Mêmes clés que api/stockage.php."""
+    def taille(d):
+        n = 0
+        for racine, _, fichiers in os.walk(d):
+            for f in fichiers:
+                try:
+                    n += os.path.getsize(os.path.join(racine, f))
+                except OSError:
+                    pass
+        return n
+    def long(x):
+        return len(json.dumps(x, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+    t = {'shots': 0, 'schemas': 0, 'prises': 0}
+    sauv = 0
+    for e in (os.listdir(ESPACES) if os.path.isdir(ESPACES) else []):
+        sauv += taille(os.path.join(ESPACES, e, 'sauvegardes'))
+        f = os.path.join(ESPACES, e, 'projet.json')
+        try:
+            n = os.path.getsize(f)
+            with open(f, encoding='utf-8') as fh:
+                db = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(db, dict):
+            continue
+        # le projet, réparti par type au prorata de ce que chaque partie pèse dans le fichier
+        schemas = shots = 0
+        for pl in db.get('plans') or []:
+            c = sum(long(pl[k]) for k in ('croquis', 'croquisPlus') if pl.get(k))
+            schemas += c
+            shots += long(pl) - c
+        schemas += long((db.get('prod') or {}).get('fonds') or {}) if (db.get('prod') or {}).get('fonds') else 0
+        tout = max(1, long(db))
+        t['shots'] += n * shots / tout
+        t['schemas'] += n * schemas / tout
+        t['prises'] += n * long(db.get('prises') or []) / tout
+    t['schemas'] += taille(os.path.join(DATA, 'fonds'))     # les plans de décor importés, en fichiers
+    espaces_ = taille(ESPACES)
+    divers = max(0, espaces_ - t['shots'] - t['schemas'] - t['prises'] - sauv + taille(os.path.join(DATA, 'fonds')))
+    anciennes = max(0, taille(DATA) - espaces_ - taille(os.path.join(DATA, 'fonds')))
+    parties = [{'cle': 'shots', 'nom': 'Shots', 'octets': round(t['shots'])},
+               {'cle': 'schemas', 'nom': 'Schémas', 'octets': round(t['schemas'])},
+               {'cle': 'prises', 'nom': 'Prises', 'octets': round(t['prises'])},
+               {'cle': 'sauvegardes', 'nom': 'Sauvegardes', 'octets': sauv},
+               {'cle': 'divers', 'nom': 'Journaux et réglages', 'octets': round(divers)},
+               {'cle': 'reste', 'nom': 'Anciennes copies', 'octets': anciennes}]
+    return {'utilise': sum(x['octets'] for x in parties), 'quota': None,
+            'quand': time.strftime('%Y-%m-%dT%H:%M:%S'), 'parties': parties}
+
+
 def liste_espaces():
     """Les espaces qui ont un projet, pour le rapprochement du DIT."""
     with verrou:
@@ -360,10 +440,25 @@ def sauvegarde_horodatee(e, force=False):
         ecrire_json(nom, e['db'])
         e['sale'] = False
         e['derniere_sauv'] = time.time()
-        anciennes = sorted(x for x in os.listdir(sauv) if x.startswith('projet_') and x.endswith('.json'))
-        for x in anciennes[:-SAUV_CONSERVEES]:
+        # le ménage passe dans tous les espaces : ceux qui ne saisissent plus gardent aussi peu
+        for d in os.listdir(ESPACES):
+            elaguer_sauvegardes(os.path.join(ESPACES, d, 'sauvegardes'))
+
+
+def elaguer_sauvegardes(dossier):
+    """On garde les dernières copies (SAUV_CONSERVEES) et la dernière de chaque jour,
+    pour revenir à la veille ; le reste s'en va."""
+    if not os.path.isdir(dossier):
+        return
+    toutes = sorted(x for x in os.listdir(dossier) if x.startswith('projet_') and x.endswith('.json'))
+    jours = {}
+    for x in toutes:                 # le nom porte la date : la dernière du jour l'emporte
+        jours[x[7:17]] = x
+    garder = set(toutes[-SAUV_CONSERVEES:]) | set(list(jours.values())[-SAUV_JOURS:])
+    for x in toutes:
+        if x not in garder:
             try:
-                os.remove(os.path.join(sauv, x))
+                os.remove(os.path.join(dossier, x))
             except OSError:
                 pass
 
@@ -841,14 +936,15 @@ class Requete(BaseHTTPRequestHandler):
 
     # -- utilitaires -------------------------------------------------------
 
-    def _repondre(self, code, corps=b'', type_=None, entetes=(), cors=False):
+    def _repondre(self, code, corps=b'', type_=None, entetes=(), cors=False, cache=''):
         """Toute réponse passe par ici : le code, les en-têtes, le corps.
-        Rien n'est mis en cache — sur le plateau, la page doit être la bonne."""
+        Rien n'est mis en cache — sur le plateau, la page doit être la bonne —
+        sauf ce qui ne change jamais (un plan de décor, nommé d'après son contenu)."""
         self.send_response(code)
         if type_:
             self.send_header('Content-Type', type_)
         self.send_header('Content-Length', str(len(corps)))
-        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Cache-Control', cache or 'no-store')
         for nom, valeur in entetes:
             self.send_header(nom, valeur)
         if cors:
@@ -942,6 +1038,17 @@ class Requete(BaseHTTPRequestHandler):
                                         'adresses': self.server.adresses})
         if u.path == '/api/depuis':
             return self._depuis(parse_qs(u.query))
+        if u.path == '/api/stockage':
+            return self._json(200, stockage())
+        if u.path == '/api/fond':
+            nom = (parse_qs(u.query).get('f') or [''])[0]
+            chemin = os.path.join(DATA, 'fonds', nom)
+            if not FOND_NOM.match(nom) or not os.path.isfile(chemin):
+                return self._json(404, {'erreur': 'introuvable'})
+            with open(chemin, 'rb') as f:
+                corps = f.read()
+            return self._repondre(200, corps, TYPES.get(os.path.splitext(nom)[1], 'application/octet-stream'),
+                                  cors=True, cache='public, max-age=31536000, immutable')
         if u.path == '/api/espaces':
             with verrou:
                 return self._json(200, {'espaces': liste_espaces()})
@@ -1092,6 +1199,10 @@ class Requete(BaseHTTPRequestHandler):
             # l'appareil émetteur reçoit ses opérations corrigées, sans le projet complet
             retour = [op if op['op'] != 'remplacer' else {'op': 'remplacer'} for op in faites]
             return self._json(200, {'rev': rev, 'ops': retour})
+
+        if u.path == '/api/fond':
+            r = enregistrer_fond(corps.get('data'))
+            return self._json(200, {'f': r}) if r else self._json(400, {'erreur': 'image attendue (WebP, JPEG ou PNG, 4 Mo au plus)'})
 
         if u.path == '/api/presence':
             client = str(corps.get('client') or '')[:40]

@@ -78,7 +78,7 @@ Laisser la fenêtre noire ouverte pendant le tournage. `Ctrl+C` ou fermer la fen
 - `data/espaces/<prénom>/projet.json` : le projet de chaque personne, réécrit à chaque modification
   (`nom.txt` à côté garde le prénom tel qu'elle l'écrit).
 - `data/espaces/<prénom>/sauvegardes/` : une copie horodatée au démarrage puis toutes les 10 minutes
-  dès qu'il y a du nouveau (60 dernières conservées). Pour revenir en arrière : arrêter le serveur,
+  dès qu'il y a du nouveau (les 5 dernières, plus la dernière de chaque jour). Pour revenir en arrière : arrêter le serveur,
   copier la sauvegarde voulue sur le `projet.json` de l'espace, relancer.
 - Le projet du temps où le serveur n'avait qu'un carnet pour tout le monde (`data/projet.json`)
   déménage tout seul au premier démarrage dans l'espace `commun`, sauvegardes comprises : le DIT le
@@ -126,7 +126,7 @@ La page sait qu'elle est chez l'hébergeur par une ligne en tête (`window.WRANG
 posée par `construire_site.py --php`, ce que fait la publication pour la copie envoyée chez OVH)
 et l'interroge toutes les deux secondes au lieu d'écouter un flux. Rien à installer ni à laisser
 allumé. Dans chaque espace : le projet, le journal, une sauvegarde horodatée toutes les dix minutes
-(60 gardées). Le journal DIT par mail
+(les 5 dernières, plus la dernière de chaque jour). Le journal DIT par mail
 part par la fonction mail de l'hébergeur ; l'expéditeur se règle dans `api/donnees/mail.json`
 (`{"expediteur": "journal@foresight-movie.com"}`). `py tests/verif_ovh.py` parle au site publié
 pour vérifier que tout répond, dans deux espaces d'essai vidés à la fin (il faut le réseau).

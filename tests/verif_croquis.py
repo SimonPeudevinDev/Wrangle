@@ -19,7 +19,17 @@ with Banc(8786, 9371) as banc:
     banc.ouvrir()
     banc.nommer()
 
-    # -- un plan sans croquis propose de dessiner
+    # -- un decor fourni avec la page (public/maps) : son plan sert de fond, sans rien peser dans le projet
+    banc.js("patch('plan', DB.plans[0].id, { lieu: 'Atelier', fondLieu: '' })")
+    essais.verifier('le plan de l Atelier est fourni, hors du projet',
+                    [banc.js("fondDecor('Atelier')"), banc.js("!!(DB.prod.fonds || {}).Atelier")], ['public/maps/atelier.webp', False])
+    banc.js('openPlan(DB.plans[0].id)'); time.sleep(0.8)
+    essais.verifier('son plan s affiche sous le croquis, sans corbeille (il ne se retire pas)',
+                    [banc.js("!!document.getElementById('croq-apercu')"), banc.js("!!document.querySelector('.croq-outils .d')")], [True, False])
+    banc.js('closeSheet()'); time.sleep(0.3)
+
+    # -- un plan sans croquis, dans un decor sans plan, propose de dessiner
+    banc.js("patch('plan', DB.plans[0].id, { lieu: 'Décor de test' })")
     banc.js('openPlan(DB.plans[0].id)'); time.sleep(0.6)
     essais.verifier('plan vierge : le bouton « Dessiner le set »',
                     banc.js("!!document.querySelector('.croq-cadre.vide .croq-vide')"), True)

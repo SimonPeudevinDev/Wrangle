@@ -30,7 +30,7 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
                           desc:'Edward entre', notesClient:'Reflet (vitre)', notesInternes:'refaire le HDRI',
                           elements:{ hdri:true, chrome:true, plates:true }, elementsAutre:'lidar du décor', mouv:'Fixe', support:'Trépied',
                           croquis:{ w:1600, h:1200, traits:[], objets:[{ t:'cam', x:500, y:600, a:0 }, { t:'cote', x1:500, y1:700, x2:900, y2:700, txt:'4,20 m' }] } });
-      patch('plan', %s, { vfxDesc:'', assets:'', tags:['LIVE'], elements:{}, elementsAutre:'' });   // un plan sans effet
+      patch('plan', %s, { vfxDesc:'', assets:'', tags:['LIVE'], elements:{}, elementsAutre:'', lieu:'Décor de test' });   // un plan sans effet, dans un decor sans plan
       Object.assign(DB.prod, { titre:'Foresight', real:'Loïs', dop:'Corentin', firstAD:'Loïse', producer:'Romain', vfxSuper:'Camille', vfxStudio:'Tic & Tac' });
     """ % (json.dumps(ids[0]), json.dumps(ids[0]), json.dumps(ids[1]), json.dumps(ids[0]), json.dumps(ids[1])))
     j = banc.js('DB.plans[0].jour')
@@ -40,18 +40,24 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('une feuille par plan tourne, pas les autres', [f['plan'] for f in m], banc.js('DB.plans.slice(0, 2).map(p => p.plan)'))
     f = m[0]
     essais.verifier('le projet, pre-rempli', dict(f['projet']),
-                    {'Name': 'Foresight', 'Director': 'Loïs', 'DOP': 'Corentin', 'First AD': 'Loïse', 'Producer': 'Romain'})
-    t = dict(f['tournage'])
+                    {'Director': 'Loïs', 'DOP': 'Corentin', 'First AD': 'Loïse', 'Producer': 'Romain'})
+    champs = lambda l: {c[i]: c[i + 1] for c in l for i in range(0, len(c), 2)}   # une ligne peut porter deux champs
+    t = champs(f['tournage'])
     essais.verifier('le tournage : les heures des prises, le jour sur le nombre de jours, le superviseur',
                     [t['Time'], t['Shooting day'].startswith(banc.js("numJour(%s)" % json.dumps(j)) + ' / '), t['VFX Sup.']],
                     ['09:05 – 09:40', True, 'Camille'])
-    s = dict(f['script'])
+    essais.verifier('la date : celle de l export, sur la ligne du jour de tournage ; le lieu du jour',
+                    [t['Date'], f['tournage'][0][2], 'Location' in t], [time.strftime('%d/%m/%Y'), 'Shooting day', True])
+    essais.verifier('la sequence seule, le plan sur la meme ligne',
+                    f['script'][0], ['Sequence', banc.js('DB.plans[0].seq'), 'Shot', banc.js('DB.plans[0].plan')])
+    s = champs(f['script'])
     essais.verifier('le script : INT coche, NIGHT coche',
                     [[n for n, on in s['Int / Ext']['choix'] if on], [n for n, on in s['Time of day']['choix'] if on]], [['INT'], ['NIGHT']])
     essais.verifier('la camera, l objectif, le codec et la cadence', [f['camera'], f['lens'], f['codec']], ['ARRI Alexa 35', 'Sigma Classic Prime', 'ARRIRAW / 24 fps'])
     on = [n for n, on in f['mouvements'] if on]
     essais.verifier('le mouvement lu dans le plan et ses prises',
                     [all(n in on for n in ['STATIC', 'TRAVEL', 'STEADI']), 'HANDHELD' in on], [True, False])
+    essais.verifier('la feuille n ecrit que le mouvement du plan', f['mouvement'], ' · '.join(on))
     b = f['prises'][1]
     essais.verifier('les releves, sans l unite que porte la colonne',
                     [b['focale'], b['focus'], b['hauteur'], b['tilt'], b['wb'], b['shutter']],
@@ -59,8 +65,11 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('ni OK ni NG, le resultat et le montage vont dans la note', b['note'], 'Faux départ · Kept for edit')
     essais.verifier('les notes', [f['prises'][0]['note'], f['client'], f['interne']], ['plaque (sans comédiens)', 'Reflet (vitre)', 'refaire le HDRI'])
     essais.verifier('la description de la scene et du VFX', [f['scene'], f['vfx']], ['Edward entre', 'Onde de choc\nAssets: Chronoscope CG'])
-    essais.verifier('les elements de la feuille coches', [e['nom'] for e in f['elements'] if e['on']], ['HDRI', 'Chrome ball', 'Grey ball'])
-    essais.verifier('les autres elements dans « Other »', f['autres'], 'Extra plates, lidar du décor')
+    essais.verifier('la liste On set du breakdown, dans son ordre', [e['nom'] for e in f['elements']],
+                    ['Photogrammetry', 'HDRI', 'Chrome / grey ball', 'Green / blue screen', 'Gaussian splat',
+                     'Color charts', 'Extra plate', 'Clean plate', 'Wide angle camera', 'Trackers'])
+    essais.verifier('les elements de la feuille coches', [e['nom'] for e in f['elements'] if e['on']], ['HDRI', 'Chrome / grey ball', 'Extra plate'])
+    essais.verifier('les autres elements dans « Other »', f['autres'], 'lidar du décor')
     essais.verifier('les distances : le point, d ou l on mesure, les cotes du croquis',
                     f['distances'], [['Take 2', '3 > 2', '', '', 'sol', ''], ['Set diagram', '', '', '', '', '4,20 m']])
     essais.verifier('le croquis du plan va sur la feuille', f['croquis'], ids[0] + ':0')

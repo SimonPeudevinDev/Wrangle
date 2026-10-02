@@ -31,7 +31,7 @@ def main():
             print('capture', chemin)
 
         banc.vue(390, 844, echelle=2)
-        banc.ouvrir('/?client=cap&nom=Marie', repos=2.5)
+        banc.ouvrir('/?client=cap&nom=Alex', repos=2.5)
 
         # quelques prises pour que la liste ait de la matiere
         banc.js("""(() => { const p = DB.plans[7]; dernierPlan = p.id;

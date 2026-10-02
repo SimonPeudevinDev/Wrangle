@@ -90,6 +90,7 @@
   <div class="dtete">
     <button type="button" class="ico" onclick="fermerCroquis(true)" aria-label="Fermer">&#8592;</button>
     <div class="dtitre"><b></b><span></span></div>
+    <div class="deja" id="croq-deja" hidden></div>
     <div class="dzoomb">
       <button type="button" class="ico" onclick="zoomCroquis(1 / 1.25)" aria-label="Réduire" title="Réduire (Ctrl + molette)">&minus;</button>
       <button type="button" class="dzoom" id="dzoom" onclick="zoomCroquis(null)" title="Revenir à la vue entière">100 %</button>
@@ -187,14 +188,19 @@ const SERIE = ['14 mm', '20 mm', '24 mm', '28 mm', '35 mm', '40 mm', '50 mm', '1
 /* Elements captes sur le plateau. Les huit premiers sont ceux de la feuille
    de tournage ; les fonds et le mur LED s'y ajoutent car ils changent tout
    pour la post. Le quatrieme champ marque ceux qui meritent d'etre colores. */
+/* dans l'ordre de la colonne « On set » du breakdown VFX ; puis ceux de l'app seule */
 const ELEMENTS = [
-  ['chrome',     'Chrome / grey ball', 'BALLS',    ''],
-  ['chart',      'Color charts',   'CHARTS',     ''],
+  ['photogram',  'Photogrammétrie', 'PHOTOGRAM', ''],
   ['hdri',       'HDRI',           'HDRI',       ''],
-  ['cleanplate', 'Cleanplate',     'CLEANPLATE', ''],
-  ['plates',     'Extra plates',   'PLATES',     ''],
+  ['chrome',     'Chrome / grey ball', 'BALLS',    ''],
   ['vert',       'Fond vert',      'FOND VERT',  'v'],
   ['bleu',       'Fond bleu',      'FOND BLEU',  'v'],
+  ['splat',      'Gaussian splat', 'SPLAT',      ''],
+  ['chart',      'Color charts',   'CHARTS',     ''],
+  ['plates',     'Extra plates',   'PLATES',     ''],
+  ['cleanplate', 'Clean plate',    'CLEANPLATE', ''],
+  ['wide',       'Wide angle camera', 'WIDE CAM', ''],
+  ['trackers',   'Trackers',       'TRACKERS',   ''],
   ['lidar',      'Lidar',          'LIDAR',      ''],
   ['camtrack',   'CamTrack live',  'CAMTRACK',   ''],
   ['led',        'Mur LED',        'MUR LED',    'v'],
@@ -305,7 +311,7 @@ const PLAN_NEUF = () => ({
 
 /* L'equipe du plateau : un bouton par prenom au premier lancement. Changer
    cette liste suffit a changer les choix proposes. */
-const EQUIPE = ['Romain', 'Simon', 'Victoire', 'Marie', 'Georges', 'Alex'];
+const EQUIPE = ['Romain', 'Simon', 'Alex', 'Autres'];
 
 function lireUI(){
   let u = {};
@@ -909,7 +915,7 @@ function envoyerPresence(){
     const v = planVise();
     RESEAU.viseEnvoye = v ? v.id : '';
     const actif = [openType === 'prise' || openType === 'plan' ? openType + ':' + openId : '',
-                   v ? 'vise:' + v.id : ''].filter(Boolean).join(';');
+                   v ? 'vise:' + v.id : '', typeof ouvrirCroquis === 'function' && dessin ? 'croquis:' + dessin.planId : ''].filter(Boolean).join(';');
     poster(API('presence'), JSON.stringify({ client: CLIENT, nom: UI.nom, actif, espace: monEspace() || undefined })).catch(() => {});
   }, 300);
 }
@@ -955,12 +961,24 @@ function majPresence(){
 }
 
 /* L'initiale de la personne qui a une prise ou un plan ouvert, dans la liste. */
+/* Le schema est commun : qui d'autre le dessine en ce moment (son editeur ouvert sur ce plan). */
+const quiDessine = id => [...new Set(autres().filter(x => (x.actif || '').split(';').includes('croquis:' + id)).map(x => x.nom || 'Quelqu’un'))];
+const texteDessine = l => l.length ? l.join(' et ') + (l.length > 1 ? ' modifient' : ' modifie') + ' déjà ce schéma' : '';
+function majDejaCroquis(){
+  // appelee des le demarrage, avant meme que l'editeur (dessin) soit declare : elle ne doit rien arreter
+  try{
+    const z = $('croq-deja');
+    if (z){ const t = dessin ? texteDessine(quiDessine(dessin.planId)) : ''; z.textContent = t; z.hidden = !t; }
+    document.querySelectorAll('.croq-deja[data-plan]').forEach(e => { const t = texteDessine(quiDessine(e.dataset.plan)); e.textContent = t; e.hidden = !t; });
+  }catch(e){}
+}
 function majMarqueurs(){
+  majDejaCroquis();
   document.querySelectorAll('.qui').forEach(e => e.remove());
   const poses = new Set();
   autres().forEach(x => {
     // actif : « prise:id » ou « plan:id » (la fiche ouverte), puis « ;vise:id » (le plan du Moteur)
-    const f = (x.actif || '').split(';').find(a => a && a.indexOf('vise:') !== 0);
+    const f = (x.actif || '').split(';').find(a => a && a.indexOf('vise:') !== 0 && a.indexOf('croquis:') !== 0);
     if (!f) return;
     const i = f.indexOf(':');
     const type = f.slice(0, i), id = f.slice(i + 1);
@@ -1093,8 +1111,9 @@ function proposerAncienCarnet(a){
 
 /* ------------------------------------------------------------------ Theme */
 
+/* Un seul theme, le sombre : le mode clair a ete retire ; un appareil qui l'avait garde revient au sombre. */
 function appliquerTheme(){
-  const clair = UI.theme === 'light';
+  const clair = false;
   document.documentElement.dataset.theme = clair ? 'light' : 'dark';
   const m = document.querySelector('meta[name=theme-color]');
   if (m) m.content = clair ? '#efe6da' : '#171110';
@@ -1128,8 +1147,12 @@ function avancement(j){
    sinon le premier jour commence mais pas fini. Il porte un point d'or dans
    la rangee des jours : sur le plateau, c'est la seule pastille qui compte. */
 function jourDuTournage(){
-  const m = String(DB.prod.jour || '').match(/\d+/);
   const jours = joursConnus();
+  // le jour dont la date (Jours de tournage, dans les reglages) est aujourd'hui
+  const auj = new Date(), iso = auj.getFullYear() + '-' + deuxCh(auj.getMonth() + 1) + '-' + deuxCh(auj.getDate());
+  const parDate = jours.find(x => x && x !== 'CG' && DB.prod['date_' + x] === iso);
+  if (parDate) return parDate;
+  const m = String(DB.prod.jour || '').match(/\d+/);
   if (m){
     const n = String(parseInt(m[0], 10));
     const j = jours.find(x => x && x !== 'CG' && numJour(x) === n);
@@ -1137,9 +1160,13 @@ function jourDuTournage(){
   }
   return jours.find(x => { const a = avancement(x); return a.fait > 0 && a.fait < a.total; }) || null;
 }
+/* Chaque jour de tournage a sa date et son decor (prod.date_J1, prod.decor_J1…),
+   reglés dans les reglages ; sans decor note, c'est celui de ses plans. */
+const decorDesPlans = j => frequences(plansDuJour(j).map(p => p.lieu || '—')).slice(0, 2).map(x => x[0]).join(' + ');
 function decorJour(j){
-  return frequences(plansDuJour(j).map(p => p.lieu || '—')).slice(0, 2).map(x => x[0]).join(' + ');
+  return String(DB.prod['decor_' + j] || '').trim() || decorDesPlans(j);
 }
+const dateJourFr = j => dateFr(DB.prod['date_' + j] || '') || (j && j === jourDuTournage() ? DB.prod.date || '' : '');
 
 /* Les focales proposees : la serie du tournage, plus toute focale deja
    employee dans le decoupage ou saisie sur le plateau. */
@@ -1276,6 +1303,8 @@ function frequences(vals){
 }
 const LISTES = {
   'dl-lieu':    () => fusion(DB.prod.decors || [], connus(DB.plans, 'lieu')),
+  // le mouvement : la liste de la fiche, et les mouvements deja notes (un champ peut en porter plusieurs)
+  'dl-mouv':  () => fusion(MOUVEMENTS, DB.plans.flatMap(p => valeursDe(p.mouv))),
   'dl-cadrage': () => fusion(['Très gros plan', 'Gros plan', 'Poitrine', 'Épaules', 'Taille', 'Américain', 'Moyen',
                               'Italien', 'Large', 'Ensemble'], connus(DB.plans, 'cadrage')),
   // les sequences sur deux chiffres (« 3 » est « 03 »), dans l'ordre
@@ -1299,9 +1328,10 @@ const LISTES = {
   'dl-diaph': () => fusion(['1.3', '1.4', '1.6', '1.8', '2', '2.2', '2.5', '2.8', '3.2', '3.5', '4', '4.5', '5', '5.6',
                             '6.3', '7.1', '8', '9', '10', '11', '13', '14', '16', '18', '20', '22'], connus(DB.prises, 'diaph')),
   // les formats capteur de l'Alexa 35 (Open Gate et anamorphiques compris)
-  'dl-reso':  () => fusion(['4.6K 3:2 Open Gate (4608 x 3164)', '4.6K 16:9 (4608 x 2592)', '4K 16:9 (4096 x 2304)',
-                            '4K 2:1 (4096 x 2048)', 'UHD (3840 x 2160)', '3.3K 6:5 (3328 x 2790)', '3K 1:1 (3072 x 3072)',
-                            '2.7K 8:9 (2743 x 3086)', '2K 16:9 S16 (2048 x 1152)', 'HD (1920 x 1080)'], connus(DB.prises, 'reso')),
+  //   ceux du tournage d'abord : l'Open Gate, puis les deux 2:1
+  'dl-reso':  () => fusion(['4.6K 3:2 Open Gate (4608 x 3164)', '4K 2:1 (4096 x 2048)', '2K 2:1 (2048 x 1024)',
+                            '4.6K 16:9 (4608 x 2592)', '4K 16:9 (4096 x 2304)', 'UHD (3840 x 2160)', '3.3K 6:5 (3328 x 2790)',
+                            '3K 1:1 (3072 x 3072)', '2.7K 8:9 (2743 x 3086)', '2K 16:9 S16 (2048 x 1152)', 'HD (1920 x 1080)'], connus(DB.prises, 'reso')),
   // la cadence : 0.75 a 120 i/s selon le format
   'dl-fps':   () => fusion(['23.976', '24', '25', '29.97', '30', '48', '50', '60', '75', '96', '100', '120'], connus(DB.prises, 'fps')),
   // les ND internes de l'Alexa 35 (FSND motorises)
@@ -2606,6 +2636,8 @@ window.addEventListener('popstate', ev => {
   const st = ev.state;
   RETOUR.rejoue = true;
   try{
+    // le Retour depuis l'editeur du croquis : il enregistre et ferme, la fiche reste
+    if (dessin){ fermerCroquis(true); return; }
     if (st && st.vue && st.vue !== view) allerVue(st.vue);
     if (st && st.fiche === 'plan' && plan(st.id)) openPlan(st.id);
     else if (st && st.fiche === 'prise' && prise(st.id)) openPrise(st.id);
@@ -3046,6 +3078,7 @@ const CROQUIS_LARGEURS = [3, 6, 12];
 const PICTO = d => ICO(d, 20, 1.8);
 const CROQUIS_OBJETS = [
   ['cam',     'Caméra',     PICTO('<rect x="3" y="8" width="11" height="9" rx="1.5"/><path d="M14 11l6-3v9l-6-3z"/>')],
+  ['chrono',  'Chronoscope', PICTO('<rect x="2" y="6.5" width="13" height="11" rx="3"/><circle cx="8.5" cy="12" r="2"/><path d="M5.5 9h6M5.5 15h6M15 10.5l5-2.5v8l-5-2.5"/>')],
   ['lum',     'Lumière',    PICTO('<path d="M4 8h8a3.5 3.5 0 0 1 3.5 3.5v1A3.5 3.5 0 0 1 12 16H4z"/><path d="M17.5 12h3M16.5 8.5l2.5-2M16.5 15.5l2.5 2M7 16v3"/>')],
   ['soleil',  'Soleil',     PICTO('<circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>')],
   ['perso',   'Personnage', PICTO('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>')],
@@ -3062,12 +3095,41 @@ const CROQUIS_OBJETS = [
   ['txt',     'Texte',      PICTO('<path d="M5 6h14M12 6v13"/>')]
 ];
 /* trois gestes : poser puis orienter ; tirer d'un bout a l'autre ; tirer coin a coin */
-const OBJ_POSE = ['cam', 'lum', 'soleil', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
+const OBJ_POSE = ['cam', 'chrono', 'lum', 'soleil', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
 /* la fleche libre : un trajet dessine a main levee, en pointille, la pointe a l'arrivee */
 const OBJ_TRACE = ['trajet'];
 let dessin = null;   // l'editeur ouvert
 
-const fondDecor = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
+/* Les plans des decors fournis avec la page (public/maps) : des fichiers, pas des
+   images dans le projet, ils ne pesent rien dans les espaces ni les sauvegardes.
+   Un plan importe pour un decor du meme nom passe devant. */
+const PLANS_DECOR = [
+  ['Atelier', 'atelier'], ['Atelier (vide)', 'atelier-vide'],
+  ['Royal Academy', 'royal-academy'], ['Royal Academy (vide)', 'royal-academy-vide'],
+  ['Rue des Brigittines', 'rue-des-brigittines'], ['Rue des Coquerez', 'rue-des-coquerez']
+];
+const planIntegre = lieu => { const x = PLANS_DECOR.find(d => memeVal(d[0], (lieu || '').trim())); return x ? 'public/maps/' + x[1] + '.webp' : ''; };
+const fondImporte = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
+/* Un plan importe vit sur le serveur, en fichier : le projet n'en garde que le nom
+   (« fond:… »). Sans serveur, il reste dans le projet, en image (data:…). */
+const urlFond = v => String(v || '').indexOf('fond:') === 0 ? API('fond') + '?f=' + encodeURIComponent(v.slice(5)) : v || '';
+const fondDecor = lieu => urlFond(fondImporte(lieu)) || planIntegre(lieu);
+/* Envoie l'image au serveur et rend ce que le projet en gardera : son nom, ou
+   l'image elle-meme si le serveur n'est pas la (elle partira a la prochaine occasion). */
+function envoyerFond(url){
+  if (!RESEAU.possible || String(url).indexOf('data:') !== 0) return Promise.resolve(url);
+  return fetch(API('fond'), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ data: url }) })
+    .then(r => r.ok ? r.json() : null).then(j => j && j.f ? 'fond:' + j.f : url).catch(() => url);
+}
+/* Les plans importes avant (ou hors ligne) sont dans le projet, en image : un
+   preparateur connecte les envoie au serveur ; le projet n'en garde plus que le nom. */
+function rangerFonds(){
+  if (!RESEAU.possible || !prepare()) return;
+  const fonds = DB.prod.fonds || {}, l = Object.keys(fonds).filter(k => String(fonds[k]).indexOf('data:') === 0);
+  l.forEach(k => envoyerFond(fonds[k]).then(ref => {
+    if (ref.indexOf('fond:') === 0 && (DB.prod.fonds || {})[k] === fonds[k]) poserFond(k, ref);
+  }));
+}
 /* Les decors du tournage se declarent une fois pour toutes (DB.prod.decors,
    propage a tous comme le reste de la production) : le champ Decor de chaque
    plan les propose, en Preparation comme dans la fiche. Ceux qu'un plan porte
@@ -3145,7 +3207,9 @@ function decorsTournage(){
   return frequences(DB.plans.filter(p => p.jour !== 'CG').map(p => (p.lieu || '').trim())).map(x => x[0]);
 }
 function chargerImage(src){
-  return new Promise((ok, ko) => { if (!src) return ok(null); const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
+  // un plan servi par l'API (peut-etre d'une autre adresse) doit rester lisible pour le PDF : on le demande en CORS
+  return new Promise((ok, ko) => { if (!src) return ok(null); const i = new Image(); i.onload = () => ok(i); i.onerror = ko;
+    if (/^https?:|api\//.test(src)) i.crossOrigin = 'anonymous'; i.src = src; });
 }
 
 /* A-t-on dessine quelque chose ? Et : y a-t-il quelque chose a montrer, le
@@ -3165,7 +3229,8 @@ const aCroquis = p => aTraits(p) || !!fondDecor(lieuFond(p));
 let choixFondOuvert = false;   // « Changer le plan du decor » : les vignettes des decors sont depliees
 function htmlCroquis(p){
   const lieu = lieuFond(p), fond = fondDecor(lieu);
-  const decors = fusion(decorsTournage(), lieu ? [lieu] : []);
+  // les decors du tournage, puis les plans fournis avec la page
+  const decors = fusion(decorsTournage(), (lieu ? [lieu] : []).concat(PLANS_DECOR.map(d => d[0])));
   const n = croquisListe(p).length, vu = croquisVu(p);
   const montrer = aTraits(p, vu) || !!fond;
   // les onglets des croquis : un par croquis s'il y en a plusieurs, et « + Croquis » des qu'un est dessine
@@ -3177,7 +3242,9 @@ function htmlCroquis(p){
   // les trois gestes du croquis : des pictos poses en haut de l'image, leur nom au survol
   const outil = (cls, action, nom, ico) =>
     `<button type="button" class="${cls}" onclick="${action}('${p.id}')" title="${nom}" aria-label="${nom}">${ico}</button>`;
+  const deja = texteDessine(quiDessine(p.id));
   return `<div class="croq">
+    <div class="croq-deja" data-plan="${p.id}"${deja ? '' : ' hidden'}>${esc(deja)}</div>
     ${onglets}
     <div class="croq-cadre${montrer ? '' : ' vide'}">
       ${montrer ? `<canvas id="croq-apercu" onclick="ouvrirCroquis('${p.id}')" title="Modifier le croquis"></canvas>`
@@ -3185,14 +3252,14 @@ function htmlCroquis(p){
       <div class="croq-outils">
         ${outil('', 'ouvrirCroquis', montrer ? 'Modifier le croquis' : 'Dessiner le set', ICONES.crayon)}
         ${outil(choixFondOuvert ? 'on' : '', 'basculerChoixFond', fond ? 'Changer le plan du décor' : 'Choisir le plan du décor', ICONES.decor)}
-        ${fond ? outil('d', 'retirerFond', 'Retirer le plan du décor', ICONES.corbeille) : ''}
+        ${fondImporte(lieu) ? outil('d', 'retirerFond', 'Retirer le plan du décor', ICONES.corbeille) : ''}
       </div>
     </div>
     ${choixFondOuvert ? `<div class="fonds">
       ${decors.map(l => { const img = fondDecor(l), ici = memeVal(l, lieu);
         return `<button type="button" class="fond${ici ? ' on' : ''}" data-l="${esc(l)}" onclick="prendreFond('${p.id}', this.dataset.l)">
           ${img ? `<img src="${img}" alt="">` : `<span class="fond-vide">${ICONES.image}<em>Importer</em></span>`}
-          <b>${esc(l)}</b><i>${img ? (ici ? 'utilisé ici' : 'plan importé') : 'pas encore de plan'}</i>
+          <b>${esc(l)}</b><i>${ici && img ? 'utilisé ici' : fondImporte(l) ? 'plan importé' : img ? 'plan du décor' : 'pas encore de plan'}</i>
         </button>`; }).join('')}
       ${fond ? `<button type="button" class="fond-autre" onclick="choisirFond('${p.id}')">Remplacer l’image de « ${esc(lieu)} »…</button>` : ''}
     </div>` : ''}
@@ -3225,6 +3292,10 @@ function ouvrirCroquis(id, i){
   i = i == null ? croquisVu(p) : i;
   chargerImage(fondDecor(lieuFond(p))).catch(() => null).then(img => {
     dessin = etatCroquis(p, img, i);
+    envoyerPresence(); majDejaCroquis();
+    { const l = quiDessine(p.id); if (l.length) toast(texteDessine(l) + ' : le dernier enregistré l’emporte'); }
+    // l'editeur a sa marque dans l'historique : le Retour du telephone le ferme (en enregistrant), pas la fiche
+    try{ if (!(history.state && history.state.dessin)) history.pushState(Object.assign({}, history.state, { dessin: 1 }), ''); }catch(e){}
     const v = $('voile-dessin');
     v.querySelector('.dtitre b').textContent = 'Croquis' + (croquisListe(p).length > 1 || i ? ' ' + (i + 1) : '') + ' · plan ' + (p.plan || '?');
     v.querySelector('.dtitre span').textContent = (lieuFond(p) || 'Sans décor') + (img ? ' — sur le plan du décor' : ' — feuille blanche');
@@ -3271,15 +3342,18 @@ function dessinerApercu(p){
     dessin = garde;
   });
 }
-function fermerCroquis(demander){
+/* Le retour (la fleche, ou le Retour du telephone) enregistre le dessin avant de fermer :
+   rien ne se perd en sortant. */
+function fermerCroquis(enregistrer){
   if (!dessin) return false;
-  const fermer = () => { fermerPick(); dessin = null; $('voile-dessin').hidden = true; };
-  if (demander && dessin.sale){
-    confirmer('Abandonner les modifications du croquis ?', { ok:'Abandonner', danger:true, annuler:'Continuer' })
-      .then(oui => { if (oui && dessin) fermer(); });
-    return true;
+  if (enregistrer && dessin.sale && plan(dessin.planId)) enregistrerCroquis();
+  fermerPick(); dessin = null; $('voile-dessin').hidden = true;
+  envoyerPresence();
+  // fermee a la main : sa marque quitte l'historique, sans que le Retour touche a la fiche
+  if (!RETOUR.rejoue && history.state && history.state.dessin){
+    RETOUR.ignorer = true;
+    try{ history.back(); }catch(e){ RETOUR.ignorer = false; }
   }
-  fermer();
   return true;
 }
 
@@ -3317,7 +3391,9 @@ function moletteCroquis(e){
   if (dessin.outil === 'move' && o && OBJ_POSE.includes(o.t)){
     e.preventDefault();
     souvenir('molette' + o.n);
-    o.a = (o.a || 0) + (e.deltaY > 0 ? 1 : -1) * Math.PI / 36;
+    // Maj + molette : la taille ; la molette seule : l'orientation
+    if (e.shiftKey) o.s = Math.round(Math.min(TAILLE_MAX, Math.max(TAILLE_MIN, (o.s || 1) * ((e.deltaY || e.deltaX) > 0 ? 1 / 1.1 : 1.1))) * 20) / 20;
+    else o.a = (o.a || 0) + (e.deltaY > 0 ? 1 : -1) * Math.PI / 36;
     dessin.sale = true; rendreCroquis();
   }
 }
@@ -3359,13 +3435,16 @@ function dessinerObjet(g, o, k, u){
   if (o.t === 'bloc'){
     // un rectangle tire coin a coin : praticable, caisse, meuble
     const x = Math.min(o.x1, o.x2), y = Math.min(o.y1, o.y2), w = Math.abs(o.x2 - o.x1), h = Math.abs(o.y2 - o.y1);
-    g.fillStyle = 'rgba(58,51,48,.16)'; g.strokeStyle = '#3a3330'; g.lineWidth = 4 * u; g.lineJoin = 'miter';
-    g.fillRect(X(x), Y(y), X(w), Y(h)); g.strokeRect(X(x), Y(y), X(w), Y(h));
+    // le contour de la couleur choisie, l'interieur de la meme couleur, translucide
+    g.fillStyle = g.strokeStyle = o.c || '#3a3330'; g.lineWidth = 4 * u; g.lineJoin = 'miter';
+    g.globalAlpha = .18; g.fillRect(X(x), Y(y), X(w), Y(h));
+    g.globalAlpha = 1; g.strokeRect(X(x), Y(y), X(w), Y(h));
   } else if (o.t === 'rond'){
     // un rond (ou un ovale) inscrit dans le rectangle tire : table ronde, tapis, zone
     const cx = X((o.x1 + o.x2) / 2), cy = Y((o.y1 + o.y2) / 2), rx = Math.abs(X(o.x2 - o.x1)) / 2, ry = Math.abs(Y(o.y2 - o.y1)) / 2;
-    g.fillStyle = 'rgba(58,51,48,.16)'; g.strokeStyle = o.c || '#3a3330'; g.lineWidth = 4 * u;
-    g.beginPath(); g.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = g.strokeStyle = o.c || '#3a3330'; g.lineWidth = 4 * u;
+    g.beginPath(); g.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
+    g.globalAlpha = .18; g.fill(); g.globalAlpha = 1; g.stroke();
   } else if (o.t === 'fleche'){
     // un deplacement : un trait en pointille long, une pointe a l'arrivee ; courbe,
     // il passe par son point du milieu (o.mx, o.my) et la pointe suit la courbe
@@ -3425,7 +3504,8 @@ function dessinerObjet(g, o, k, u){
     // le fond vert et les diffuseurs (blanc : gris clair ; noir) se tirent comme un mur, en plus epais
     const TEINTE = { mur:'#3a3330', vert:'#5fb36d', diffb:'#b9b3ac', diffn:'#1d1a18' };
     g.lineCap = 'butt';
-    g.strokeStyle = TEINTE[o.t]; g.lineWidth = (o.t === 'mur' ? 12 : 16) * u;
+    // le mur prend la couleur choisie ; le fond vert et les diffuseurs gardent la leur
+    g.strokeStyle = o.t === 'mur' ? o.c || TEINTE.mur : TEINTE[o.t]; g.lineWidth = (o.t === 'mur' ? 12 : 16) * u;
     g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
     if (o.t !== 'mur'){
       // une hachure : un fond ou un diffuseur se distingue d'un mur peint
@@ -3439,8 +3519,9 @@ function dessinerObjet(g, o, k, u){
     g.fillStyle = o.c || '#1c1410'; g.fillText(o.txt, X(o.x), Y(o.y));
   } else {
     g.translate(X(o.x), Y(o.y)); g.rotate(o.a || 0);
+    if (o.s && o.s !== 1) g.scale(o.s, o.s);   // sa taille, choisie a la poignee carree
     // la camera est toujours rouge, la lumiere toujours caramel : on les reconnait de loin
-    const teinte = o.t === 'cam' ? '#e8675e' : o.t === 'lum' ? '#e7b04a' : (o.c || '#1c1410');
+    const teinte = o.t === 'cam' ? '#e8675e' : o.t === 'chrono' ? '#8e4ec6' : o.t === 'lum' ? '#e7b04a' : (o.c || '#1c1410');
     g.strokeStyle = teinte; g.fillStyle = teinte; g.lineCap = 'round'; g.lineJoin = 'round';
     if (o.t === 'cam'){
       // le corps, l'objectif devant, et le champ de vision en pointille
@@ -3453,6 +3534,19 @@ function dessinerObjet(g, o, k, u){
       g.setLineDash([]);
       g.font = '700 ' + Math.round(18 * u) + 'px Figtree, "Segoe UI", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('CAM', -8 * u, 0);
+    } else if (o.t === 'chrono'){
+      // le Chronoscope : une machine a remonter le temps qui ressemble a une camera — un corps
+      // arrondi portant son embleme, l'objectif devant ; toujours violet, on le reconnait de loin
+      g.lineWidth = 5 * u;
+      g.fillStyle = '#fff'; g.beginPath(); g.roundRect(-38 * u, -24 * u, 56 * u, 48 * u, 10 * u); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(18 * u, -10 * u); g.lineTo(36 * u, -19 * u); g.lineTo(36 * u, 19 * u); g.lineTo(18 * u, 10 * u); g.closePath();
+      g.fill(); g.stroke();
+      // son embleme, au centre du corps (un anneau entre deux barres, a la Green Lantern) ;
+      // il reste droit a l'ecran, quel que soit le sens de l'objet
+      g.translate(-10 * u, 0); g.rotate(-(o.a || 0));
+      g.fillStyle = teinte;
+      g.beginPath(); g.roundRect(-13 * u, -15 * u, 26 * u, 5 * u, 1.5 * u); g.roundRect(-13 * u, 10 * u, 26 * u, 5 * u, 1.5 * u); g.fill();
+      g.lineWidth = 4 * u; g.beginPath(); g.arc(0, 0, 8 * u, 0, Math.PI * 2); g.stroke();
     } else if (o.t === 'perso'){
       // un personnage vu de dessus : les epaules, la tete, et le nez dans la direction du regard
       g.lineWidth = 4 * u;
@@ -3534,11 +3628,19 @@ function rendreCroquis(cv){
 /* Les poignees de l'objet saisi : un anneau au bout d'un bras pour tourner ce qui
    s'oriente, un anneau a chaque bout pour ce qui se tire d'un point a l'autre. */
 // le bras de rotation : juste au-dela du champ de la camera, du cone de la lumiere, du personnage
-const BRAS = { cam:215, lum:200, soleil:200, perso:70 };
+const BRAS = { cam:215, chrono:85, lum:200, soleil:200, perso:70 };
+/* la poignee carree de la taille : de cote, a cette distance de l'objet (a sa taille d'origine) */
+const PORTEE_TAILLE = { cam:60, chrono:55, lum:60, soleil:60, perso:55, table:85, chaise:40 };
+const TAILLE_MIN = .3, TAILLE_MAX = 4;
 function poigneesDe(o){
   if (OBJ_POSE.includes(o.t)){
-    const l = (BRAS[o.t] || 80) * dessin.w / 1600;
-    return [{ x: o.x + Math.cos(o.a || 0) * l, y: o.y + Math.sin(o.a || 0) * l, rot:true }];
+    const u = dessin.w / 1600, s = o.s || 1, l = (BRAS[o.t] || 80) * u * s, a = o.a || 0, t = (PORTEE_TAILLE[o.t] || 60) * u * s;
+    // le carre de la taille : en haut a droite a l'ecran (le nom d'un personnage est dessous),
+    // en haut a gauche si le bras de rotation pointe deja la
+    const ecart = Math.abs(Math.atan2(Math.sin(a + Math.PI / 4), Math.cos(a + Math.PI / 4)));
+    const b = ecart < Math.PI / 4 ? -3 * Math.PI / 4 : -Math.PI / 4;
+    return [{ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l, rot:true },
+            { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
   }
   if (OBJ_SEG.includes(o.t)) return [{ x: o.x1, y: o.y1, bout:1 }, { x: o.x2, y: o.y2, bout:2 }]
     .concat(o.t === 'fleche' ? [Object.assign({ courbe:true }, milieuFleche(o))] : []);
@@ -3593,8 +3695,9 @@ function dessinerPoignees(g, o, k){
   g.setLineDash([]); g.lineWidth = 2 * px * k; g.strokeStyle = '#e7b04a'; g.fillStyle = '#fff';
   poigneesDe(o).forEach(p => {
     if (p.rot){ g.setLineDash([5 * px * k, 5 * px * k]); g.beginPath(); g.moveTo(o.x * k, o.y * k); g.lineTo(p.x * k, p.y * k); g.stroke(); g.setLineDash([]); }
-    // la poignee qui courbe la fleche est pleine : on la distingue des deux bouts
-    g.fillStyle = p.courbe ? '#e7b04a' : '#fff';
+    // la poignee qui courbe la fleche est pleine : on la distingue des deux bouts ; celle de la taille est carree
+    g.fillStyle = p.courbe || p.taille ? '#e7b04a' : '#fff';
+    if (p.taille){ const c = 8 * px * k; g.fillRect(p.x * k - c, p.y * k - c, 2 * c, 2 * c); g.strokeStyle = '#fff'; g.strokeRect(p.x * k - c, p.y * k - c, 2 * c, 2 * c); g.strokeStyle = '#e7b04a'; return; }
     g.beginPath(); g.arc(p.x * k, p.y * k, (p.courbe ? 7 : 9) * px * k, 0, Math.PI * 2); g.fill(); g.stroke();
   });
   g.restore();
@@ -3619,7 +3722,7 @@ function debutTrait(e){
   if (o === 'gomme'){ dessin.courant = { gomme:true }; gommer(pt); return; }
   if (o === 'move'){
     const pg = poigneeSous(pt);
-    if (pg){ dessin.courant = pg.rot ? { tourne: dessin.selection } : pg.courbe ? { courbe: dessin.selection } : { bout: dessin.selection, quel: pg.bout }; return; }
+    if (pg){ dessin.courant = pg.rot ? { tourne: dessin.selection } : pg.taille ? { taille: dessin.selection } : pg.courbe ? { courbe: dessin.selection } : { bout: dessin.selection, quel: pg.bout }; return; }
     const s = saisir(pt);
     dessin.selection = s && s.t ? s : null;
     dessin.courant = s ? { bouge:s, dernier:pt } : null;
@@ -3689,6 +3792,13 @@ function mouvTrait(e){
     if (a === (o.a || 0)) return;
     retenir(c); o.a = a; c.deplace = true; rendreCroquis(); return;
   }
+  if (c && c.taille){
+    // eloigner la poignee carree agrandit l'objet, la rapprocher le rapetisse (par pas de 5 %)
+    const o = c.taille, base = (PORTEE_TAILLE[o.t] || 60) * dessin.w / 1600;
+    const s = Math.round(Math.min(TAILLE_MAX, Math.max(TAILLE_MIN, Math.hypot(pt[0] - o.x, pt[1] - o.y) / base)) * 20) / 20;
+    if (s === (o.s || 1)) return;
+    retenir(c); o.s = s; c.deplace = true; rendreCroquis(); return;
+  }
   if (c && c.courbe){
     // tirer le milieu courbe la fleche ; ramene sur la ligne droite, elle se redresse
     const o = c.courbe;
@@ -3738,7 +3848,7 @@ function finTrait(e){
   if (!dessin || !dessin.courant) return;
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
-  if (c.bouge || c.tourne || c.bout || c.courbe){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  if (c.bouge || c.tourne || c.taille || c.bout || c.courbe){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
   if (c.pts) rejoindreMain(c);
   if (OBJ_TRACE.includes(c.t)){
     const u = dessin.w / 1600;
@@ -3791,8 +3901,8 @@ function touche(pt, o){
   if (o.t === 'fleche' && o.mx != null){ const l = pointsFleche(o); return l.slice(1).some((q, i) => distSeg(pt, l[i], q) <= r); }
   if (OBJ_SEG.includes(o.t)) return distSeg(pt, [o.x1, o.y1], [o.x2, o.y2]) <= r;
   if (OBJ_RECT.includes(o.t)) return pt[0] >= Math.min(o.x1, o.x2) - r && pt[0] <= Math.max(o.x1, o.x2) + r && pt[1] >= Math.min(o.y1, o.y2) - r && pt[1] <= Math.max(o.y1, o.y2) + r;
-  const port = { txt:60, table:90, chaise:36, cam:44, lum:44, perso:46 }[o.t] || 44;
-  return Math.hypot(o.x - pt[0], o.y - pt[1]) <= port * u;
+  const port = { txt:60, table:90, chaise:36, cam:44, chrono:44, lum:44, perso:46 }[o.t] || 44;
+  return Math.hypot(o.x - pt[0], o.y - pt[1]) <= port * u * (o.s || 1);
 }
 function saisir(pt){
   const r = 28 * dessin.w / 1600;
@@ -3892,13 +4002,13 @@ function majOutils(){
     o === 'rond' ? 'Tirez d’un bord à l’autre ; le rond s’inscrit dedans.' :
     OBJ_RECT.includes(o) ? 'Tirez d’un coin à l’autre.' :
     o === 'txt' ? 'Touchez l’endroit du texte.' :
-    o === 'move' ? 'Saisissez et glissez ; l’anneau au bout du bras fait tourner (la molette aussi), les bouts d’un trait se déplacent, le point du milieu courbe une flèche.' :
+    o === 'move' ? 'Saisissez et glissez ; l’anneau au bout du bras fait tourner (la molette aussi), le carré agrandit ou rapetisse (Maj + molette aussi), les bouts d’un trait se déplacent, le point du milieu courbe une flèche.' :
     o === 'main' ? 'Faites glisser la vue. Deux doigts ou la barre d’espace font pareil.' :
     o === 'gomme' ? 'Touchez un trait ou un objet pour le retirer.' : '';
 }
 
 /* Enregistrer : les traits et objets, et une image rendue (800 px) pour l'apercu. */
-function enregistrerCroquis(){
+function enregistrerCroquis(silence){
   if (!dessin) return;
   const p = plan(dessin.planId); if (!p){ fermerCroquis(); return; }
   const sans = l => l.map(o => { const c = Object.assign({}, o); delete c.n; return c; });
@@ -3909,8 +4019,11 @@ function enregistrerCroquis(){
   // on reste dans l'editeur : la fiche derriere se met a jour, la fleche ramene quand on veut
   dessin.sale = false;
   redessinerFichePlan(p); renderList();
-  toast('Croquis enregistré');
+  if (!silence) toast('Croquis enregistré');
 }
+/* La page qu'on actualise, qu'on ferme ou qu'on quitte pour une autre appli : le
+   croquis en cours est enregistre avant que les saisies ne partent. */
+function sauverCroquisEnCours(){ if (dessin && dessin.sale && plan(dessin.planId)) try{ enregistrerCroquis(true); }catch(e){} }
 
 /* Le plan du decor : une image par decor, dans le projet, pour tous. */
 function choisirFond(id, lieu){ demanderImage('fond-in', id || (dessin ? dessin.planId : ''), lieu); }
@@ -3939,7 +4052,7 @@ function fondChoisi(input){
   input.value = ''; input.dataset.lieu = '';
   if (!f || !p) return;
   if (!lieu){ toast('Choisissez d’abord un décor'); return; }
-  reduirePhoto(f, 1600, .72).then(url => {
+  reduirePhoto(f, 1600, .72).then(envoyerFond).then(url => {
     poserFond(lieu, url);
     toast('Plan du décor « ' + lieu + ' » enregistré');
     if (dessin && dessin.planId === p.id) ouvrirCroquis(p.id, dessin.index);
@@ -3952,7 +4065,7 @@ function poserFond(lieu, url){
   patch('prod', 'prod', { fonds });
 }
 function retirerFond(id){
-  const p = plan(id), lieu = p ? lieuFond(p) : ''; if (!p || !fondDecor(lieu)) return;
+  const p = plan(id), lieu = p ? lieuFond(p) : ''; if (!p || !fondImporte(lieu)) return;
   confirmer('Retirer le plan du décor « ' + lieu + ' » ?',
             { detail:'Les croquis posés dessus repasseront sur feuille blanche.', ok:'Retirer', danger:true }).then(oui => {
     if (!oui) return;
@@ -4340,8 +4453,45 @@ function rangPrep(p){
         ${champPrep(p, 'duree', 'Durée', {cls:'w-dur', ph:'3s'})}
         ${champDistribution(p)}
       </div>
+      <div class="pl pl3">
+        ${champPrep(p, 'vfxDesc', 'Description VFX', {cls:'w-vfx', area:1, ph:'Relevés HDRI, effacement, set extension…'})}
+        ${champPrep(p, 'mouv', 'Mouvement de caméra', {cls:'w-mouv', ph:'Fixe', dl:'dl-mouv', multi:1})}
+        ${champOnSet(p)}
+      </div>
     </div>
   </div>`;
+}
+/* « On set » : ce qu'on fera au tournage pour ce plan (HDRI, color charts, photogrammétrie…),
+   commun a l'equipe. Les cles sont celles des elements de la fiche ; le menu les coche. */
+const texteOnSet = p => ELEMENTS.filter(e => (p.onSet || []).indexOf(e[0]) >= 0).map(e => e[1]).join(', ');
+function champOnSet(p){
+  return `<label class="pc w-onset"><span>On set</span>
+    <input readonly value="${esc(texteOnSet(p))}" placeholder="Ce qu’on fait sur le plateau" data-onset="${p.id}" onclick="ouvrirOnSet(this.nextElementSibling)" onkeydown="touchePrep(event, '${p.id}')">
+    <button type="button" class="deroul" onclick="ouvrirOnSet(this)" aria-label="Choisir ce qu’on fait sur le plateau">${CHEVRON_BAS}</button></label>`;
+}
+function ouvrirOnSet(btn){
+  const deja = btn.classList.contains('on');
+  fermerMenu();
+  if (deja) return;
+  const row = btn.closest('.pc'), id = row.querySelector('input').dataset.onset, p = plan(id);
+  if (!p) return;
+  const m = document.createElement('div');
+  m.className = 'menu multi';
+  m.innerHTML = ELEMENTS.map(e => `<button type="button" class="${(p.onSet || []).indexOf(e[0]) >= 0 ? 'on' : ''}" data-v="${e[0]}"
+      onclick="cocherOnSet('${id}', this)">${esc(e[1])}</button>`).join('');
+  row.appendChild(m);
+  btn.classList.add('on');
+  setTimeout(() => document.addEventListener('click', clicHorsMenu), 0);
+}
+function cocherOnSet(id, b){
+  const p = plan(id); if (!p) return;
+  const s = new Set(p.onSet || []), k = b.dataset.v;
+  if (s.has(k)) s.delete(k); else s.add(k);
+  // dans l'ordre de la liste, quel que soit l'ordre des clics
+  patch('plan', id, { onSet: ELEMENTS.map(e => e[0]).filter(x => s.has(x)) });
+  b.classList.toggle('on');
+  const i = document.querySelector(`#l-prep input[data-onset="${id}"]`);
+  if (i) i.value = texteOnSet(plan(id));
 }
 
 function renderPrep(){
@@ -4380,7 +4530,7 @@ function renderPrep(){
         <button type="button" class="btn p" onclick="ajouterPlanPrep('${unJour ? esc(fJourP) : ''}')" ${modeOrdre ? 'hidden' : ''}>+ Ajouter un plan</button>
       </div></div>
     <p class="pnote">Séquences, numéros, descriptions, décors et jours : ce qui se prépare avant le plateau.
-      Cadrage, mouvement, éléments à capter et détail VFX se règlent dans la fiche de chaque plan.
+      Cadrage, focale, mouvement, description VFX et ce qu’on fait sur le plateau se notent ici ; le reste se règle dans la fiche de chaque plan.
       L’ordre des cartes est l’ordre de tournage : « Ordonner » permet de les glisser.</p>`;
   (unJour ? [fJourP] : tous).forEach(j => {
     const ps = trierPlans(plansDuJour(j), false);
@@ -4410,12 +4560,15 @@ function renderPrepLecture(l){
     const ps = trierPlans(plansDuJour(j), false);
     html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span></div>` + ps.map((p, i) => {
       const ctx = [p.lieu && `<span><b>${esc(p.lieu)}</b></span>`, p.cadrage && `<span>${esc(p.cadrage)}</span>`,
-                   p.focale && `<span>${esc(p.focale)}</span>`, (p.acteurs || []).length && `<span>${esc(p.acteurs.join(', '))}</span>`]
+                   p.focale && `<span>${esc(p.focale)}</span>`, p.mouv && `<span>${esc(p.mouv)}</span>`,
+                   (p.acteurs || []).length && `<span>${esc(p.acteurs.join(', '))}</span>`,
+                   texteOnSet(p) && `<span>On set : ${esc(texteOnSet(p))}</span>`]
                   .filter(Boolean).join('');
       return `<div class="lprep" onclick="openPlan('${p.id}')">
         <div class="lprep-tete"><span class="lprep-ordre">${deuxCh(i + 1)}</span><b>Shot ${esc(p.plan || 'sans n°')}</b>
           <span class="lprep-seq">Séq ${esc(p.seq || '—')}${p.seqTitre ? ' · ' + esc(p.seqTitre) : ''}</span><span class="ptags">${htmlPtags(p)}</span></div>
         ${p.desc ? `<div class="lprep-desc">${esc(p.desc)}</div>` : ''}
+        ${p.vfxDesc ? `<div class="lprep-desc"><b>VFX</b> · ${esc(p.vfxDesc)}</div>` : ''}
         ${ctx ? `<div class="pctx">${ctx}</div>` : ''}
       </div>`;
     }).join('');
@@ -4800,9 +4953,8 @@ function openProd(){
   openId = 'prod'; openType = 'prod';
   videEntete();
   const p = DB.prod;
-  const multi = RESEAU.possible ? ' (sur tous vos appareils)' : '';
   $('stitle').textContent = 'Journée';
-  $('ssub').textContent = 'Équipe, en-tête du rapport, exports et données';
+  $('ssub').textContent = 'Équipe, jours de tournage, en-tête du rapport et stockage';
   $('sbody').innerHTML = `
     <div class="sec">
       <h3>Équipe connectée</h3>
@@ -4810,13 +4962,16 @@ function openProd(){
     </div>
 
     <div class="sec">
-      <h3>Journée</h3>
-      <div class="specs">
-        ${F(p, 'Jour', 'jour', {ph:'4 / 7', refresh:1})}
-        ${F(p, 'Date', 'date', {ph:'14/09/2026', refresh:1})}
-        ${F(p, 'Décor', 'lieu', {refresh:1, dl:'dl-lieu'})}
-        ${F(p, 'Équipe', 'unit', {ph:'Main unit'})}
+      <h3>Jours de tournage</h3>
+      <div class="jours-tournage">
+        ${joursConnus().filter(j => j && j !== 'CG').map(j => `<div class="jt">
+          <b>${esc(nomJour(j))}</b>
+          <div class="specs">
+            ${champDate(p, 'Date', 'date_' + j)}
+            ${F(p, 'Décor', 'decor_' + j, {ph: decorDesPlans(j), dl:'dl-lieu', refresh:1})}
+          </div></div>`).join('') || '<div class="note">Aucun jour pour l’instant : les jours viennent du découpage.</div>'}
       </div>
+      <div class="note">Le jour dont la date est aujourd’hui devient le jour en cours. Sans décor noté, c’est celui de ses plans.</div>
     </div>
 
     <div class="sec">
@@ -4841,35 +4996,6 @@ function openProd(){
       </div>
     </div>
 
-    <div class="sec">
-      <h3>Exports pour la post</h3>
-      <div class="btns">
-        <button class="btn p" onclick="exportCSV('montage')">Feuille de montage</button>
-        <button class="btn" onclick="exportALE()">ALE</button>
-        <button class="btn" onclick="exportCSV('prises')">Toutes les prises</button>
-      </div>
-      <div class="note">${equipeReunie() ? 'Ces exports portent sur les saisies de toute l’équipe, réunies dans Rapport.'
-        : 'Ces exports ne portent que sur vos saisies. Pour toute l’équipe : Rapport → « Toute l’équipe ».'}</div>
-      <div class="note">La feuille de montage ne contient que les prises marquées à monter,
-        avec leur clip, leur timecode, les éléments captés et la note du plateau.</div>
-    </div>
-
-    <div class="sec">
-      <h3>Données</h3>
-      <div class="btns">
-        <button class="btn" onclick="exportJSON()">Sauvegarde JSON</button>
-        <button class="btn" onclick="$('imp').click()">Importer</button>
-        <button class="btn" onclick="exportCSV('plans')">CSV des plans</button>
-      </div>
-      <div class="btns" style="margin-top:10px">
-        <button class="btn" onclick="resync()">Recharger le découpage</button>
-        <button class="btn d" onclick="wipe()">Tout effacer</button>
-      </div>
-      <div class="note">Recharger le découpage remet à jour les fiches depuis le DT d’origine${multi}.
-        Les prises, éléments, notes, états et jours sont conservés.
-        ${RESEAU.possible ? '<br>Le serveur garde une sauvegarde horodatée de vos saisies toutes les 10 minutes dans <b style="display:inline;text-transform:none;letter-spacing:0;font-size:inherit">data/espaces/' + esc(monEspace()) + '/sauvegardes</b>.' : ''}</div>
-    </div>
-
     ${RESEAU.possible ? `<div class="sec">
       <h3>Journal DIT par mail</h3>
       <div class="specs">
@@ -4891,14 +5017,13 @@ function openProd(){
         <span id="mail-etat"></span></div>
     </div>` : ''}
 
-    <div class="sec">
-      <h3>Affichage</h3>
-      <div class="btns">
-        <button class="btn" onclick="basculerTheme();openProd()">${UI.theme === 'light' ? 'Passer en sombre' : 'Passer en clair (plein soleil)'}</button>
-      </div>
-    </div>`;
+    ${RESEAU.possible ? `<div class="sec">
+      <h3>Stockage</h3>
+      <div id="stockage"><div class="note">Mesure en cours…</div></div>
+    </div>` : ''}`;
   montrerFiche(0);
   majEtatMail();
+  majStockage();
   if ($('plage-mail')) glisserPlage(null);
 }
 
@@ -5040,7 +5165,7 @@ function renderBilan(perimetre, rapprochement){
       <div style="font-size:21px;font-weight:800">${esc(p.titre) || 'Projet sans titre'}${tous ? '' : ' <span style="color:var(--dim2);font-weight:600">· ' + esc(nomJour(fJourR)) + '</span>'}</div>
       ${equipeReunie() ? '<div style="color:var(--acc);font-size:13.5px;margin-top:6px;font-weight:600">Toute l’équipe</div>' : ''}
       <div style="color:var(--dim);font-size:13.5px;margin-top:8px;line-height:1.8">
-        ${[p.jour && 'Jour ' + p.jour, p.date, p.lieu, p.unit].filter(Boolean).map(esc).join(' · ')}
+        ${[!tous && dateJourFr(fJourR), !tous && decorJour(fJourR), p.unit].filter(Boolean).map(esc).join(' · ')}
         ${[p.prod && 'Production : ' + p.prod, p.real && 'Réalisation : ' + p.real,
            p.dop && 'Image : ' + p.dop, p.vfxSuper && 'Superviseur VFX : ' + p.vfxSuper,
            p.wrangler && 'Data wrangler : ' + p.wrangler, p.dit && 'DIT : ' + p.dit]
@@ -5187,7 +5312,7 @@ function htmlPost(j){
 
   return `
     <h1>${esc(p.titre || 'Projet sans titre')} — transmission post-production</h1>
-    <div class="psous">${[tous ? 'Tout le tournage' : nomJour(j), p.date, p.lieu, p.unit,
+    <div class="psous">${[tous ? 'Tout le tournage' : nomJour(j), !tous && dateJourFr(j), !tous && decorJour(j), p.unit,
         p.dit && 'DIT ' + p.dit, p.wrangler && 'Wrangler ' + p.wrangler].filter(Boolean).map(esc).join(' · ')}</div>
     <div class="pchiffres">
       <span><b>${P.filter(x => x.etat === 'done').length}</b>plans tournés sur ${P.length}</span>
@@ -5284,7 +5409,7 @@ function modeleDIT(j){
     const saisis = [...new Set(T.flatMap(t => String(t.par || '').split(/\s*,\s*/)).filter(Boolean))];
     return {
       jour, titre: p.titre || 'Projet sans titre', sauvegarde, ecarts, listeEcarts,
-      sous: ['Journal DIT', nomJour(jour), dec, p.date, p.dit && 'DIT ' + p.dit,
+      sous: ['Journal DIT', nomJour(jour), dec, dateJourFr(jour), p.dit && 'DIT ' + p.dit,
              saisis.length && 'Wrangler' + plur(saisis.length) + ' ' + saisis.join(', ')].filter(Boolean).join(' · '),
       chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
                  [T.length, 'fichier' + plur(T.length) + ' à sauvegarder'], [gardees.length, 'prises à monter'],
@@ -5663,11 +5788,13 @@ function telechargerDIT(){
    Tout ce que l'app sait y est deja ecrit, le reste attend le stylo. Elle est
    en anglais, comme la feuille : elle part chez le studio. */
 const VFX_LIGNES = 14;
-/* les elements de la feuille, et ceux de l'app qui les cochent ; les autres vont dans « Other » */
+/* les elements de la feuille, ceux de la colonne « On set » du breakdown VFX, et ceux de l'app
+   qui les cochent ; les autres (lidar, camtrack, mur LED, « Autre ») vont dans « Other » */
 const ELEMENTS_VFX = [
-  ['HDRI', 0, ['hdri']], ['Chrome ball', 0, ['chrome']], ['Grey ball', 0, ['chrome']], ['Color chart', 0, ['chart']],
-  ['Clean plate', 1, ['cleanplate']], ['Environment scan', 1, ['lidar'], 'VFX shot'],
-  ['Witness camera', 1, [], 'side cam'], ['Wide angle camera', 1, [], 'cam on cam']
+  ['Photogrammetry', ['photogram']], ['HDRI', ['hdri']], ['Chrome / grey ball', ['chrome']],
+  ['Green / blue screen', ['vert', 'bleu']], ['Gaussian splat', ['splat']],
+  ['Color charts', ['chart']], ['Extra plate', ['plates']], ['Clean plate', ['cleanplate']],
+  ['Wide angle camera', ['wide']], ['Trackers', ['trackers']]
 ];
 /* les mouvements de la feuille, lus dans le mouvement et le support du plan et de ses prises */
 const MOUV_VFX = [['STATIC', /fixe|static/i], ['PAN', /\b(pan|tilt|suivi)/i],
@@ -5695,10 +5822,11 @@ function feuilleVFX(x, jour){
   const heures = pr.map(t => t.heure).filter(Boolean).sort();
   const nJours = joursConnus().filter(v => v && v !== 'CG').length;
   const mouv = x ? [x.mouv, x.support].concat(pr.map(t => t.mouvement), pr.map(t => t.support)).filter(Boolean).join(' / ') : '';
-  const coches = x ? elementsTous(x) : {}, lus = new Set(ELEMENTS_VFX.flatMap(e => e[2]));
+  const coches = x ? elementsTous(x) : {}, lus = new Set(ELEMENTS_VFX.flatMap(e => e[1]));
   const cotes = x ? croquisListe(x).flatMap(c => (c && c.objets || []).filter(o => o.t === 'cote' && o.txt).map(o => o.txt)) : [];
   // le croquis de la feuille : le premier dessine (a defaut, le plan du decor seul) ; les autres ont leur page
   const dessines = x ? croquisListe(x).map((c, i) => pleinCroquis(c) ? i : -1).filter(i => i >= 0) : [];
+  const auj = new Date();
   // une ligne par mesure differente ; les prises qui la partagent se lisent ensemble
   const dist = [];
   pr.filter(t => t.focusStart || t.focusStop || t.mesureDepuis).forEach(t => {
@@ -5711,18 +5839,23 @@ function feuilleVFX(x, jour){
   if (cotes.length){ dist.length = Math.min(dist.length, 3); dist.push(['Set diagram', '', '', '', '', cotes.join(' · ')]); }
   return {
     seq: x ? x.seq || '' : '', plan: x ? x.plan || '' : '', titre: p.titre || '',
-    projet: [['Name', p.titre], ['Director', p.real], ['DOP', p.dop], ['First AD', p.firstAD], ['Producer', p.producer]],
-    tournage: [['Date', jour && jour === jourDuTournage() ? p.date : ''],
+    // le titre est en tete de page
+    projet: [['Director', p.real], ['DOP', p.dop], ['First AD', p.firstAD], ['Producer', p.producer]],
+    // la date : celle de l'export de la feuille ; elle partage sa ligne avec le jour de tournage
+    tournage: [['Date', deuxCh(auj.getDate()) + '/' + deuxCh(auj.getMonth() + 1) + '/' + auj.getFullYear(),
+                'Shooting day', jour && jour !== 'CG' ? numJour(jour) + ' / ' + nJours : jour === 'CG' ? 'Full CG' : ''],
                ['Time', heures.length ? heures[0] + (heures.length > 1 ? ' – ' + heures[heures.length - 1] : '') : ''],
-               ['Shooting day', jour && jour !== 'CG' ? numJour(jour) + ' / ' + nJours : jour === 'CG' ? 'Full CG' : ''],
                ['Location', jour === 'CG' ? '' : (jour && decorJour(jour)) || p.lieu], ['VFX Sup.', p.vfxSuper]],
-    script: [['Sequence', x ? [x.seq, x.seqTitre].filter(Boolean).join(' · ') : ''], ['Shot', x ? x.plan : ''],
+    // la sequence et le plan partagent leur ligne
+    script: [['Sequence', x ? x.seq || '' : '', 'Shot', x ? x.plan : ''],
              ['Int / Ext', { choix: [['INT', /int/i.test(x && x.intExt || '')], ['EXT', /ext/i.test(x && x.intExt || '')]] }],
              ['Location', x ? x.lieu : ''],
              ['Time of day', { choix: MOMENT_VFX.map(([n, re]) => [n, !!x && re.test(x.momentJour || '')]) }]],
     camera: val('camModel') || 'ARRI Alexa 35', lens: val('objectif'), format: val('reso'),
     codec: [val('codec'), val('fps') && val('fps') + ' fps'].filter(Boolean).join(' / '),
     mouvements: MOUV_VFX.map(([n, re]) => [n, re.test(mouv)]),
+    // le mouvement ecrit sur la feuille : celui du plan seul (a defaut d'un nom connu, tel que saisi)
+    mouvement: MOUV_VFX.filter(([, re]) => re.test(mouv)).map(m => m[0]).join(' · ') || mouv,
     prises: pr.map(t => ({
       n: t.n, clip: t.clip || '', statut: t.statut || '', retenue: !!t.retenue,
       focale: [sansUnite(t.focale, /\s*mm$/i), sansUnite(t.focaleStop, /\s*mm$/i)],
@@ -5739,7 +5872,7 @@ function feuilleVFX(x, jour){
     mesure: val('mesureDepuis'),
     scene: x ? x.desc || '' : '',
     vfx: x ? [texteDe(x, 'vfxDesc'), x.assets && 'Assets: ' + x.assets].filter(Boolean).join('\n') : '',
-    elements: ELEMENTS_VFX.map(([nom, col, cles, sous]) => ({ nom, col, sous: sous || '', on: cles.some(k => coches[k]) })),
+    elements: ELEMENTS_VFX.map(([nom, cles]) => ({ nom, on: cles.some(k => coches[k]) })),
     autres: x ? ELEMENTS.filter(e => coches[e[0]] && !lus.has(e[0])).map(e => e[1])
                   .concat(texteDe(x, 'elementsAutre') ? [texteDe(x, 'elementsAutre')] : []).join(', ') : '',
     client: x ? texteDe(x, 'notesClient') : '', interne: x ? x.notesInternes || '' : '', studio: p.vfxStudio || '',
@@ -5903,81 +6036,90 @@ function pdfVFX(j, images){
   const entete = (f, suite, sous) => {
     page++;
     const H = doc.hauteur;
-    T(M, H - 42, 'VFX CAMERA REPORT' + (suite || sous ? ' · CONTINUED' : ''), { taille: 17, police: 'HB', couleur: 'encre' });
-    T(M, H - 53, sous || (suite ? 'Takes ' + suite : 'Camera sheet · one sheet per setup'), { taille: 7, couleur: 'tan' });
-    doc.rect(M, H - 60, 34, 2, 'caramel');
+    // un bandeau serre : le titre et sa ligne a gauche ; le logo, le projet, le plan et la page a droite
+    T(M, H - 37, 'VFX CAMERA REPORT' + (suite || sous ? ' · CONTINUED' : ''), { taille: 15, police: 'HB', couleur: 'encre' });
+    T(M, H - 46, sous || (suite ? 'Takes ' + suite : 'Camera sheet · one sheet per setup'), { taille: 6.5, couleur: 'tan' });
+    doc.rect(M, H - 52, 34, 2, 'caramel');
     const xd = M + W;
     if (LOGO_PDF){
-      const hl = 10, kl = hl / LOGO_BOITE.h, lg = LOGO_BOITE.l * kl;
-      const ox = xd - lg - LOGO_BOITE.x * kl, oy = H - 20 + LOGO_BOITE.y * kl;
+      const hl = 9, kl = hl / LOGO_BOITE.h, lg = LOGO_BOITE.l * kl;
+      const ox = xd - lg - LOGO_BOITE.x * kl, oy = H - 17 + LOGO_BOITE.y * kl;
       doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
       doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
     }
     const titre = (f.titre || 'Untitled project').toUpperCase(), plan = f.plan ? 'Seq ' + (f.seq || '—') + ' · Shot ' + f.plan : '';
-    T(xd - largeurPdf(titre, 9, 'HB'), H - 40, titre, { taille: 9, police: 'HB', couleur: 'encre' });
-    if (plan) T(xd - largeurPdf(plan, 8, 'HB'), H - 50, plan, { taille: 8, police: 'HB', couleur: 'caramel' });
+    const lp = plan ? largeurPdf(plan, 8.5, 'HB') : 0;
+    if (plan) T(xd - lp, H - 37, plan, { taille: 8.5, police: 'HB', couleur: 'caramel' });
+    T(xd - lp - (plan ? 8 : 0) - largeurPdf(titre, 8.5, 'HB'), H - 37, titre, { taille: 8.5, police: 'HB', couleur: 'encre' });
     const pg = 'Page ' + page + ' / ' + total;
-    T(xd - largeurPdf(pg, 6.5, 'H'), H - 59, pg, { taille: 6.5, couleur: 'tan' });
+    T(xd - largeurPdf(pg, 6.5, 'H'), H - 46, pg, { taille: 6.5, couleur: 'tan' });
   };
 
   feuilles.forEach((f, n) => {
     if (n) doc.nouvellePage();
     entete(f);
     const H = doc.hauteur;
-    // 1. projet, tournage, script
-    const w3 = (W - 16) / 3;
+    // 1. projet, tournage, script : quatre lignes serrees ; une ligne peut porter deux champs
+    const w3 = (W - 16) / 3, LH = 9.5, hb = 11 + 4 * LH + 5;
+    const champ = (xg, xdr, y, lib, v, lw) => {
+      T(xg, y, lib, { taille: 6, couleur: 'tan' });
+      doc.ligne(xg + lw - 2, y - 2.5, xdr, y - 2.5, .35, 'filet');
+      if (v && v.choix) choix(xg + lw, y, v.choix, 6.8, null, xdr - xg - lw);
+      else if (v) ecrire(xg + lw, y, v, xdr - xg - lw - 1, 7, 'HB', 'encre');
+    };
     [['Project', f.projet], ['Shoot', f.tournage], ['Script', f.script]].forEach(([titre, champs], k) => {
-      const x = M + k * (w3 + 8), yh = H - 68;
+      const x = M + k * (w3 + 8), yh = H - 58;
       barre(x, yh, w3, titre);
-      cadre(x, yh - 74, w3, 74, .5, 'filet');
-      champs.forEach(([lib, v], i) => {
-        const y = yh - 21 - i * 11.8;
-        T(x + 5, y, lib, { taille: 6, couleur: 'tan' });
-        doc.ligne(x + 52, y - 2.5, x + w3 - 5, y - 2.5, .35, 'filet');
-        if (v && v.choix) choix(x + 54, y, v.choix, 6.8);
-        else if (v) ecrire(x + 54, y, v, w3 - 60, 7, 'HB', 'encre');
+      cadre(x, yh - hb, w3, hb, .5, 'filet');
+      champs.forEach(([lib, v, lib2, v2], i) => {
+        const y = yh - 19 - i * LH;
+        if (!lib2) return champ(x + 5, x + w3 - 5, y, lib, v, 44);
+        // le second champ a la place de son libelle et d'une valeur courte (01, 1 / 5), le premier le reste
+        const l2 = largeurPdf(lib2, 6, 'H') + 7, m = x + w3 - 5 - l2 - 30;
+        champ(x + 5, m - 4, y, lib, v, 44);
+        champ(m + 4, x + w3 - 5, y, lib2, v2, l2);
       });
     });
-    // 2. la camera, sur une barre
+    // 2. la camera, sur une barre ; le capteur et le codec n'y sont que s'ils sont remplis.
+    //    Chaque case a la largeur de son texte, le reste se partage
     let x = M;
-    const yc = H - 150, hc = 16;
-    [['Camera', 36, f.camera, 66], ['Lens set', 36, f.lens, 44], ['Movement', 42, f.mouvements, 126],
-     ['Sensor / format', 58, f.format, 0], ['Codec / fps', 44, f.codec, 58]].forEach(([lib, wl, v, wv], k, l) => {
-      if (!wv) wv = W - l.reduce((a, c) => a + c[1] + c[3], 0);
+    const yc = H - 58 - hb - 6, hc = 16, TV = 6.5;
+    const cam = [['Camera', f.camera], ['Lens set', f.lens], ['Movement', f.mouvement]]
+      .concat(f.format ? [['Sensor / format', f.format]] : [], f.codec ? [['Codec / fps', f.codec]] : [])
+      .map(([lib, v]) => [lib.toUpperCase(), v, largeurPdf(lib.toUpperCase(), 5.6, 'HB') + 9, Math.max(36, largeurPdf(v || '', TV, 'HB') + 12)]);
+    const reste = (W - cam.reduce((a, c) => a + c[2] + c[3], 0)) / cam.length;
+    cam.forEach(([lib, v, wl, wv]) => {
+      wv = Math.max(20, wv + reste);
       doc.rect(x, yc - hc, wl, hc, 'encre');
-      ecrire(x + 4, yc - 10.3, lib.toUpperCase(), wl - 6, 5.6, 'HB', 'blanc');
+      ecrire(x + 4, yc - 10.3, lib, wl - 6, 5.6, 'HB', 'blanc');
       cadre(x + wl, yc - hc, wv, hc, .5, 'filet2');
-      if (Array.isArray(v)) choix(x + wl + 5, yc - 10.3, v, 5.6, '·', wv - 8);
-      else ecrire(x + wl + 5, yc - 10.5, v, wv - 9, 7, 'HB', 'encre');
+      ecrire(x + wl + 5, yc - 10.3, v, wv - 9, TV, 'HB', 'encre');
       x += wl + wv;
     });
     // 3. les prises : quatorze lignes, les premieres remplies ; les autres numerotees a la suite
     const pr = f.prises.slice(0, VFX_LIGNES), dernier = Math.max(0, ...f.prises.map(t => parseInt(t.n, 10) || 0));
     const lignes = Array.from({ length: VFX_LIGNES }, (_, i) => pr[i] || null);
     const numeros = lignes.map((t, i) => t ? t.n : dernier + i - pr.length + 1);
-    let y = tableau(H - 174, lignes, numeros);
+    let y = tableau(yc - hc - 8, lignes, numeros);
     T(M, y - 8, 'Focus = distance from camera to subject.  Height measured ' + (f.mesure ? 'from: ' + f.mesure : 'from the ground to the lens centre') +
       '.  Clipname = camera file name.  OK / NG = validated takes' + (f.prises.some(t => t.retenue) ? ' · shaded row = kept for edit.' : '.'),
       { taille: 5.6, couleur: 'tan' });
 
-    // 4. en bas a gauche : descriptions, elements, notes
-    const yB = y - 16, wg = 172, xg = M;
+    // 4. en bas a gauche : descriptions, elements, notes ; le bas de page tient, la place gagnee
+    //    en tete va aux descriptions (des lignes de plus), aux notes et au croquis
+    const BAS = 42, yB = y - 16, wg = 172, xg = M;
     const bloc = (yh, titre, h, droite) => { barre(xg, yh, wg, titre, droite); cadre(xg, yh - h, wg, h, .5, 'filet'); return yh - 11; };
+    const plus = Math.max(0, Math.floor((yB - 357 - BAS) / 10)), nS = 5 + Math.floor(plus / 2), nV = 5 + Math.ceil(plus / 2);
     let yh = yB;
-    regle(xg, bloc(yh, 'Scene description', 67), wg, 5, f.scene); yh -= 73;
-    regle(xg, bloc(yh, 'VFX description', 67), wg, 5, f.vfx); yh -= 73;
+    regle(xg, bloc(yh, 'Scene description', 17 + nS * 10), wg, nS, f.scene); yh -= 23 + nS * 10;
+    regle(xg, bloc(yh, 'VFX description', 17 + nV * 10), wg, nV, f.vfx); yh -= 23 + nV * 10;
     const ye = bloc(yh, 'Elements', 85);
-    T(xg + 6, ye - 9, 'ALWAYS', { taille: 5.6, police: 'HB', couleur: 'caramel', esp: .4 });
-    T(xg + wg / 2 + 2, ye - 9, 'WHEN NEEDED', { taille: 5.6, police: 'HB', couleur: 'caramel', esp: .4 });
-    [0, 1].forEach(col => {
-      let yy = ye - 20;
-      f.elements.filter(e => e.col === col).forEach(e => {
-        const xe = col ? xg + wg / 2 + 2 : xg + 6;
-        coche(xe, yy - 1, e.on, 6.5);
-        T(xe + 10, yy, e.nom, { taille: 6.6, police: e.on ? 'HB' : 'H', couleur: e.on ? 'encre' : 'brun' });
-        if (e.sous) T(xe + 10, yy - 5.5, e.sous, { taille: 4.6, couleur: 'tan' });
-        yy -= e.sous || col ? 12.5 : 11;
-      });
+    // la liste « On set » du breakdown, dans son ordre : deux colonnes de cinq
+    const demi = Math.ceil(f.elements.length / 2);
+    f.elements.forEach((e, i) => {
+      const xe = i < demi ? xg + 6 : xg + wg / 2 + 2, yy = ye - 11 - (i % demi) * 11;
+      coche(xe, yy - 1, e.on, 6.5);
+      ecrire(xe + 10, yy, e.nom, wg / 2 - 18, 6.6, e.on ? 'HB' : 'H', e.on ? 'encre' : 'brun');
     });
     coche(xg + 6, ye - 69, !!f.autres, 6.5);
     T(xg + 16, ye - 68, 'Other :', { taille: 6.6, couleur: 'brun' });
@@ -5985,10 +6127,11 @@ function pdfVFX(j, images){
     if (f.autres) ecrire(xg + 44, ye - 68, f.autres, wg - 52, 6.6, 'HB', 'encre');
     yh -= 91;
     regle(xg, bloc(yh, 'Client notes', 57, f.studio), wg, 4, f.client); yh -= 63;
-    regle(xg, bloc(yh, 'Internal notes', 57, 'between us'), wg, 4, f.interne);
+    const hI = Math.max(57, yh - BAS);
+    regle(xg, bloc(yh, 'Internal notes', hI, 'between us'), wg, Math.floor((hI - 17) / 10), f.interne);
 
     // 5. a droite : le croquis du decor, puis les distances
-    const xd = M + wg + 8, wd = W - wg - 8, yBas = yB - 357;
+    const xd = M + wg + 8, wd = W - wg - 8, yBas = yh - hI;
     const hDist = 11 + 11 + 4 * 12, yDist = yBas + hDist, hDia = yB - yDist - 6 - 11;
     barre(xd, yB, wd, 'Diagram of the set');
     cadre(xd, yB - 11 - hDia, wd, hDia, .5, 'filet');
@@ -6029,13 +6172,13 @@ function pdfVFX(j, images){
       const l = f.prises.slice(d, d + SUITE);
       doc.nouvellePage();
       entete(f, l[0].n + ' – ' + l[l.length - 1].n);
-      tableau(doc.hauteur - 74, l, l.map(t => t.n));
+      tableau(doc.hauteur - 60, l, l.map(t => t.n));
     }
     // 7. les autres croquis du plan, chacun sur sa page, en grand
     f.autresCroquis.filter(k => images[k]).forEach((k, q) => {
       doc.nouvellePage();
       entete(f, '', 'Set diagram ' + (q + 2));
-      const im = images[k], yh = doc.hauteur - 74, hb = yh - 40 - 11;
+      const im = images[k], yh = doc.hauteur - 60, hb = yh - 40 - 11;
       barre(M, yh, W, 'Diagram of the set ' + (q + 2));
       cadre(M, 40, W, hb, .5, 'filet');
       const kk = Math.min((W - 12) / im.l, (hb - 12) / im.h), l = im.l * kk, h = im.h * kk;
@@ -6826,6 +6969,38 @@ function verifierEnvoiAuto(d){
 }
 setInterval(() => verifierEnvoiAuto(), 30000);
 /* dans la fiche Journee : la boite du serveur et les derniers envois */
+/* La jauge du stockage : chez l'hebergeur, la place prise sur le quota de l'offre
+   (1 Go), qui se remplit a chaque croquis et chaque prise (les sauvegardes
+   horodatees les gardent aussi) ; sur le PC du plateau, la place des donnees seule. */
+/* en base 1024, comme Windows et l'hebergeur : 1 Go = 1024 Mo */
+const KO = 1024, MO = KO * KO, GO = MO * KO;
+const octetsLisibles = n => n >= GO ? (n / GO).toFixed(2).replace('.', ',') + ' Go'
+  : n >= MO ? (n / MO).toFixed(1).replace('.', ',') + ' Mo' : n > 0 && n < KO ? '< 1 ko' : Math.round(n / KO) + ' ko';
+/* la couleur de chaque type dans la jauge */
+const COULEURS_STOCK = { shots:'var(--acc)', schemas:'var(--tag-bleu)', prises:'var(--ok)', sauvegardes:'#b48ad6',
+                         divers:'var(--tag-orange)', site:'var(--dim2)', reste:'var(--line2)' };
+const pourcent = x => x < 1 ? x.toFixed(1).replace('.', ',') : String(Math.round(x));
+function majStockage(){
+  if (!$('stockage')) return;
+  fetch(API('stockage')).then(r => r.json()).then(s => {
+    const z = $('stockage'); if (!z) return;
+    const l = (s.parties || []).filter(x => x.octets > 0);
+    const coul = x => COULEURS_STOCK[x.cle] || 'var(--dim2)';
+    // comme sur un telephone : une barre, chaque type de sa couleur, le libre en gris ;
+    // chez l'hebergeur la barre est le quota, sur le PC ce qui est pris
+    const base = s.quota || l.reduce((a, x) => a + x.octets, 0) || 1, pc = s.quota ? Math.min(100, s.utilise / s.quota * 100) : 100;
+    z.innerHTML = `<div class="stock-carte${pc >= 90 ? ' plein' : pc >= 75 ? ' haut' : ''}">
+      ${s.quota ? `<div class="stock-pc"><b>${pourcent(pc)} %</b> utilisé</div>
+        <div class="stock-bornes"><span>${octetsLisibles(s.utilise)}</span><span>${octetsLisibles(s.quota)}</span></div>`
+        : `<div class="stock-pc"><b>${octetsLisibles(s.utilise)}</b> de données sur ce PC</div>`}
+      <div class="stock-barre" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pc)}" aria-label="Stockage utilisé">${l.map(x =>
+        `<i style="width:${x.octets / base * 100}%;background:${coul(x)}" title="${esc(x.nom)} : ${octetsLisibles(x.octets)}"></i>`).join('')}</div>
+      <div class="stock-liste">${l.map(x => `<div><i style="background:${coul(x)}"></i><span>${esc(x.nom)}</span><b>${octetsLisibles(x.octets)}</b></div>`).join('')}</div>
+      ${pc >= 75 && s.quota ? `<div class="note">L’hébergement approche de sa limite : la liste dit ce qui pèse le plus.</div>` : ''}
+    </div>`;
+  }).catch(() => { if ($('stockage')) $('stockage').innerHTML = '<div class="note">Mesure indisponible pour l’instant.</div>'; });
+}
+
 function majEtatMail(){
   const z = $('mail-etat'); if (!z) return;
   fetch(API('mail')).then(r => r.json()).then(m => {
@@ -7151,14 +7326,14 @@ function envoyerBalise(){
   }catch(e){}
 }
 window.addEventListener('pagehide', e => {
-  flush(); envoyerBalise();
+  sauverCroquisEnCours(); flush(); envoyerBalise();
   // l'onglet part (et ne reste pas en memoire pour un retour arriere) : il sort des connectes
   if (!e.persisted && RESEAU.possible && navigator.sendBeacon)
     try{ navigator.sendBeacon(API('presence'), new Blob([JSON.stringify({ client: CLIENT, quitte: true, espace: monEspace() || undefined })], { type:'text/plain' })); }catch(x){}
 });
 window.addEventListener('pageshow', e => { if (e.persisted) envoyerPresence(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden){ flush(); envoyerBalise(); }
+  if (document.hidden){ sauverCroquisEnCours(); flush(); envoyerBalise(); }
   else if (RESEAU.possible && RESEAU.src && RESEAU.src.readyState === 2) connecter();
 });
 
@@ -7210,7 +7385,10 @@ renderAll();
 reprendrePlace();
 majPresence();
 if (RESEAU.possible) connecter();   // une fois nomme : l'espace, c'est le prenom
-if (!UI.nom) demanderNom();   // partout : c'est le prenom qui signe les prises et nomme l'espace
+if (RESEAU.possible) setTimeout(rangerFonds, 8000);   // une fois le projet recu : les plans importes en image partent en fichier
+// partout : c'est le prenom qui signe les prises et nomme l'espace ; un prenom
+// retire de l'equipe (Victoire, Marie, Georges…) repose la question
+if (!UI.nom || EQUIPE.indexOf(UI.nom) < 0) demanderNom();
 else veillerAuCarnet();       // le carnet ouvert est-il bien le sien ?
 setTimeout(verifierVersion, 20000);
 setInterval(verifierVersion, 1800000);

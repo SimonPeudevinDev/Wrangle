@@ -639,6 +639,10 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .pl{display:grid;gap:0 14px;align-items:end}
 .pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) minmax(0,1.4fr) auto}
 .pl2{grid-template-columns:minmax(0,1fr) 176px 104px 60px 236px}   /* le cadrage peut en porter plusieurs ; la distribution ferme la ligne */
+/* la ligne VFX : la description sous la description, le mouvement sous le cadrage, « On set » au bout */
+.pl3{grid-template-columns:minmax(0,1fr) 176px 104px 60px 236px}
+.pl3 .w-onset{grid-column:3 / -1}
+.w-onset input{cursor:pointer;text-overflow:ellipsis}
 /* la distribution : un champ qui se lit, son menu a cocher s'ouvre au clic ;
    elle loge a droite, sous les etiquettes et Fiche, la ou la carte avait du vide */
 .w-dist input{cursor:pointer;text-overflow:ellipsis}
@@ -692,7 +696,7 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 @media(max-width:1200px){
   .pl1{grid-template-columns:56px 78px 68px 78px minmax(0,1fr) auto}
   .pl1 .w-flex{grid-column:1 / -1}
-  .pl2{grid-template-columns:minmax(0,1fr) 124px 96px 56px 200px}
+  .pl2,.pl3{grid-template-columns:minmax(0,1fr) 124px 96px 56px 200px}
 }
 @media(max-width:560px){
   .prow{grid-template-columns:1fr;gap:12px;padding:14px;margin-bottom:12px}
@@ -701,6 +705,8 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
   .pl1 .w-flex,.pl1 .w-lieu{grid-column:1 / -1}
   .pl2{grid-template-columns:1fr 1fr 56px}
   .pl2 .w-desc,.pl2 .w-dist{grid-column:1 / -1}
+  .pl3{grid-template-columns:1fr}
+  .pl3 .w-onset{grid-column:auto}
   .haut{grid-column:1 / -1;justify-content:space-between;margin:0 0 4px;order:-1}
 }
 
@@ -796,6 +802,10 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .dtitre{flex:1;min-width:0}
 .dtitre b{display:block;font:700 17px/1.2 var(--font-titre);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dtitre span{display:block;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* quelqu'un d'autre dessine ce schema : dans l'en-tete de l'editeur, et au-dessus du schema dans la fiche */
+.deja,.croq-deja{flex:none;padding:6px 12px;border-radius:var(--rp);font-size:12.5px;font-weight:600;color:var(--acc);background:rgba(231,176,74,.14);white-space:nowrap}
+.croq-deja{display:inline-block;margin-bottom:10px}
+.deja[hidden],.croq-deja[hidden]{display:none}
 /* la zone defile quand le croquis est zoome ; centre tant qu'il tient */
 .dzone{min-height:0;min-width:0;display:flex;padding:12px;background:var(--surface);touch-action:none;overflow:auto;overscroll-behavior:contain}
 #croquis{display:block;flex:none;margin:auto;background:#fff;border-radius:4px;box-shadow:0 12px 34px rgba(0,0,0,.45);touch-action:none;cursor:crosshair}
@@ -1230,6 +1240,26 @@ select option{background:var(--surface);color:var(--txt)}
   border-bottom:1px solid var(--line)}
 .ligne span{flex:1;color:var(--dim)}
 .ligne b{flex:none;font-variant-numeric:tabular-nums;font-weight:700;font-size:14px}
+/* les jours de tournage, dans les reglages : un bloc par jour, sa date et son decor */
+.jt{margin-top:16px}
+.jt:first-child{margin-top:4px}
+.jt>b{display:block;font-size:13px;font-weight:700;color:var(--acc);letter-spacing:.02em}
+/* la jauge du stockage, dans les reglages, comme celle d'un telephone : le pourcentage,
+   une barre ou chaque type a sa couleur (le libre en gris), puis la liste des types */
+.stock-carte{padding:16px 18px;background:var(--surface2);border-radius:var(--r)}
+.stock-pc{font-size:14px;color:var(--dim)}
+.stock-pc b{font-size:28px;font-weight:800;color:var(--txt);margin-right:4px}
+.stock-bornes{display:flex;justify-content:space-between;margin-top:10px;font-size:12.5px;color:var(--dim)}
+.stock-barre{display:flex;gap:2px;height:12px;margin-top:6px;border-radius:var(--rp);overflow:hidden;background:var(--surface3)}
+.stock-barre i{display:block;flex:none;min-width:4px;height:100%}
+.stock-carte.haut .stock-pc b{color:var(--g3)}
+.stock-carte.plein .stock-pc b{color:var(--ng)}
+.stock-liste{margin-top:14px;display:flex;flex-direction:column}
+.stock-liste div{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:14px;border-top:1px solid var(--line)}
+.stock-liste div:first-child{border-top:0}
+.stock-liste i{flex:none;width:10px;height:10px;border-radius:50%}
+.stock-liste span{flex:1;color:var(--txt)}
+.stock-liste b{font-weight:600;font-variant-numeric:tabular-nums;color:var(--txt)}
 .jauge{flex:none;width:76px;height:2px;background:var(--line2);overflow:hidden}
 .jauge i{display:block;height:100%;background:var(--acc)}
 
