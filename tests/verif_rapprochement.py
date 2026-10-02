@@ -50,7 +50,7 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
     essais.verifier('le bloc montre les deux sources', banc.js("[...document.querySelectorAll('#rapprocher .rsource')].map(s => s.firstChild.textContent.trim())"), ['Simon', 'Alice'])
     essais.verifier('et le bilan', banc.js("document.querySelector('#rapprocher .rresume').textContent"), '2 écarts · 4 compléments · 1 prise chez un seul')
     essais.verifier('les ecarts en avertissement, le reste en gris',
-                    [banc.js("document.querySelectorAll('#rapprocher .alert.o').length"), banc.js("document.querySelectorAll('#rapprocher .alert:not(.o)').length")], [2, 5])
+                    [banc.js("document.querySelectorAll('#rapprocher .alert.o').length"), banc.js("document.querySelectorAll('#rapprocher .alert:not(.o)').length")], [2, 3])   # les complements d'une prise, regroupes sur une ligne
 
     # -- la fiche data wrangling : les ecarts a trancher, une colonne par personne
     banc.js('chargerLogo()'); time.sleep(0.6)

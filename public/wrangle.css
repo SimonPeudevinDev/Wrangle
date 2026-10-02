@@ -1600,3 +1600,5 @@ select option{background:var(--surface);color:var(--txt)}
 /* la focale fin : « Pas de zoom » en tete des tuiles */
 .tuile.aucun{border-style:dashed}
 .tuile.aucun.on{border-style:solid}
+/* rapprochement : un complement, sa valeur au survol */
+.rval{border-bottom:1px dotted var(--dim2);cursor:help}

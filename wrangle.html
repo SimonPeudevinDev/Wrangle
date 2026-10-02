@@ -6606,11 +6606,20 @@ function nomDeSource(db, fichier){
 }
 function retirerSource(i){ RAP.sources.splice(i, 1); renderReport(); }
 
-const ligneRap = (qui, c) =>
-  c.ecarts.map(e => `<div class="alert o"><i>&#9888;</i><div>${qui ? esc(qui) + ' · ' : ''}${esc(e.champ)} : ${
-    e.valeurs.map(([nom, v]) => `<b>${esc(nom)}</b> ${esc(v)}`).join(' · ')}</div></div>`).join('') +
-  c.complements.map(e => `<div class="alert"><i></i><div>${qui ? esc(qui) + ' · ' : ''}${esc(e.champ)} « ${esc(e.valeur)} » seulement chez ${esc(e.par.join(', '))}</div></div>`).join('') +
-  (c.seuls ? `<div class="alert"><i></i><div>${esc(qui)} seulement chez ${esc(c.seuls.join(', '))}</div></div>` : '');
+/* Le rapprochement en resume : par prise, une ligne pour les ecarts (a trancher, valeurs
+   cote a cote) et une pour ce qu'un seul a note, regroupe par personne ; la valeur d'un
+   complement se lit au survol. */
+function ligneRap(qui, c){
+  const tete = qui ? `<b>${esc(qui)}</b> · ` : '';
+  const ecarts = c.ecarts.length ? `<div class="alert o"><i>&#9888;</i><div>${tete}${c.ecarts.map(e => `${esc(e.champ)} : ${
+    e.valeurs.map(([nom, v]) => `<b>${esc(nom)}</b> ${esc(v)}`).join(' · ')}`).join(' — ')}</div></div>` : '';
+  const groupes = new Map();
+  c.complements.forEach(e => { const k = e.par.join(', '); if (!groupes.has(k)) groupes.set(k, []); groupes.get(k).push(e); });
+  const compl = groupes.size ? `<div class="alert"><i></i><div>${tete}${[...groupes].map(([par, l]) => `seulement chez ${esc(par)} : ${
+    l.map(e => `<span class="rval" title="${esc(e.champ)} : ${esc(e.valeur)}">${esc(e.champ.toLowerCase())}</span>`).join(', ')}`).join(' · ')}</div></div>` : '';
+  const seuls = c.seuls ? `<div class="alert"><i></i><div>${esc(qui)} seulement chez ${esc(c.seuls.join(', '))}</div></div>` : '';
+  return ecarts + compl + seuls;
+}
 function resumeRap(t){
   return [t.ecarts + ' écart' + plur(t.ecarts), t.complements + ' complément' + plur(t.complements),
           t.seuls + ' prise' + plur(t.seuls) + ' chez un seul'].join(' · ');
