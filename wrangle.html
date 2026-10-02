@@ -2115,10 +2115,11 @@ function calerPrises(racine){
 /* « Tourne » s'affiche une fois qu'on est passe a la suite : la derniere prise
    notee est sur un autre shot. Le shot qu'on tourne encore ne le dit pas. */
 /* Un shot termine (toutes ses prises faites) : coche sur sa carte, pour toute l'equipe ; son nom passe au vert. */
-// le clap referme : le shot est dans la boite
-const ICO_FINI = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<rect x="3" y="9.5" width="18" height="10.5" rx="1.6"/><rect x="3" y="5" width="18" height="4.5" rx="1"/>' +
-  '<path d="M7.5 5l-2.2 4.5M12.5 5l-2.2 4.5M17.5 5l-2.2 4.5"/><path d="M7 14.5h10"/></svg>';
+// le cadenas : ferme, le shot est valide et verrouille ; ouvert, il peut l'etre
+const ICO_FINI = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2"/></svg>';
+const ICO_FINI_OUVERT = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/><path d="M12 14.5v2"/></svg>';
 /* Le bandeau d'un shot valide, en tete de sa fiche et de celles de ses prises */
 const bandeauVerrou = p => p && p.termine ? `<div class="verrou-shot">${ICO_FINI}<span>Shot validé : il ne se modifie plus.</span>
   <button type="button" class="btn sm" onclick="terminerShot('${p.id}')">Rouvrir le shot</button></div>` : '';
@@ -2191,7 +2192,7 @@ function blocPlan(p, seulementRetenues, qui){
           p.termine ? '<span class="ptourne">Terminé</span>' : estTourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
           <span class="pactions">${estTourne(p) || p.termine ? `<button type="button" class="fini${p.termine ? ' on' : ''}" onclick="event.stopPropagation();terminerShot('${p.id}')"
             title="${p.termine ? 'Shot terminé : toucher pour le rouvrir' : 'Marquer le shot terminé, pour toute l’équipe'}" aria-pressed="${!!p.termine}"
-            aria-label="Shot terminé">${ICO_FINI}</button>` : ''}
+            aria-label="Shot terminé">${p.termine ? ICO_FINI : ICO_FINI_OUVERT}</button>` : ''}
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}"
             onclick="event.stopPropagation();viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></span></div>
