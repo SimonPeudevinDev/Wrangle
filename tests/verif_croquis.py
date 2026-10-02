@@ -83,7 +83,7 @@ with Banc(8786, 9371) as banc:
     banc.js("nouveauCroquis(DB.plans[0].id)"); time.sleep(0.8)
     essais.verifier('le nouveau croquis s ouvre vide, numero 2',
                     banc.js("[dessin.index, dessin.traits.length, document.querySelector('#voile-dessin .dtitre b').textContent]"),
-                    [1, 0, 'Croquis 2 · plan ' + banc.js("DB.plans[0].plan")])
+                    [1, 0, 'Croquis 2 · shot ' + banc.js("DB.plans[0].plan")])
     banc.js("dessin.traits.push({ c:'#4f8fd6', w:3, n:1, pts:[[100,100],[900,700]] }); enregistrerCroquis(); fermerCroquis()"); time.sleep(0.6)
     essais.verifier('enregistre, il rejoint le plan sans toucher au premier',
                     banc.js("[(DB.plans[0].croquisPlus || []).length, DB.plans[0].croquis.traits.length]"), [1, 3])

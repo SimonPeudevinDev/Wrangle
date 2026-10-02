@@ -89,7 +89,7 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     essais.verifier('une page par feuille', pdf.count('/Type /Page '), len(m))
     essais.verifier('le logo en tete de chaque feuille', pdf.count(' h f*'), len(m))
     essais.verifier('le titre, le clip et la description VFX s y lisent',
-                    ['(VFX CAMERA REPORT)' in pdf, '(A001C002)' in pdf, '(Onde de choc)' in pdf], [True, True, True])
+                    ['(VFX camera report ' in pdf, '(A001C002)' in pdf, '(Onde de choc)' in pdf], [True, True, True])
     essais.verifier('le croquis est une image JPEG dans la page', ['/Filter /DCTDecode' in pdf, '/Im1 Do' in pdf], [True, True])
     essais.verifier('les notes a parentheses sont echappees', '\\(sans com\xe9diens\\)' in pdf, True)
     essais.verifier('les objets sont numerotes d un trait',
@@ -109,7 +109,7 @@ with Banc(8793, 9393, taille=(1100, 900)) as banc:
     # -- plus de quatorze prises : la feuille continue sur une page de suite
     banc.js("for (let i = 0; i < 15; i++) patch('prise', ajouterPrise(%s, false, {}).id, { clip:'B00' + i, statut:'OK' })" % json.dumps(ids[1]))
     pdf2 = banc.js("Array.from(pdfVFX(%s), b => String.fromCharCode(b)).join('')" % json.dumps(j))
-    essais.verifier('seize prises : la feuille et sa suite', ['(VFX CAMERA REPORT \\267 CONTINUED)' in pdf2 or '(VFX CAMERA REPORT \xb7 CONTINUED)' in pdf2,
+    essais.verifier('seize prises : la feuille et sa suite', ['VFX camera report \\267 continued' in pdf2 or 'VFX camera report \xb7 continued' in pdf2,
                     pdf2.count('/Type /Page ')], [True, len(m) + 1])
 
     # -- le bouton du rapport telecharge

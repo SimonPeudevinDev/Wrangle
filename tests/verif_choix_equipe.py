@@ -60,14 +60,14 @@ with Banc(PORT, 9399, taille=(1200, 900)) as banc:
     banc.js("reunirEquipe()")
     essais.verifier('Tous : ceux qui ont saisi, Alice et Bob', patienter(lambda: sources(banc) == ['Alice', 'Bob'], tours=40), True)
     essais.verifier('et le dit', banc.js("$('toast-msg').textContent"), '2 personnes réunies')
-    essais.verifier('une pastille par personne, Zoe grisee et pas cochee', pastilles(banc), ['Tous +', 'Alice +', 'Bob +', 'Zoe vide'])
+    essais.verifier('une pastille par personne ; Zoe, hors equipe et sans saisie, n en a pas', pastilles(banc), ['Tous +', 'Alice +', 'Bob +'])
     essais.verifier('le bilan reunit Alice et Bob : la prise 1 des deux ne fait qu une ligne',
                     banc.js("projetEquipe().prises.map(t => t.n + ' ' + t.par).sort()"), ['1 Alice, Bob', '2 Bob'])
     essais.verifier('le bouton de recuperation devient Actualiser', banc.js("document.querySelector('#rapprocher .rsources .btn.p').textContent"), 'Actualiser')
 
     # -- une seule personne
     banc.js("basculerChoix('alice')")
-    essais.verifier('Alice decochee : Bob seul', [sources(banc), pastilles(banc)], [['Bob'], ['Tous', 'Alice', 'Bob +', 'Zoe vide']])
+    essais.verifier('Alice decochee : Bob seul', [sources(banc), pastilles(banc)], [['Bob'], ['Tous', 'Alice', 'Bob +']])
     essais.verifier('le rapprochement ne compare que Simon et Bob', banc.js("rapprocher(sourcesRap()).noms"), ['Simon', 'Bob'])
     essais.verifier('les prises d Alice ne sont plus dans le projet reuni', banc.js("projetEquipe().prises.some(t => t.id === 'a1')"), False)
 

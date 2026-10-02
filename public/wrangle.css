@@ -668,8 +668,8 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 /* les actions : Fiche et suppression, en haut a droite, a hauteur de la premiere ligne */
 /* a droite de la premiere ligne : les etiquettes du plan (LIVE / TBC…) puis
    Fiche et la croix, en haut de carte ; la distribution ferme la seconde ligne */
-.haut{display:flex;align-items:center;justify-content:flex-end;gap:14px;align-self:start;margin-left:6px}
-.haut .ptags{margin:0;flex-wrap:nowrap}
+.pl1>.haut{display:flex;align-items:center;justify-content:flex-end;gap:14px;align-self:start;margin-left:6px}
+.pl1>.haut .ptags{margin:0;flex-wrap:nowrap}
 .pbtns{display:flex;gap:8px;align-items:center}
 .pdel,.pfiche{
   flex:none;border:1px solid var(--line2);background:none;color:var(--dim);cursor:pointer;
@@ -707,7 +707,7 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
   .pl2 .w-desc,.pl2 .w-dist{grid-column:1 / -1}
   .pl3{grid-template-columns:1fr}
   .pl3 .w-onset{grid-column:auto}
-  .haut{grid-column:1 / -1;justify-content:space-between;margin:0 0 4px;order:-1}
+  .pl1>.haut{grid-column:1 / -1;justify-content:space-between;margin:0 0 4px;order:-1}
 }
 
 /* ------------------------------- Croquis ------------------------------- */
@@ -1572,7 +1572,6 @@ select option{background:var(--surface);color:var(--txt)}
 /* La fiche du plan : les etiquettes et « Renommer » sur une ligne ; la note du bas, centree */
 .fiche-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
 .fiche-tete .ptags{margin:0}
-.fiche-tete .renommer{flex:none;margin:0}
 .note.centre{text-align:center}
 /* la valeur et « Custom » sur la ligne, le curseur dessous, en pleine largeur */
 .spec.wb{flex-wrap:wrap;row-gap:0;padding-bottom:10px}
@@ -1592,6 +1591,11 @@ select option{background:var(--surface);color:var(--txt)}
 .champs.duo-champs .champ + .champ .champ-tete{position:relative;padding-left:23px}
 .champs.duo-champs .champ + .champ .champ-nom{display:none}
 .champs.duo-champs .champ + .champ .champ-tete::before{content:"→";position:absolute;left:0;font-size:15px;color:var(--dim2)}
+/* le trait « a deux » (vert : la meme valeur chez un autre ; rouge : un ecart) se loge dans la marge,
+   pas sur le libelle ni sur la fleche du debut → fin */
+.champs.duo-champs .champ.a2-autre>.champ-tete,.champs.duo-champs .champ.a2-accord>.champ-tete,.champs.duo-champs .champ.a2-ecart>.champ-tete{padding-left:12px}
+.champs.duo-champs .champ + .champ.a2-autre>.champ-tete,.champs.duo-champs .champ + .champ.a2-accord>.champ-tete,.champs.duo-champs .champ + .champ.a2-ecart>.champ-tete{padding-left:35px}
+.champs.duo-champs .champ + .champ.a2-autre>.champ-tete::before,.champs.duo-champs .champ + .champ.a2-accord>.champ-tete::before,.champs.duo-champs .champ + .champ.a2-ecart>.champ-tete::before{left:12px}
 .champs.duo-champs .champ.ouvert .champ-val{color:var(--acc)}
 /* la barre « a deux » se pose une fois, a gauche de la ligne, comme sur hauteur ou pan */
 .champs.duo-champs .champ + .champ > .champ-tete{box-shadow:none!important;margin-left:0!important;width:100%!important}
@@ -1602,3 +1606,26 @@ select option{background:var(--surface);color:var(--txt)}
 .tuile.aucun.on{border-style:solid}
 /* rapprochement : un complement, sa valeur au survol */
 .rval{border-bottom:1px dotted var(--dim2);cursor:help}
+/* le titre de la fiche d'un plan : on le touche pour renommer le plan */
+#stitle.editable{cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+#stitle .stitre-crayon{display:inline-flex;color:var(--dim2)}
+#stitle .stitre-crayon svg{width:16px;height:16px}
+#stitle.editable:hover .stitre-crayon{color:var(--acc)}
+/* l'explication d'un choix, dans un menu (ND : « 2 diaphs de moins ») */
+.menu button .indice{display:block;font-style:normal;font-size:.78em;font-weight:500;color:var(--dim2);white-space:nowrap;margin-top:2px}
+.menu button:has(.indice){flex-direction:column;align-items:flex-start;justify-content:center;gap:0}
+/* une valeur verrouillee pour tout le projet (objectif, LUT) : lue sur la prise, changee dans les reglages */
+.spec.verrou .verrou-val{flex:1;min-width:0;font-size:15px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spec.verrou .verrou-ico{flex:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:none;color:var(--dim2);display:grid;place-items:center;cursor:pointer}
+.spec.verrou .verrou-ico:hover{color:var(--acc);border-color:var(--line2)}
+nav button[hidden]{display:none}
+/* le rapprochement : environ cinq lignes, le reste defile dans sa boite */
+.rliste{max-height:236px;overflow-y:auto;padding-right:6px;border:1px solid var(--line);border-radius:var(--r);padding:4px 10px;margin-top:8px}
+.rliste .rplan > b{position:sticky;top:-4px;background:var(--bg);display:block;padding:6px 0 4px;z-index:1}
+.rliste .rplan:first-child{margin-top:0}
+/* l'adresse d'un decor, collee a sa ligne */
+.spec.decor + .spec{border-top:none;min-height:40px}
+.spec.decor + .spec label{color:var(--dim2)}
+/* deux jauges sur le PC : le site (toute l'equipe), puis ce PC */
+.stock-carte + .stock-carte{margin-top:12px}
+.stock-titre{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2);margin-bottom:6px}

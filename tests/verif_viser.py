@@ -32,7 +32,7 @@ with Banc(8785, 9385, taille=(1200, 900)) as banc:
     banc.js("document.querySelector('#l-shoot .viser[data-vise=%s]').click()" % json.dumps(ids[2])); time.sleep(0.3)
     essais.verifier('toucher l anneau vise le plan', banc.js('UI.vise'), ids[2])
     essais.verifier('sa carte le montre, et elle seule', banc.js(VISES), [ids[2]])
-    essais.verifier('le Moteur le nomme', 'plan ' + nums[2] in banc.js("$('fab').textContent"), True)
+    essais.verifier('le Moteur le nomme', 'shot ' + nums[2] in banc.js("$('fab').textContent"), True)
     essais.verifier('+ Prise compte pour lui', banc.js("$('fab2').textContent"), '+ Prise 1')
     essais.verifier('la fiche du plan ne s ouvre pas pour autant', banc.js('openType'), None)
 
@@ -40,7 +40,7 @@ with Banc(8785, 9385, taille=(1200, 900)) as banc:
     essais.verifier('une prise ajoutee ailleurs ne deplace pas le plan vise', banc.js(VISES), [ids[2]])
     banc.js("openPrise(prisesDe(%s)[0].id)" % json.dumps(ids[0])); time.sleep(0.4)
     essais.verifier('ouvrir une prise ailleurs non plus', banc.js(VISES), [ids[2]])
-    essais.verifier('le Moteur nomme toujours le plan vise', 'plan ' + nums[2] in banc.js("$('fab').textContent"), True)
+    essais.verifier('le Moteur nomme toujours le plan vise', 'shot ' + nums[2] in banc.js("$('fab').textContent"), True)
     banc.js("closeSheet(); nouvellePrise()"); time.sleep(0.4)
     essais.verifier('+ Prise ajoute la prise au plan vise', banc.js('prisesDe(%s).length' % json.dumps(ids[2])), 1)
 

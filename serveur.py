@@ -278,58 +278,6 @@ def enregistrer_fond(url):
     return nom
 
 
-def stockage():
-    """La place des données sur ce PC, pour la jauge des réglages : pas de quota
-    ici (le disque du PC), seulement le détail. Mêmes clés que api/stockage.php."""
-    def taille(d):
-        n = 0
-        for racine, _, fichiers in os.walk(d):
-            for f in fichiers:
-                try:
-                    n += os.path.getsize(os.path.join(racine, f))
-                except OSError:
-                    pass
-        return n
-    def long(x):
-        return len(json.dumps(x, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
-    t = {'shots': 0, 'schemas': 0, 'prises': 0}
-    sauv = 0
-    for e in (os.listdir(ESPACES) if os.path.isdir(ESPACES) else []):
-        sauv += taille(os.path.join(ESPACES, e, 'sauvegardes'))
-        f = os.path.join(ESPACES, e, 'projet.json')
-        try:
-            n = os.path.getsize(f)
-            with open(f, encoding='utf-8') as fh:
-                db = json.load(fh)
-        except (OSError, ValueError):
-            continue
-        if not isinstance(db, dict):
-            continue
-        # le projet, réparti par type au prorata de ce que chaque partie pèse dans le fichier
-        schemas = shots = 0
-        for pl in db.get('plans') or []:
-            c = sum(long(pl[k]) for k in ('croquis', 'croquisPlus') if pl.get(k))
-            schemas += c
-            shots += long(pl) - c
-        schemas += long((db.get('prod') or {}).get('fonds') or {}) if (db.get('prod') or {}).get('fonds') else 0
-        tout = max(1, long(db))
-        t['shots'] += n * shots / tout
-        t['schemas'] += n * schemas / tout
-        t['prises'] += n * long(db.get('prises') or []) / tout
-    t['schemas'] += taille(os.path.join(DATA, 'fonds'))     # les plans de décor importés, en fichiers
-    espaces_ = taille(ESPACES)
-    divers = max(0, espaces_ - t['shots'] - t['schemas'] - t['prises'] - sauv + taille(os.path.join(DATA, 'fonds')))
-    anciennes = max(0, taille(DATA) - espaces_ - taille(os.path.join(DATA, 'fonds')))
-    parties = [{'cle': 'shots', 'nom': 'Shots', 'octets': round(t['shots'])},
-               {'cle': 'schemas', 'nom': 'Schémas', 'octets': round(t['schemas'])},
-               {'cle': 'prises', 'nom': 'Prises', 'octets': round(t['prises'])},
-               {'cle': 'sauvegardes', 'nom': 'Sauvegardes', 'octets': sauv},
-               {'cle': 'divers', 'nom': 'Journaux et réglages', 'octets': round(divers)},
-               {'cle': 'reste', 'nom': 'Anciennes copies', 'octets': anciennes}]
-    return {'utilise': sum(x['octets'] for x in parties), 'quota': None,
-            'quand': time.strftime('%Y-%m-%dT%H:%M:%S'), 'parties': parties}
-
-
 def liste_espaces():
     """Les espaces qui ont un projet, pour le rapprochement du DIT."""
     with verrou:
@@ -1038,8 +986,6 @@ class Requete(BaseHTTPRequestHandler):
                                         'adresses': self.server.adresses})
         if u.path == '/api/depuis':
             return self._depuis(parse_qs(u.query))
-        if u.path == '/api/stockage':
-            return self._json(200, stockage())
         if u.path == '/api/fond':
             nom = (parse_qs(u.query).get('f') or [''])[0]
             chemin = os.path.join(DATA, 'fonds', nom)

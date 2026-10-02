@@ -173,7 +173,9 @@ const BLANK = {
   version: 2,
   prod: { titre:'', prod:'', real:'', dop:'', firstAD:'', producer:'',
           vfxStudio:'', vfxSuper:'', wrangler:'', dit:'',
-          jour:'', date:'', lieu:'', unit:'' },
+          jour:'', date:'', lieu:'', unit:'',
+          // verrouilles pour tout le projet : chaque prise les porte (Reglages → Camera du projet)
+          objectif:'Sigma Classic Prime', lut:'ARRI LogC4 to Gamma24 Rec709 D65 v1' },
   optiques: [],
   plans: [], prises: []
 };
@@ -262,7 +264,7 @@ const fleche = (a, b) => String(a || '').trim() && String(a).trim() === String(b
    rangee sous son prenom (notesClient@Romain), et on lit celles des autres. Le
    plan etant partage, toutes voyagent ensemble ; celle du decoupage (sans
    prenom) reste en tete. textesDe : [[prenom ou '', texte]]. */
-const TEXTES_A_CHACUN = ['vfxDesc', 'notesClient', 'elementsAutre'];
+const TEXTES_A_CHACUN = ['vfxDesc', 'notesClient', 'notesInternes', 'elementsAutre'];
 const cleTexte = k => UI.nom ? k + '@' + UI.nom.trim() : k;
 function textesDe(p, k){
   const out = [];
@@ -287,9 +289,22 @@ const HERITE = ['cam', 'camModel', 'carte', 'objectif', 'focale', 'focaleStop', 
                 'codec', 'reso', 'fps', 'shutter', 'ei', 'wb', 'nd', 'lut',
                 'mesureDepuis', 'sonRoll', 'sync', 'mouvement', 'support', 'meteo'];
 
+/* L'objectif et la LUT sont verrouilles pour tout le projet : chaque prise porte ceux des
+   reglages (DB.prod), quoi qu'elle ait herite ; sur la fiche de prise, ils se lisent sans se changer. */
+const VERROU_PROJET = ['objectif', 'lut'];
+function verrouillerPrises(db){
+  const p = db && db.prod; if (!p) return;
+  (db.prises || []).forEach(t => VERROU_PROJET.forEach(k => { if (p[k] && t[k] !== p[k]) t[k] = p[k]; }));
+}
+const ICO_CADENAS = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+function champVerrou(label, k){
+  return `<div class="spec verrou"><label>${label}</label><span class="verrou-val">${esc(DB.prod[k] || '—')}</span>
+    <button type="button" class="verrou-ico" onclick="openProd()" title="Réglé pour tout le projet : à changer dans les Réglages" aria-label="${label} réglé pour tout le projet, dans les Réglages">${ICO_CADENAS}</button></div>`;
+}
+
 /* Les notes de prise les plus courantes : un appui, un mot. */
 const NOTES_RAPIDES = ['Raccord', 'Jeu', 'Cadre', 'Point', 'Son', 'Lumière', 'Technique',
-                       'Figuration', 'Bonne pour le son', 'Bonne pour l’image'];
+                       'Figuration', 'Bonne pour le son', 'Bonne pour l’image', 'Pas'];
 
 const NEUVE = () => ({
   statut:'', retenue:false, clip:'', carte:'', cam:'', camModel:'ARRI Alexa 35', mouvement:'', support:'', meteo:'',
@@ -406,6 +421,7 @@ function normaliser(d){
   const ranger = (o, k) => { const s = SUPPORT_ANCIEN[String(o[k] || '').trim().toLowerCase()]; if (s){ if (!o.support) o.support = s; o[k] = ''; } };
   db.plans.forEach(p => ranger(p, 'mouv'));
   db.prises.forEach(t => ranger(t, 'mouvement'));
+  verrouillerPrises(db);
   // une prise sans heure reprend celle de sa creation : son identifiant commence par cet instant
   // (uid : l'horloge en base 36, puis cinq caracteres au hasard)
   db.prises.forEach(t => {
@@ -898,7 +914,7 @@ function signalerDistant(m){
   const ajouts = m.ops.filter(op => op.op === 'add' && op.kind === 'prise');
   if (ajouts.length === 1){
     const t = ajouts[0].data;
-    toast(qui + ' : prise ' + t.n + ' · plan ' + (t.plan || 'sans n°'));
+    toast(qui + ' : prise ' + t.n + ' · shot ' + (t.plan || 'sans n°'));
   } else if (m.ops.some(op => op.op === 'remplacer')) toast(qui + ' a remplacé le projet');
 }
 
@@ -1348,9 +1364,10 @@ const LISTES = {
                             '5000 K', '5300 K', '5600 K', '6000 K', '6500 K', '7000 K', '7500 K', '8000 K', '9000 K', '10000 K', '11000 K'],
                            connus(DB.prises, 'wb')),
   // l'Alexa 35 enregistre en LogC4 ; le look sur le retour
-  'dl-lut':   () => fusion(['Aucune (LogC4)', 'ARRI Rec 709', 'Rec 2100 PQ (HDR)', 'Rec 2100 HLG (HDR)', 'Show LUT'], connus(DB.prises, 'lut')),
-  'dl-obj':   () => fusion(['Sigma Classic Prime', 'NiSi Athena Prime', 'Cooke S4', 'Zeiss Supreme Prime', 'ARRI Signature Prime',
-                            'Angénieux Optimo', 'Canon K35', 'Panavision C Series'], connus(DB.prises, 'objectif')),
+  'dl-sync':  () => ['Clap', 'Jam TC', 'MOS / muet'],
+  'dl-lut':   () => fusion(['Aucune (LogC4)', 'ARRI LogC4 to Gamma24 Rec709 D65 v1', 'ARRI Rec 709', 'Rec 2100 PQ (HDR)', 'Rec 2100 HLG (HDR)', 'Show LUT'], connus(DB.prises, 'lut')),
+  // la serie du tournage seule ; une autre optique passe par « + Custom… » et revient ensuite dans le menu
+  'dl-obj':   () => fusion(['Sigma Classic Prime'], connus(DB.prises, 'objectif')),
   'dl-filtre': () => fusion(['Black Pro-Mist 1/8', 'Black Pro-Mist 1/4', 'Black Pro-Mist 1/2', 'Glimmerglass 1', 'Polarisant',
                              'ND 0.3', 'ND 0.6', 'ND 0.9', 'IRND 0.6', 'Diffusion 1/4'], connus(DB.prises, 'filtre'))
 };
@@ -1371,8 +1388,9 @@ function ouvrirMenu(btn){
   const m = document.createElement('div');
   m.className = 'menu' + (multi ? ' multi' : '');
   const ajout = AJOUTS[btn.dataset.liste];
+  const indice = INDICES_MENU[btn.dataset.liste] || {};
   m.innerHTML = (liste.map(x => `<button type="button" class="${choisis.some(c => memeVal(c, x)) ? 'on' : ''}" data-v="${esc(x)}"
-      onclick="choisirMenu(this)">${esc(x)}</button>`).join('') || (ajout ? '' : '<div class="vide">Rien à proposer</div>')) +
+      onclick="choisirMenu(this)">${esc(x)}${indice[x] ? ` <em class="indice">${esc(indice[x])}</em>` : ''}</button>`).join('') || (ajout ? '' : '<div class="vide">Rien à proposer</div>')) +
     (ajout ? `<button type="button" class="autre" onclick="ajoutMenu('${btn.dataset.liste}', this)">${ajout.nom}</button>` : '');
   row.appendChild(m);
   btn.classList.add('on');
@@ -1382,6 +1400,11 @@ function ouvrirMenu(btn){
   if (r.bottom + h > cadre.bottom && r.top - h > cadre.top) m.classList.add('haut');
   setTimeout(() => document.addEventListener('click', clicHorsMenu), 0);
 }
+/* Une explication a cote d'un choix du menu, sans toucher a la valeur notee */
+const INDICES_MENU = {
+  'dl-nd': { 'Aucun':'pas de filtre', '0.6':'2 diaphs de moins', '1.2':'4 diaphs de moins', '1.8':'6 diaphs de moins' },
+  'dl-sync': { 'Clap':'le clap à l’image', 'Jam TC':'timecode partagé caméra / son', 'MOS / muet':'sans son' }
+};
 function fermerMenu(){
   const m = document.querySelector('.menu'); if (!m) return false;
   const sp = m.closest('.spec, .pc'), b = sp ? sp.querySelector('.deroul') : document.querySelector('.ptag.on');
@@ -1528,12 +1551,12 @@ function ambianceVoisine(p){
 function htmlAmbianceVoisine(p){
   const v = ambianceVoisine(p);
   return v ? `<button type="button" class="comme" onclick="reprendreAmbiance('${p.id}')">
-    <b>&#8630; Comme le plan ${esc(v.de.plan || '?')}</b><span>${AMBIANCE.map(k => v.data[k]).filter(Boolean).map(esc).join(' · ')}</span></button>` : '';
+    <b>&#8630; Comme le shot ${esc(v.de.plan || '?')}</b><span>${AMBIANCE.map(k => v.data[k]).filter(Boolean).map(esc).join(' · ')}</span></button>` : '';
 }
 function reprendreAmbiance(id){
   const p = plan(id), v = p && ambianceVoisine(p); if (!v) return;
   patch('plan', id, v.data);
-  toast('Ambiance du plan ' + (v.de.plan || '?') + ' reprise');
+  toast('Ambiance du shot ' + (v.de.plan || '?') + ' reprise');
   renderList();
   champOuvert = '';
   redessinerFichePlan(p);
@@ -2266,7 +2289,7 @@ function majFicheEnPlace(){
   document.querySelectorAll('#sbody .wb-val').forEach(majCurseurWb);   // le curseur suit la valeur venue d'ailleurs
   if (openType === 'prise'){
     const t = prise(openId);
-    $('stitle').textContent = 'Plan ' + (t.plan || '?') + ' · prise ' + t.n;
+    $('stitle').textContent = 'Prise ' + t.n;
     majBoutonsPrise(); majChronoFiche();
   }
   if (openType === 'plan'){ majBoutonsPlan(); majPrisesFiche(); }
@@ -2298,7 +2321,7 @@ function majFab(){
     html = `<i class="rec-point"></i><b class="rec-mot">REC</b><em>${fmtChrono(Date.now() - chrono.debut)}${t ? ' · prise ' + t.n : ''}</em><span class="rec-stop" title="Coupez">${ICO_COUPEZ}</span>`;
   } else {
     cls = 'fab';
-    html = ICO_MOTEUR + (p ? ` Moteur <em>plan ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : ' Moteur');
+    html = ICO_MOTEUR + (p ? ` Moteur <em>shot ${esc(p.plan || '?')} · prise ${prisesDe(p.id).length + 1}</em>` : ' Moteur');
   }
   if (f.className !== cls) f.className = cls;
   if (f.dataset.html !== html){ f.dataset.html = html; f.innerHTML = html; }
@@ -2414,6 +2437,7 @@ function renderList(){
 }
 
 function renderAll(){
+  verrouillerPrises(DB);
   renderShoot(); renderReport(); renderPrep();
 }
 
@@ -2438,6 +2462,7 @@ function ajouterPrise(planId, ouvrir, extra){
                           NEUVE(), { n, par: UI.nom || '', heure: maintenant() }, extra || {});
   if (modele) HERITE.forEach(k => { if (modele[k]) t[k] = modele[k]; });
   else { if (p.focale) t.focale = p.focale; if (p.mouv) t.mouvement = p.mouv; if (p.meteo) t.meteo = p.meteo; }
+  VERROU_PROJET.forEach(k => { if (DB.prod[k]) t[k] = DB.prod[k]; });
   // le nom de clip suit la numerotation de la camera : AA005 puis AA006, sans rien taper
   if (!t.clip){ const s = clipSuivant(t); if (s) t.clip = s; }
   { const c = carteDuClip(t.clip); if (c && (!t.carte || FORME_BOBINE.test(String(t.carte).trim()))) t.carte = c; }
@@ -2467,7 +2492,7 @@ function ajouterPrise(planId, ouvrir, extra){
     if (r.top < 90 || r.bottom > window.innerHeight - 150)
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
-  toast('Prise ' + t.n + ' — plan ' + (p.plan || 'sans n°'));
+  toast('Prise ' + t.n + ' — shot ' + (p.plan || 'sans n°'));
   return t;
 }
 
@@ -2662,6 +2687,8 @@ function redessinerFichePlan(p){ if (p && openType === 'plan' && openId === p.id
 /* Ce qui n'est pas propre a la prise ouverte quitte l'en-tete et le pied de fiche. */
 function videEntete(){
   fermerMenu();
+  // le titre ne se renomme que sur la fiche d'un plan
+  const st = $('stitle'); st.onclick = null; st.classList.remove('editable'); st.removeAttribute('title'); st.removeAttribute('role');
   $('snav').innerHTML = '';
   const f = $('sfoot'); f.hidden = true; f.innerHTML = '';
 }
@@ -2673,19 +2700,21 @@ function openPrise(id, y){
   if (y == null){ champOuvert = ''; champSaisie = false; }   // une fiche qu'on ouvre : toutes les lignes repliees
   openId = id; openType = 'prise';
   dernierPlan = t.planId;
+  { const st = $('stitle'); st.onclick = null; st.classList.remove('editable'); st.removeAttribute('title'); st.removeAttribute('role'); }
   const p = plan(t.planId);
   const el = lisElements(p);
   const sug = clipSuivant(t);
 
-  $('stitle').textContent = 'Plan ' + (t.plan || '?') + ' · prise ' + t.n;
+  // la prise en titre ; son shot ouvre la ligne dessous
+  $('stitle').textContent = 'Prise ' + t.n;
   $('ssub').textContent =
-    [p && ('Séq ' + p.seq), t.jour && nomJour(t.jour), p && p.lieu].filter(Boolean).join(' · ');
+    ['Shot ' + (t.plan || '?'), p && ('Séq ' + p.seq), t.jour && nomJour(t.jour), p && p.lieu].filter(Boolean).join(' · ');
   majNavPrise();
 
   $('sbody').innerHTML = `
     ${p ? `<a class="fplan" href="#" onclick="event.preventDefault();openPlan('${p.id}')">
       <span class="ftxt">
-        <span class="fdesc">${esc(p.desc || 'Plan ' + (p.plan || ''))}</span>
+        <span class="fdesc">${esc(p.desc || 'Shot ' + (p.plan || ''))}</span>
         <span class="fctx">${[p.lieu, p.cadrage, p.mouv, p.focale && p.focale + ' prévu'].filter(Boolean).map(esc).join(' · ')}</span>
         ${el ? `<span class="pelem">${el}</span>` : ''}
       </span>
@@ -2723,7 +2752,7 @@ function openPrise(id, y){
         ${F(t, 'Note', 'notes', {auto:1, refresh:1,
           ph:'Jeu, raccord, élément à effacer…'})}
       </div>
-      ${blocChamps(t, ['meteo', 'mouvement'])}
+      ${blocChamps(t, ['meteo'])}
     </div>
 
     ${sectionFiche('fichier', 'Fichier & caméra', t, `
@@ -2751,7 +2780,7 @@ function openPrise(id, y){
         ${DUO(t, 'Tilt', 'tiltStart', 'tiltStop', '-4°')}
         ${DUO(t, 'Roll', 'rollStart', 'rollStop', '0°')}
       </div>
-      ${blocChamps(t, ['support'])}
+      ${blocChamps(t, ['mouvement', 'support'])}
       <div class="specs suite">
         ${F(t, 'Mesuré depuis', 'mesureDepuis', {ph:'Nodal, sol, mur nord…'})}
       </div>
@@ -2759,19 +2788,19 @@ function openPrise(id, y){
 
     ${sectionFiche('image', 'Réglages image', t, `
       <div class="specs">
+        ${champVerrou('Objectif', 'objectif')}
         ${F(t, 'Codec', 'codec', {dl:'dl-codec', ph:'ARRIRAW'})}
         ${F(t, 'Résolution', 'reso', {dl:'dl-reso', ph:'4.6K 3:2 Open Gate'})}
         ${F(t, 'Cadence', 'fps', {dl:'dl-fps', refresh:1, im:'decimal', ph:'24'})}
-        ${F(t, 'ND', 'nd', {ph:'0.6', dl:'dl-nd'})}
-        ${F(t, 'LUT', 'lut', {dl:'dl-lut', ph:'ARRI Rec 709'})}
-        ${F(t, 'Objectif', 'objectif', {dl:'dl-obj'})}
+        ${champVerrou('LUT', 'lut')}
+        ${F(t, 'ND (filtre gris)', 'nd', {ph:'0.6', dl:'dl-nd'})}
         ${F(t, 'Filtres', 'filtre', {dl:'dl-filtre'})}
       </div>`)}
 
     ${sectionFiche('son', 'Son', t, `
       <div class="specs">
         ${F(t, 'Bande son', 'sonRoll', {ph:'S001', cap:'characters'})}
-        ${F(t, 'Synchro', 'sync', {opts:['','Clap','Jam TC','MOS / muet']})}
+        ${F(t, 'Synchro', 'sync', {dl:'dl-sync', ph:'Clap'})}
         ${F(t, 'Fichier son', 'sonFile')}
       </div>`)}
 
@@ -2983,10 +3012,10 @@ const court = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); retur
 const RESUME_PLAN = {
   ppassages: p => { const n = (String(p.passages || '').match(/^\d+\/\d+ /gm) || []).length;
                     return [n > 1 ? n + ' passages' : '', court(p.passages, 60)]; },
-  pvfx:      p => [court(texteDe(p, 'vfxDesc'), 40), court(texteDe(p, 'notesClient'), 40)],
+  pvfx:      p => [court(texteDe(p, 'vfxDesc'), 40), court(texteDe(p, 'notesInternes'), 30), court(texteDe(p, 'notesClient'), 30)],
   pcroquis:  p => [aTraits(p) ? (croquisListe(p).filter(pleinCroquis).length > 1 ? croquisListe(p).filter(pleinCroquis).length + ' croquis' : 'Un croquis') : '', fondDecor(lieuFond(p)) ? 'sur le plan « ' + lieuFond(p) + ' »' : ''],
   pcontexte: p => [p.lieu, p.intExt, p.momentJour, p.meteo, (p.acteurs || []).join(', '), p.figu && 'Figuration', p.cadrage, p.mouv, p.support, p.focale, p.duree],
-  preperes:  p => [p.jour && nomJour(p.jour), p.plan && 'Plan ' + p.plan, p.seq && 'Séq ' + p.seq]
+  preperes:  p => [p.jour && nomJour(p.jour), p.plan && 'Shot ' + p.plan, p.seq && 'Séq ' + p.seq]
 };
 
 /* Dans l'en-tete, d'un plan a l'autre, dans l'ordre de la liste affichee. */
@@ -3106,7 +3135,8 @@ let dessin = null;   // l'editeur ouvert
 const PLANS_DECOR = [
   ['Atelier', 'atelier'], ['Atelier (vide)', 'atelier-vide'],
   ['Royal Academy', 'royal-academy'], ['Royal Academy (vide)', 'royal-academy-vide'],
-  ['Rue des Brigittines', 'rue-des-brigittines'], ['Rue des Coquerez', 'rue-des-coquerez']
+  // la rue et la cour : leurs plans portent le nom du decor (Rue des Brigittines, rue Coquerez, a Lille)
+  ['La rue', 'rue-des-brigittines'], ['La cour', 'rue-des-coquerez']
 ];
 const planIntegre = lieu => { const x = PLANS_DECOR.find(d => memeVal(d[0], (lieu || '').trim())); return x ? 'public/maps/' + x[1] + '.webp' : ''; };
 const fondImporte = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
@@ -3114,6 +3144,8 @@ const fondImporte = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
    (« fond:… »). Sans serveur, il reste dans le projet, en image (data:…). */
 const urlFond = v => String(v || '').indexOf('fond:') === 0 ? API('fond') + '?f=' + encodeURIComponent(v.slice(5)) : v || '';
 const fondDecor = lieu => urlFond(fondImporte(lieu)) || planIntegre(lieu);
+/* L'adresse reelle d'un decor (prod.adresse_<decor>), reglee dans Decors, pour le rapport VFX */
+const adresseDecor = lieu => String(DB.prod['adresse_' + String(lieu || '').trim()] || '').trim();
 /* Envoie l'image au serveur et rend ce que le projet en gardera : son nom, ou
    l'image elle-meme si le serveur n'est pas la (elle partira a la prochaine occasion). */
 function envoyerFond(url){
@@ -3151,7 +3183,8 @@ function renommerDecor(nom){
     const l = (DB.prod.decors || []).filter(x => !memeVal(x, nom) && !memeVal(x, neuf)).concat([neuf]);
     const fonds = Object.assign({}, DB.prod.fonds || {});
     if (fonds[nom] !== undefined){ fonds[neuf] = fonds[nom]; delete fonds[nom]; }
-    patch('prod', 'prod', { decors: l, fonds });
+    const adr = adresseDecor(nom);
+    patch('prod', 'prod', Object.assign({ decors: l, fonds }, adr ? { ['adresse_' + neuf]: adr, ['adresse_' + nom]: '' } : {}));
     DB.plans.forEach(x => {
       const d = {};
       if (memeVal(x.lieu, nom)) d.lieu = neuf;
@@ -3167,7 +3200,8 @@ function retirerDecor(nom){
   const plans = DB.plans.filter(x => memeVal(x.lieu, nom) || memeVal(x.fondLieu, nom));
   const faire = () => {
     const fonds = Object.assign({}, DB.prod.fonds || {}); delete fonds[nom];
-    patch('prod', 'prod', { decors: (DB.prod.decors || []).filter(x => !memeVal(x, nom)), fonds });
+    patch('prod', 'prod', Object.assign({ decors: (DB.prod.decors || []).filter(x => !memeVal(x, nom)), fonds },
+                                        adresseDecor(nom) ? { ['adresse_' + nom]: '' } : {}));
     plans.forEach(x => patch('plan', x.id, Object.assign(memeVal(x.lieu, nom) ? { lieu: '' } : {}, memeVal(x.fondLieu, nom) ? { fondLieu: '' } : {})));
     oublierPrep(); renderAll(); openDecors();
     toast('« ' + nom + ' » retiré' + (plans.length ? ' : ' + plans.length + ' plan' + plur(plans.length) + ' sans décor' : ''));
@@ -3190,13 +3224,14 @@ function openDecors(){
         ${tous.map(d => { const n = compte(d); return `<div class="spec decor"><label>${esc(d)}</label>
           <span class="compte">${n ? n + ' plan' + plur(n) : 'aucun plan'}</span>
           <button type="button" class="btn sm" onclick="renommerDecor('${esc(d)}')">Modifier</button>
-          <button type="button" class="btn sm" onclick="retirerDecor('${esc(d)}')">Retirer</button></div>`; }).join('') ||
+          <button type="button" class="btn sm" onclick="retirerDecor('${esc(d)}')">Retirer</button></div>
+          ${F(DB.prod, 'Adresse', 'adresse_' + d.trim(), {ph:'Rue, numéro, ville : l’adresse réelle du tournage'})}`; }).join('') ||
           '<div class="note">Aucun décor pour l’instant.</div>'}
       </div>
       <div class="btns" style="margin-top:12px">
         <button type="button" class="btn p" onclick="ajouterDecor().then(openDecors)">+ Ajouter un décor</button>
       </div>
-      <div class="note">Modifier renomme le décor sur tous les plans qui le portent ; Retirer les laisse sans décor. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
+      <div class="note">Modifier renomme le décor sur tous les plans qui le portent ; Retirer les laisse sans décor. L’adresse va dans « Location » du rapport VFX. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
     </div>`;
   montrerFiche(0);
 }
@@ -3297,7 +3332,7 @@ function ouvrirCroquis(id, i){
     // l'editeur a sa marque dans l'historique : le Retour du telephone le ferme (en enregistrant), pas la fiche
     try{ if (!(history.state && history.state.dessin)) history.pushState(Object.assign({}, history.state, { dessin: 1 }), ''); }catch(e){}
     const v = $('voile-dessin');
-    v.querySelector('.dtitre b').textContent = 'Croquis' + (croquisListe(p).length > 1 || i ? ' ' + (i + 1) : '') + ' · plan ' + (p.plan || '?');
+    v.querySelector('.dtitre b').textContent = 'Croquis' + (croquisListe(p).length > 1 || i ? ' ' + (i + 1) : '') + ' · shot ' + (p.plan || '?');
     v.querySelector('.dtitre span').textContent = (lieuFond(p) || 'Sans décor') + (img ? ' — sur le plan du décor' : ' — feuille blanche');
     v.hidden = false;
     majOutils(); tailleCroquis(); rendreCroquis();
@@ -4162,7 +4197,11 @@ function openPlan(id, y){
   dernierPlan = id;
   p.elements = p.elements || {};
 
-  $('stitle').textContent = 'Plan ' + (p.plan || 'sans n°');
+  // le titre se touche pour renommer le plan : le numero change pour toute l'equipe
+  const st = $('stitle');
+  st.innerHTML = esc('Shot ' + (p.plan || 'sans n°')) + `<span class="stitre-crayon" aria-hidden="true">${ICONES.crayon}</span>`;
+  st.classList.add('editable'); st.title = 'Renommer le shot (pour toute l’équipe)'; st.setAttribute('role', 'button');
+  st.onclick = () => renommerPlan(p.id);
   $('ssub').textContent =
     [p.jour && nomJour(p.jour), 'Séquence ' + (p.seq || ''), p.seqTitre].filter(Boolean).join(' · ');
   majNavPlan();
@@ -4170,8 +4209,7 @@ function openPlan(id, y){
   $('sbody').innerHTML = `
     <div class="bandeau">
       <div class="btxt">
-        <div class="fiche-tete"><div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div>
-          <button type="button" class="mini renommer" onclick="renommerPlan('${p.id}')">Renommer</button></div>
+        <div class="fiche-tete"><div class="ptags" id="ptags-fiche">${htmlPtags(p)}</div></div>
         <div class="lead-ligne"><div class="lead">${esc(p.desc || '—')}</div>
           <button type="button" class="viser${(planVise() || {}).id === p.id ? ' on' : ''}" data-vise="${p.id}" onclick="viser('${p.id}')"
             title="Tourner ce plan : le Moteur et + Prise enregistrent dessus" aria-label="Tourner ce plan">${ICO_VISER}<span>Moteur</span></button></div>
@@ -4203,7 +4241,9 @@ function openPlan(id, y){
       <div class="specs">
         ${F(p, 'Description', cleTexte('vfxDesc'), {auto:1, ph:'À fabriquer, à effacer, ce qui bouge dans le cadre…'})}
         <div class="textes-autres" data-texte="vfxDesc"></div>
-        ${F(p, 'Note', cleTexte('notesClient'), {auto:1, heure:1, ph:'À savoir sur ce plan…'})}
+        ${F(p, 'Internal note', cleTexte('notesInternes'), {auto:1, heure:1, ph:'Entre nous : à savoir sur ce plan…'})}
+        <div class="textes-autres" data-texte="notesInternes"></div>
+        ${F(p, 'Client note', cleTexte('notesClient'), {auto:1, heure:1, ph:'Pour le studio VFX : ce qu’il doit savoir…'})}
         <div class="textes-autres" data-texte="notesClient"></div>
       </div>`)}
 
@@ -4307,11 +4347,11 @@ function supprimerPlan(p){
 /* Demande confirmation, supprime, propose Annuler. Tient vrai si c'est fait. */
 function supprimerPlanConfirme(p){
   const pr = prisesDe(p.id);
-  return confirmer('Supprimer le plan ' + (p.plan || 'sans n°') + (pr.length ? ' et ses ' + pr.length + ' prise(s)' : '') + ' ?',
+  return confirmer('Supprimer le shot ' + (p.plan || 'sans n°') + (pr.length ? ' et ses ' + pr.length + ' prise(s)' : '') + ' ?',
                    { ok:'Supprimer', danger:true }).then(oui => {
     if (!oui || !plan(p.id)) return false;
     supprimerPlan(p);
-    toastAction('Plan ' + (p.plan || 'sans n°') + ' supprimé', 'Annuler', restaurer);
+    toastAction('Shot ' + (p.plan || 'sans n°') + ' supprimé', 'Annuler', restaurer);
     return true;
   });
 }
@@ -4928,10 +4968,10 @@ function ouEst(x){
   if (f){
     const i = f.indexOf(':');
     const type = f.slice(0, i), o = cible(f.slice(i + 1));
-    if (o) return ` <small>— sur ${esc(type === 'prise' ? 'prise ' + o.n + ' · plan ' + (o.plan || '?') : 'plan ' + (o.plan || 'sans n°'))}</small>`;
+    if (o) return ` <small>— sur ${esc(type === 'prise' ? 'prise ' + o.n + ' · shot ' + (o.plan || '?') : 'shot ' + (o.plan || 'sans n°'))}</small>`;
   }
   const pv = v && plan(v.slice(5));
-  return pv ? ` <small>— Moteur sur le plan ${esc(pv.plan || 'sans n°')}</small>` : '';
+  return pv ? ` <small>— Moteur sur le shot ${esc(pv.plan || 'sans n°')}</small>` : '';
 }
 function htmlEquipe(){
   const moi = `<div class="specs"><div class="spec col"><label>Votre nom</label>
@@ -4972,6 +5012,15 @@ function openProd(){
           </div></div>`).join('') || '<div class="note">Aucun jour pour l’instant : les jours viennent du découpage.</div>'}
       </div>
       <div class="note">Le jour dont la date est aujourd’hui devient le jour en cours. Sans décor noté, c’est celui de ses plans.</div>
+    </div>
+
+    <div class="sec">
+      <h3>Caméra du projet</h3>
+      <div class="specs">
+        ${F(p, 'Objectif', 'objectif', {dl:'dl-obj', refresh:1})}
+        ${F(p, 'LUT', 'lut', {dl:'dl-lut', refresh:1})}
+      </div>
+      <div class="note">Verrouillés pour tout le projet : chaque prise de chaque shot les porte, pour toute l’équipe. Ils ne se changent qu’ici.</div>
     </div>
 
     <div class="sec">
@@ -5283,7 +5332,7 @@ function htmlPost(j){
     return `<article class="pplan">
       <div class="ptete">
         <div>
-          <div class="pno">Plan ${esc(x.plan || '—')}${
+          <div class="pno">Shot ${esc(x.plan || '—')}${
             (x.tags || []).map(t => `<span>${esc(t)}</span>`).join('')}</div>
           <div class="pdes">${esc(x.desc || '')}</div>
           <div class="pmet">${[nomJour(x.jour || ''), 'Séq ' + (x.seq || ''), x.lieu, x.cadrage, x.mouv]
@@ -5845,13 +5894,15 @@ function feuilleVFX(x, jour){
     tournage: [['Date', deuxCh(auj.getDate()) + '/' + deuxCh(auj.getMonth() + 1) + '/' + auj.getFullYear(),
                 'Shooting day', jour && jour !== 'CG' ? numJour(jour) + ' / ' + nJours : jour === 'CG' ? 'Full CG' : ''],
                ['Time', heures.length ? heures[0] + (heures.length > 1 ? ' – ' + heures[heures.length - 1] : '') : ''],
-               ['Location', jour === 'CG' ? '' : (jour && decorJour(jour)) || p.lieu], ['VFX Sup.', p.vfxSuper]],
+               // le lieu du jour, par son adresse reelle (Decors) ; a defaut, le nom du decor
+               ['Location', (jour === 'CG' ? '' : (jour && decorJour(jour)) || p.lieu || '').split(' + ').map(l => adresseDecor(l) || l).join(' + ')],
+               ['VFX Sup.', p.vfxSuper]],
     // la sequence et le plan partagent leur ligne
     script: [['Sequence', x ? x.seq || '' : '', 'Shot', x ? x.plan : ''],
              ['Int / Ext', { choix: [['INT', /int/i.test(x && x.intExt || '')], ['EXT', /ext/i.test(x && x.intExt || '')]] }],
              ['Location', x ? x.lieu : ''],
              ['Time of day', { choix: MOMENT_VFX.map(([n, re]) => [n, !!x && re.test(x.momentJour || '')]) }]],
-    camera: val('camModel') || 'ARRI Alexa 35', lens: val('objectif'), format: val('reso'),
+    camera: val('camModel') || 'ARRI Alexa 35', lens: val('objectif') || p.objectif || '', format: val('reso'),
     codec: [val('codec'), val('fps') && val('fps') + ' fps'].filter(Boolean).join(' / '),
     mouvements: MOUV_VFX.map(([n, re]) => [n, re.test(mouv)]),
     // le mouvement ecrit sur la feuille : celui du plan seul (a defaut d'un nom connu, tel que saisi)
@@ -5875,7 +5926,7 @@ function feuilleVFX(x, jour){
     elements: ELEMENTS_VFX.map(([nom, cles]) => ({ nom, on: cles.some(k => coches[k]) })),
     autres: x ? ELEMENTS.filter(e => coches[e[0]] && !lus.has(e[0])).map(e => e[1])
                   .concat(texteDe(x, 'elementsAutre') ? [texteDe(x, 'elementsAutre')] : []).join(', ') : '',
-    client: x ? texteDe(x, 'notesClient') : '', interne: x ? x.notesInternes || '' : '', studio: p.vfxStudio || '',
+    client: x ? texteDe(x, 'notesClient') : '', interne: x ? texteDe(x, 'notesInternes') : '', studio: p.vfxStudio || '',
     distances: dist.slice(0, 4).map(r => r.slice()),
     croquis: x && aCroquis(x) ? x.id + ':' + (dessines[0] || 0) : '',
     autresCroquis: x ? dessines.slice(1).map(i => x.id + ':' + i) : []
@@ -6033,26 +6084,24 @@ function pdfVFX(j, images){
   const pagesDe = f => 1 + Math.ceil(Math.max(0, f.prises.length - VFX_LIGNES) / SUITE) + f.autresCroquis.filter(k => images[k]).length;
   const total = feuilles.reduce((a, f) => a + pagesDe(f), 0);
   let page = 0;
+  // l'en-tete, comme celui du journal DIT : le logo a gauche ; le projet a droite et, dessous,
+  // la feuille, le plan et la page ; un seul trait caramel sur toute la largeur
+  const HAUT = 66;   // ce que l'en-tete occupe en haut de page, trait compris
   const entete = (f, suite, sous) => {
     page++;
-    const H = doc.hauteur;
-    // un bandeau serre : le titre et sa ligne a gauche ; le logo, le projet, le plan et la page a droite
-    T(M, H - 37, 'VFX CAMERA REPORT' + (suite || sous ? ' · CONTINUED' : ''), { taille: 15, police: 'HB', couleur: 'encre' });
-    T(M, H - 46, sous || (suite ? 'Takes ' + suite : 'Camera sheet · one sheet per setup'), { taille: 6.5, couleur: 'tan' });
-    doc.rect(M, H - 52, 34, 2, 'caramel');
-    const xd = M + W;
+    const H = doc.hauteur, xd = M + W, haut = H - 22;
     if (LOGO_PDF){
-      const hl = 9, kl = hl / LOGO_BOITE.h, lg = LOGO_BOITE.l * kl;
-      const ox = xd - lg - LOGO_BOITE.x * kl, oy = H - 17 + LOGO_BOITE.y * kl;
-      doc.trace(LOGO_PDF.mot, 'encre', true, ox, oy, kl);
-      doc.trace(LOGO_PDF.touche, 'or', false, ox, oy, kl);
+      const hl = 24, kl = hl / LOGO_BOITE.h;
+      doc.trace(LOGO_PDF.mot, 'encre', true, M - LOGO_BOITE.x * kl, haut + LOGO_BOITE.y * kl, kl);
+      doc.trace(LOGO_PDF.touche, 'or', false, M - LOGO_BOITE.x * kl, haut + LOGO_BOITE.y * kl, kl);
     }
-    const titre = (f.titre || 'Untitled project').toUpperCase(), plan = f.plan ? 'Seq ' + (f.seq || '—') + ' · Shot ' + f.plan : '';
-    const lp = plan ? largeurPdf(plan, 8.5, 'HB') : 0;
-    if (plan) T(xd - lp, H - 37, plan, { taille: 8.5, police: 'HB', couleur: 'caramel' });
-    T(xd - lp - (plan ? 8 : 0) - largeurPdf(titre, 8.5, 'HB'), H - 37, titre, { taille: 8.5, police: 'HB', couleur: 'encre' });
-    const pg = 'Page ' + page + ' / ' + total;
-    T(xd - largeurPdf(pg, 6.5, 'H'), H - 46, pg, { taille: 6.5, couleur: 'tan' });
+    const titre = f.titre || 'Untitled project';
+    T(xd - largeurPdf(titre, 19, 'HB'), haut - 16, titre, { taille: 19, police: 'HB', couleur: 'encre' });
+    const ligne = ['VFX camera report' + (suite || sous ? ' · continued' : ''),
+                   f.plan ? 'Seq ' + (f.seq || '—') + ' · Shot ' + f.plan : '', sous || (suite ? 'Takes ' + suite : ''),
+                   'Page ' + page + ' / ' + total].filter(Boolean).join(' · ');
+    T(xd - largeurPdf(ligne, 8.5, 'H'), haut - 29, ligne, { taille: 8.5, couleur: 'tan' });
+    doc.ligne(M, haut - 40, xd, haut - 40, 1, 'caramel');
   };
 
   feuilles.forEach((f, n) => {
@@ -6068,7 +6117,7 @@ function pdfVFX(j, images){
       else if (v) ecrire(xg + lw, y, v, xdr - xg - lw - 1, 7, 'HB', 'encre');
     };
     [['Project', f.projet], ['Shoot', f.tournage], ['Script', f.script]].forEach(([titre, champs], k) => {
-      const x = M + k * (w3 + 8), yh = H - 58;
+      const x = M + k * (w3 + 8), yh = H - HAUT - 4;
       barre(x, yh, w3, titre);
       cadre(x, yh - hb, w3, hb, .5, 'filet');
       champs.forEach(([lib, v, lib2, v2], i) => {
@@ -6081,19 +6130,26 @@ function pdfVFX(j, images){
       });
     });
     // 2. la camera, sur une barre ; le capteur et le codec n'y sont que s'ils sont remplis.
-    //    Chaque case a la largeur de son texte, le reste se partage
+    //    Chaque valeur a la place de son texte ; s'il n'y en a pas assez pour tout, toutes
+    //    rapetissent d'autant (rien n'est coupe), s'il en reste, elle se partage
     let x = M;
-    const yc = H - 58 - hb - 6, hc = 16, TV = 6.5;
+    const yc = H - HAUT - 4 - hb - 6, hc = 16, TL = 5.2, PAD = 9;
+    let TV = 6.5;
     const cam = [['Camera', f.camera], ['Lens set', f.lens], ['Movement', f.mouvement]]
       .concat(f.format ? [['Sensor / format', f.format]] : [], f.codec ? [['Codec / fps', f.codec]] : [])
-      .map(([lib, v]) => [lib.toUpperCase(), v, largeurPdf(lib.toUpperCase(), 5.6, 'HB') + 9, Math.max(36, largeurPdf(v || '', TV, 'HB') + 12)]);
-    const reste = (W - cam.reduce((a, c) => a + c[2] + c[3], 0)) / cam.length;
-    cam.forEach(([lib, v, wl, wv]) => {
-      wv = Math.max(20, wv + reste);
+      .map(([lib, v]) => [lib.toUpperCase(), v || '', largeurPdf(lib.toUpperCase(), TL, 'HB') + 8]);
+    const libres = W - cam.reduce((a, c) => a + c[2], 0) - cam.length * PAD;
+    const textes = cam.reduce((a, c) => a + largeurPdf(c[1], TV, 'HB'), 0);
+    if (textes > libres) TV = Math.max(4.6, TV * libres / textes);
+    // une case vide garde de quoi y ecrire au stylo
+    const nat = cam.map(c => c[1] ? largeurPdf(c[1], TV, 'HB') : 80);
+    const surplus = Math.max(0, libres - nat.reduce((a, n) => a + n, 0)) / cam.length;
+    cam.forEach(([lib, v, wl], i) => {
+      const wv = nat[i] + PAD + surplus;
       doc.rect(x, yc - hc, wl, hc, 'encre');
-      ecrire(x + 4, yc - 10.3, lib, wl - 6, 5.6, 'HB', 'blanc');
+      ecrire(x + 4, yc - 10.1, lib, wl - 5, TL, 'HB', 'blanc');
       cadre(x + wl, yc - hc, wv, hc, .5, 'filet2');
-      ecrire(x + wl + 5, yc - 10.3, v, wv - 9, TV, 'HB', 'encre');
+      ecrire(x + wl + 4.5, yc - 10.3, v, wv - 7, TV, 'HB', 'encre');
       x += wl + wv;
     });
     // 3. les prises : quatorze lignes, les premieres remplies ; les autres numerotees a la suite
@@ -6172,13 +6228,13 @@ function pdfVFX(j, images){
       const l = f.prises.slice(d, d + SUITE);
       doc.nouvellePage();
       entete(f, l[0].n + ' – ' + l[l.length - 1].n);
-      tableau(doc.hauteur - 60, l, l.map(t => t.n));
+      tableau(doc.hauteur - HAUT - 6, l, l.map(t => t.n));
     }
     // 7. les autres croquis du plan, chacun sur sa page, en grand
     f.autresCroquis.filter(k => images[k]).forEach((k, q) => {
       doc.nouvellePage();
       entete(f, '', 'Set diagram ' + (q + 2));
-      const im = images[k], yh = doc.hauteur - 60, hb = yh - 40 - 11;
+      const im = images[k], yh = doc.hauteur - HAUT - 6, hb = yh - 40 - 11;
       barre(M, yh, W, 'Diagram of the set ' + (q + 2));
       cadre(M, 40, W, hb, .5, 'filet');
       const kk = Math.min((W - 12) / im.l, (hb - 12) / im.h), l = im.l * kk, h = im.h * kk;
@@ -6260,7 +6316,7 @@ const AUTRES = { liste: [], revs: {}, t: 0, encours: false };
 // l'heure, les timecodes et la duree ne sont pas des desaccords ; le reste de la liste est a chacun ou au decoupage
 const A2_IGNORE = ['par', 'heure', 'tcIn', 'tcOut', 'duree', 'n', 'jour', 'plan', 'seq', 'seqTitre', 'lieu', 'desc'];
 // les textes libres s'ajoutent au sien au lieu de le remplacer
-const A2_AJOUT = ['notes', 'notesClient', 'vfxDesc', 'elementsAutre'];
+const A2_AJOUT = ['notes', 'notesClient', 'notesInternes', 'vfxDesc', 'elementsAutre'];
 const ficheA2 = () => openType === 'prise' || openType === 'plan';
 function oublierAutres(){ AUTRES.liste = []; AUTRES.revs = {}; AUTRES.t = 0; }
 function majAutres(force){
@@ -6442,8 +6498,8 @@ const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Cli
   ['codec', 'Codec'], ['reso', 'Résolution'], ['fps', 'Cadence'], ['shutter', 'Obturateur'], ['ei', 'EI'], ['wb', 'Balance'],
   ['nd', 'ND'], ['lut', 'LUT'], ['objectif', 'Objectif'], ['filtre', 'Filtres'], ['sonRoll', 'Bande son'], ['sync', 'Synchro'],
   ['sonFile', 'Fichier son']];
-const RAP_PLAN = [['etat', 'État'], ['elements', 'Éléments captés'], ['elementsAutre', 'Autre élément'], ['notesClient', 'Note'],
-  ['notesInternes', 'Note interne'], ['vfxDesc', 'Description VFX']];
+const RAP_PLAN = [['etat', 'État'], ['elements', 'Éléments captés'], ['elementsAutre', 'Autre élément'], ['notesClient', 'Client note'],
+  ['notesInternes', 'Internal note'], ['vfxDesc', 'Description VFX']];
 const valRap = v => v === true ? 'oui' : v === false || v == null ? '' : Array.isArray(v) ? v.join(', ') : String(v).trim();
 const clePlan = p => (p.seq || '') + '|' + (p.plan || '');
 const champPlan = (p, k) => k === 'etat' ? (ETATS[p.etat] || valRap(p.etat))
@@ -6630,7 +6686,8 @@ function htmlRapprochement(){
   // sauvegardes deposees a la main se retirent d'une croix
   const tous = !UI.choixEquipe;
   const equipier = RAP.equipier.length ? `<button type="button" class="rsource coche${tous ? ' on' : ''}" onclick="choisirTous()" aria-pressed="${tous}">Tous</button>` +
-    RAP.equipier.map(e => { const on = choisi(e), n = e.db.prises.length;
+    // un ancien profil qui n'a rien saisi (Georges, Marie…) ne s'affiche plus
+    RAP.equipier.filter(e => e.db.prises.length || EQUIPE.some(n => memeVal(n, e.nom))).map(e => { const on = choisi(e), n = e.db.prises.length;
       return `<button type="button" class="rsource coche${on ? ' on' : ''}${n ? '' : ' vide'}" onclick="basculerChoix('${esc(e.espace)}')" aria-pressed="${on}">${
         esc(e.nom)} <em>${n ? n + ' prise' + plur(n) : 'rien saisi'}</em></button>`; }).join('') : '';
   const puces = `<span class="rsource ici">${esc(s[0].nom)} <em>ce navigateur</em></span>` + equipier +
@@ -6640,9 +6697,9 @@ function htmlRapprochement(){
   if (s.length > 1){
     const r = rapprocher(s);
     corps = `<div class="rresume">${resumeRap(r.total)}</div>` +
-      (r.plans.length ? r.plans.map(b => `<div class="rplan"><b>Séquence ${esc(b.seq || '—')} · Plan ${esc(b.plan || '—')}</b>${
+      (r.plans.length ? '<div class="rliste">' + r.plans.map(b => `<div class="rplan"><b>Séquence ${esc(b.seq || '—')} · Shot ${esc(b.plan || '—')}</b>${
           b.planSeul ? ` <em>seulement chez ${esc(b.planSeul.join(', '))}</em>` : ''}
-          ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('')
+          ${ligneRap('', b.plan_)}${b.prises.map(t => ligneRap('Prise ' + t.n, t)).join('')}</div>`).join('') + '</div>'
         : '<div class="alert g"><i>&#10003;</i><div>Rien ne se contredit : les saisies concordent.</div></div>') +
       (RESEAU.possible ? '' : `<div class="btns" style="margin-top:14px">
         <button class="btn p" onclick="garderFusion()">Garder la fusion comme projet</button></div>`);
@@ -6988,26 +7045,35 @@ const octetsLisibles = n => n >= GO ? (n / GO).toFixed(2).replace('.', ',') + ' 
 /* la couleur de chaque type dans la jauge */
 const COULEURS_STOCK = { shots:'var(--acc)', schemas:'var(--tag-bleu)', prises:'var(--ok)', sauvegardes:'#b48ad6',
                          divers:'var(--tag-orange)', site:'var(--dim2)', reste:'var(--line2)' };
-const pourcent = x => x < 1 ? x.toFixed(1).replace('.', ',') : String(Math.round(x));
+const pourcent = x => x < 10 ? x.toFixed(1).replace('.', ',') : String(Math.round(x));
+/* Le site de l'equipe, chez l'hebergeur : sur le PC (serveur local), la jauge le montre
+   aussi — c'est la que tous les appareils ecrivent. */
+const SITE_EQUIPE = 'https://foresight-movie.com/api/';
+function htmlStock(s, titre){
+  const l = (s.parties || []).filter(x => x.octets > 0);
+  const coul = x => COULEURS_STOCK[x.cle] || 'var(--dim2)';
+  // comme sur un telephone : le pourcentage, « 32,5 Mo / 1 Go », une barre ou chaque type
+  // a sa couleur et le libre est gris ; puis la liste des types
+  const base = s.quota || l.reduce((a, x) => a + x.octets, 0) || 1, pc = s.quota ? Math.min(100, s.utilise / s.quota * 100) : 100;
+  const go = n => n === GO ? '1 Go' : octetsLisibles(n);
+  return `<div class="stock-carte${s.quota && pc >= 90 ? ' plein' : s.quota && pc >= 75 ? ' haut' : ''}">
+    ${titre ? `<div class="stock-titre">${esc(titre)}</div>` : ''}
+    <div class="stock-pc"><b>${s.quota ? pourcent(pc) + ' %' : octetsLisibles(s.utilise)}</b> utilisé</div>
+    ${s.quota ? `<div class="stock-bornes"><span>${octetsLisibles(s.utilise)} / ${go(s.quota)}</span></div>` : ''}
+    <div class="stock-barre" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pc)}" aria-label="Stockage utilisé">${l.map(x =>
+      `<i style="width:${x.octets / base * 100}%;background:${coul(x)}" title="${esc(x.nom)} : ${octetsLisibles(x.octets)}"></i>`).join('')}</div>
+    <div class="stock-liste">${l.map(x => `<div><i style="background:${coul(x)}"></i><span>${esc(x.nom)}</span><b>${octetsLisibles(x.octets)}</b></div>`).join('')}</div>
+    ${pc >= 75 && s.quota ? `<div class="note">Bientôt plein : la liste dit ce qui pèse le plus.</div>` : ''}
+  </div>`;
+}
 function majStockage(){
   if (!$('stockage')) return;
-  fetch(API('stockage')).then(r => r.json()).then(s => {
-    const z = $('stockage'); if (!z) return;
-    const l = (s.parties || []).filter(x => x.octets > 0);
-    const coul = x => COULEURS_STOCK[x.cle] || 'var(--dim2)';
-    // comme sur un telephone : une barre, chaque type de sa couleur, le libre en gris ;
-    // chez l'hebergeur la barre est le quota, sur le PC ce qui est pris
-    const base = s.quota || l.reduce((a, x) => a + x.octets, 0) || 1, pc = s.quota ? Math.min(100, s.utilise / s.quota * 100) : 100;
-    z.innerHTML = `<div class="stock-carte${pc >= 90 ? ' plein' : pc >= 75 ? ' haut' : ''}">
-      ${s.quota ? `<div class="stock-pc"><b>${pourcent(pc)} %</b> utilisé</div>
-        <div class="stock-bornes"><span>${octetsLisibles(s.utilise)}</span><span>${octetsLisibles(s.quota)}</span></div>`
-        : `<div class="stock-pc"><b>${octetsLisibles(s.utilise)}</b> de données sur ce PC</div>`}
-      <div class="stock-barre" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pc)}" aria-label="Stockage utilisé">${l.map(x =>
-        `<i style="width:${x.octets / base * 100}%;background:${coul(x)}" title="${esc(x.nom)} : ${octetsLisibles(x.octets)}"></i>`).join('')}</div>
-      <div class="stock-liste">${l.map(x => `<div><i style="background:${coul(x)}"></i><span>${esc(x.nom)}</span><b>${octetsLisibles(x.octets)}</b></div>`).join('')}</div>
-      ${pc >= 75 && s.quota ? `<div class="note">L’hébergement approche de sa limite : la liste dit ce qui pèse le plus.</div>` : ''}
-    </div>`;
-  }).catch(() => { if ($('stockage')) $('stockage').innerHTML = '<div class="note">Mesure indisponible pour l’instant.</div>'; });
+  // seul compte l'abonnement chez l'hebergeur (1 Go) : sur le site comme sur le PC, c'est sa jauge
+  fetch(RESEAU.php ? API('stockage') : SITE_EQUIPE + 'stockage.php', { cache:'no-store' })
+    .then(r => r.ok ? r.json() : null).catch(() => null).then(s => {
+      const z = $('stockage'); if (!z) return;
+      z.innerHTML = s ? htmlStock(s, 'Abonnement OVH') : '<div class="note">Le site ne répond pas pour l’instant.</div>';
+    });
 }
 
 function majEtatMail(){
@@ -7270,19 +7336,28 @@ function reprendrePlace(){
    consultent en lecture, jour par jour. Changer de prenom redessine la page. */
 const PREPARATEURS = ['Simon'];
 function prepare(){ return PREPARATEURS.indexOf((UI.nom || '').trim()) >= 0; }
+/* Alex (DIT) ne saisit rien : il n'a que le Rapport, ni Preparation ni Tournage. */
+const RAPPORT_SEUL = ['Alex'];
+const rapportSeul = () => RAPPORT_SEUL.indexOf((UI.nom || '').trim()) >= 0;
 function majOnglets(){
   oublierPrep();
+  const seul = rapportSeul();
+  document.querySelectorAll('nav button[data-v="prep"], nav button[data-v="shoot"]').forEach(b => b.hidden = seul);
+  // apres le demarrage : la barre des jours du Rapport n'est construite qu'a la fin
+  if (seul && view !== 'report') return void setTimeout(() => { if (rapportSeul() && view !== 'report') allerVue('report'); }, 0);
   if (view === 'prep') renderList();
 }
 function accueil(){
   if (openType) closeSheet();
-  if (view !== 'shoot') document.querySelector('nav button[data-v="shoot"]').click();
+  const v = rapportSeul() ? 'report' : 'shoot';
+  if (view !== v) document.querySelector(`nav button[data-v="${v}"]`).click();
   window.scrollTo({ top:0, behavior:'smooth' });
 }
 
 /* Changer de page. Depuis le menu, la page pose sa marque dans l'historique :
    Retour y ramene ; depuis l'historique (Retour), elle ne s'y ajoute pas. */
 function allerVue(v){
+  if (rapportSeul()) v = 'report';
   const b = document.querySelector(`nav button[data-v="${v}"]`);
   if (!b) return;
   // le menu reste atteignable une fiche ouverte : on la referme d abord (ses marques
