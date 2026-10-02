@@ -1716,12 +1716,12 @@ nav button[hidden]{display:none}
   color:var(--dim2);opacity:.6;pointer-events:none;white-space:pre}
 .clip-col > .clip > .fantome i{font-style:normal;color:transparent}
 /* valider et Moteur, toujours cote a cote a droite du titre du shot */
-.pnum .pactions{order:3;margin-left:auto;margin-right:var(--gouttiere);display:flex;align-items:center;gap:10px;flex:none}
+.pnum .pactions{order:3;margin-left:auto;margin-right:var(--gouttiere);display:flex;align-items:center;gap:6px;flex:none}   /* le meme ecart que les boutons des prises : valider au-dessus de OK, Moteur au-dessus de NG */
 .pnum .pactions .viser,.pnum .pactions .fini{margin:0;order:0}
 @media(max-width:560px){
   .plan.termine .ptourne{display:none}   /* la coche verte et le nom en vert le disent deja */
   .plan.termine .pnum{font-size:22px}
-  .pnum .pactions{gap:8px}
+  .pnum .pactions{gap:6px}
 }
 /* un shot valide : un bandeau vert en tete de sa fiche (et de ses prises), le reste grise et inerte */
 .verrou-shot{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding:10px 12px;border-radius:var(--r);
