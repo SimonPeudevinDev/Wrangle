@@ -132,6 +132,23 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
                     banc.js("(document.querySelector('.champ[data-champ=\"momentJour\"] .champ-val .a2-pts') || {}).textContent"), 'R')
     essais.verifier('contexte : la tuile Aube porte son rond', bulle(banc, '.champ[data-champ="momentJour"] .tuile[data-f="Aube"]'), 'a2-lui R')
     essais.verifier('contexte : les autres tuiles, rien', bulle(banc, '.champ[data-champ="momentJour"] .tuile[data-f="Nuit"]'), '')
+    ctx = lambda k: banc.js("""(() => { const c = document.querySelector('.champ[data-champ="%s"]');
+      return (c.className.split(' ').find(x => x.indexOf('a2-') === 0) || '') + ' | ' + ((c.querySelector('.champ-val .a2-pts') || {}).textContent || ''); })()""" % k)
+    # la double verification : Simon saisit autre chose, rouge ; la meme chose, vert
+    banc.js("choisirChamp('momentJour', 'Nuit')")
+    essais.verifier('Simon met Nuit, Romain avait Aube : rouge, et ce que Romain a mis', ctx('momentJour'), 'a2-ecart | RAube')
+    essais.verifier('Simon a sa saisie a lui', banc.js("plan(openId)['saisie@Simon'].momentJour"), 'Nuit')
+    banc.js("ouvrirChamp('momentJour'); choisirChamp('momentJour', 'Aube')")
+    essais.verifier('Simon met Aube aussi : vert, rien dessous', ctx('momentJour'), 'a2-accord | ')
+    # une ligne tapee : la duree de Romain se reprend d'un appui
+    romain([{'op': 'patch', 'kind': 'plan', 'id': pid, 'data': {'saisie@Romain': {'momentJour': 'Aube', 'duree': '3s'}}}])
+    patienter(lambda: banc.js("(plan(openId)['saisie@Romain'] || {}).duree") == '3s', tours=40)
+    banc.js("patch('plan', openId, { duree: '4s' }); rouvrirFiche()")
+    essais.verifier('duree : 4s chez Simon, 3s chez Romain, a reprendre',
+                    banc.js("(r => r ? r.className + ' | ' + r.textContent.replace(/\\s+/g, '') : '')(document.querySelector('#sbody .a2-row.ctx'))"), 'a2-row ctx a2-ecart | R3sreprendre')
+    banc.js("document.querySelector('#sbody .a2-row.ctx .a2-val').click()")
+    essais.verifier('repris : 3s pour tous, la ligne passe au vert',
+                    [banc.js("plan(openId).duree"), banc.js("document.querySelector('#sbody [data-k=\"duree\"]').closest('.spec').classList.contains('a2-accord')")], ['3s', True])
     # la note du plan est a chacun : celle de Romain en italique sous la sienne
     essais.verifier('sa note a lui, en italique sous la mienne',
                     banc.js("[...document.querySelectorAll('.textes-autres[data-texte=\"notesClient\"] .texte-autre')].map(d => d.querySelector('b').textContent + ' | ' + d.querySelector('i').textContent)"),

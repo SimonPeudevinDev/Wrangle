@@ -1727,13 +1727,12 @@ nav button[hidden]{display:none}
   .toast.on{transform:none}
 }
 .btns.centre{justify-content:center}
-/* la priorite d'un shot : P1 (rouge, la plus haute) a P5 (gris) */
-.ptag.prio{border:1px solid currentColor;background:none}
-.ptag.prio.p1{color:var(--ng);background:rgba(var(--ng-rgb),.14)}
-.ptag.prio.p2{color:var(--tag-orange);background:rgba(217,160,102,.12)}
-.ptag.prio.p3{color:var(--acc);background:rgba(231,176,74,.10)}
-.ptag.prio.p4{color:var(--tag-bleu);background:rgba(134,165,201,.10)}
-.ptag.prio.p5{color:var(--dim2)}
+/* la priorite d'un shot : P1 haute (rouge), P2 moyenne (orange), P3 basse (bleu) ; sans priorite, une pastille vide */
+.ptag.prio{border:1px solid currentColor;background:none;cursor:pointer}
+.ptag.prio.vide{border-style:dashed}
+.prio.p1{color:var(--ng);background:rgba(var(--ng-rgb),.14)}
+.prio.p2{color:var(--tag-orange);background:rgba(217,160,102,.12)}
+.prio.p3{color:var(--tag-bleu);background:rgba(134,165,201,.10)}
 /* le fantome du clip : la suite attendue en gris, derriere ce qu'on tape */
 .clip-col > .clip{position:relative}
 .clip-col > .clip > .fantome{position:absolute;left:0;top:36px;font:600 23px/1.25 var(--font-titre);letter-spacing:.01em;font-variant-numeric:tabular-nums;

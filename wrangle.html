@@ -713,11 +713,33 @@ function patch(kind, id, data){
    l'a coche ou change (p.auteurs : { 'el:hdri': 'Romain', etat: 'Simon' }). */
 // l'etat, et tout le contexte du shot : chaque champ garde le nom de qui l'a saisi
 const AUTEURS_SUIVIS = ['etat', 'meteo', 'lieu', 'intExt', 'momentJour', 'acteurs', 'figu', 'cadrage', 'mouv', 'support', 'focale', 'duree'];
+/* Le contexte du shot reste commun (une valeur par ligne, pour la liste, les PDF, les exports),
+   mais chacun garde aussi ce qu'il y a saisi lui-meme (saisie@Prenom : { meteo:'Couvert', … }) :
+   la fiche compare, comme pour une prise — vert si l'on a saisi pareil, rouge sinon. */
+const CONTEXTE_DOUBLE = ['lieu', 'intExt', 'momentJour', 'meteo', 'acteurs', 'figu', 'cadrage', 'mouv', 'support', 'focale', 'duree'];
+function saisiesDe(p, k){
+  const out = {};
+  Object.keys(p || {}).forEach(c => { if (c.indexOf('saisie@') === 0 && p[c] && typeof p[c] === 'object' && k in p[c]) out[c.slice(7)] = p[c][k]; });
+  // d'avant : qui a saisi la ligne (p.auteurs) y a mis la valeur commune
+  const a = ((p && p.auteurs) || {})[k];
+  if (a && !(a in out) && valRap(p[k])) out[a] = p[k];
+  return out;
+}
 function avecAuteurs(o, data){
   if (!UI.nom || 'auteurs' in data) return data;
-  const au = Object.assign({}, o.auteurs || {});
-  let change = false;
+  const au = Object.assign({}, o.auteurs || {}), cleS = 'saisie@' + UI.nom.trim();
+  let change = false, mes = null;
+  const leurs = {};
   Object.keys(data).forEach(k => {
+    if (CONTEXTE_DOUBLE.indexOf(k) >= 0){
+      const v = data[k];
+      mes = mes || Object.assign({}, o[cleS] || {});
+      if (v != null && v !== false && valRap(v)) mes[k] = Array.isArray(v) ? v.slice() : v; else delete mes[k];
+      // une valeur d'avant, saisie par un autre sans saisie a son nom : elle passe sous son nom avant d'etre remplacee
+      const x = au[k], cx = 'saisie@' + x;
+      if (x && x !== UI.nom.trim() && valRap(o[k]) && !(o[cx] && typeof o[cx] === 'object' && k in o[cx]))
+        leurs[cx] = Object.assign({}, leurs[cx] || o[cx] || {}, { [k]: o[k] });
+    }
     if (k === 'elements'){
       const av = o.elements || {}, ap = data.elements || {};
       new Set(Object.keys(av).concat(Object.keys(ap))).forEach(e => {
@@ -730,7 +752,8 @@ function avecAuteurs(o, data){
       change = true;
     }
   });
-  return change ? Object.assign({}, data, { auteurs: au }) : data;
+  const out = change ? Object.assign({}, data, { auteurs: au }) : data;
+  return mes ? Object.assign({}, out, leurs, { [cleS]: mes }) : out;
 }
 function viderTampon(){
   clearTimeout(RESEAU.tTampon); RESEAU.tTampon = null;
@@ -1399,7 +1422,7 @@ const LISTES = {
                            connus(DB.prises, 'wb')),
   // l'Alexa 35 enregistre en LogC4 ; le look sur le retour
   'dl-sync':  () => ['Clap', 'Jam TC', 'MOS / muet'],
-  'dl-prio':  () => ['1', '2', '3', '4', '5'],
+  'dl-prio':  () => ['1', '2', '3'],
   'dl-lut':   () => fusion(['Aucune (LogC4)', 'ARRI LogC4 to Gamma24 Rec709 D65 v1', 'ARRI Rec 709', 'Rec 2100 PQ (HDR)', 'Rec 2100 HLG (HDR)', 'Show LUT'], connus(DB.prises, 'lut')),
   // la serie du tournage seule ; une autre optique passe par « + Custom… » et revient ensuite dans le menu
   'dl-obj':   () => fusion(['Sigma Classic Prime'], connus(DB.prises, 'objectif')),
@@ -1438,7 +1461,7 @@ function ouvrirMenu(btn){
 /* Une explication a cote d'un choix du menu, sans toucher a la valeur notee */
 const INDICES_MENU = {
   'dl-nd': { 'Aucun':'pas de filtre', '0.6':'2 diaphs de moins', '1.2':'4 diaphs de moins', '1.8':'6 diaphs de moins' },
-  'dl-prio': { '1':'la plus haute', '2':'haute', '3':'moyenne', '4':'basse', '5':'la plus basse' },
+  'dl-prio': { '1':'haute', '2':'moyenne', '3':'basse' },
   'dl-sync': { 'Clap':'le clap à l’image', 'Jam TC':'timecode partagé caméra / son', 'MOS / muet':'sans son' }
 };
 function fermerMenu(){
@@ -3171,10 +3194,40 @@ function htmlPtags(p){
         onclick="event.stopPropagation();menuTag(this, '${p.id}')">${g[0]}</button>`);
   });
   tags.filter(t => rangTag(t) === 9).forEach(t => out.push(`<span class="ptag">${esc(t)}</span>`));
-  // la priorite du shot (1 la plus haute, 5 la plus basse), reglee en Preparation
-  const pr = String(p.prio || '').trim();
-  if (/^[1-5]$/.test(pr)) out.push(`<span class="ptag prio p${pr}" title="Priorité ${pr} sur 5">P${pr}</span>`);
+  // la priorite du shot : une pastille a trois niveaux, en Tournage comme en Preparation ; un clic ouvre son menu
+  const pr = niveauPrio(p);
+  out.push(pr ? `<button type="button" class="ptag prio p${pr}" data-g="prio" title="Priorité ${PRIOS[pr - 1]}"
+        onclick="event.stopPropagation();menuPrio(this, '${p.id}')">P${pr}</button>`
+             : `<button type="button" class="ptag vide prio" data-g="prio" title="Donner une priorité"
+        onclick="event.stopPropagation();menuPrio(this, '${p.id}')">Prio</button>`);
   return out.join('');
+}
+/* La priorite : 1 haute, 2 moyenne, 3 basse. Les 4 et 5 d'avant (cinq niveaux) comptent comme basses. */
+const PRIOS = ['haute', 'moyenne', 'basse'];
+const niveauPrio = p => { const n = parseInt(String((p && p.prio) || '').trim(), 10); return n >= 1 ? Math.min(3, n) : 0; };
+function menuPrio(btn, id){
+  const deja = btn.classList.contains('on');
+  fermerMenu();
+  if (deja) return;
+  const actuel = niveauPrio(plan(id));
+  const m = document.createElement('div');
+  m.className = 'menu puce';
+  m.innerHTML = PRIOS.map((nom, i) => `<button type="button" class="prio p${i + 1}${actuel === i + 1 ? ' on' : ''}"
+      onclick="event.stopPropagation();poserPrio('${id}', ${i + 1})">P${i + 1} · ${nom}</button>`).join('') +
+    (actuel ? `<button type="button" onclick="event.stopPropagation();poserPrio('${id}', 0)">Aucune</button>` : '');
+  const r = btn.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - 180)) + 'px'; m.style.top = (r.bottom + 5) + 'px';
+  document.body.appendChild(m);
+  btn.classList.add('on');
+  setTimeout(() => document.addEventListener('click', clicHorsMenu), 0);
+  window.addEventListener('scroll', fermerMenu, { once:true, capture:true });
+}
+function poserPrio(id, n){
+  fermerMenu();
+  const p = plan(id); if (!p) return;
+  patch('plan', p.id, { prio: n ? String(n) : '' });
+  if (openType === 'plan' && openId === p.id) majBoutonsPlan();
+  renderList();
 }
 /* Le petit menu sous la puce : les etiquettes de sa famille, celle en place cochee. */
 function menuTag(btn, id){
@@ -4748,7 +4801,6 @@ function rangPrep(p){
         ${champPrep(p, 'seq', 'Séq', {cls:'w-seq', ph:'01', dl:'dl-seq'})}
         ${champPrep(p, 'plan', 'Shot', {cls:'w-num', ph:'05', cap:'characters'})}
         ${champPrep(p, 'jour', 'Jour', {cls:'w-jour', ph:'J1', dl:'dl-jour', cap:'characters'})}
-        ${champPrep(p, 'prio', 'Prio', {cls:'w-prio', ph:'—', dl:'dl-prio', im:'numeric'})}
         ${champPrep(p, 'lieu', 'Décor', {cls:'w-lieu', ph:'Royal Academy', dl:'dl-lieu'})}
         ${champPrep(p, 'seqTitre', 'Titre de séquence', {cls:'w-flex', ph:'Ciel de Londres — intro'})}
         <div class="haut">
@@ -6739,6 +6791,13 @@ function decorerFiche(){
 /* La fiche d'un plan : le plan est partage, il n'y a rien a comparer. Une
    pastille dit seulement qui a coche un element ou change l'etat (s'il n'est
    pas soi), et les descriptions et notes des autres se lisent en italique. */
+/* Reprendre ce qu'un autre a saisi dans le contexte du shot : la valeur commune devient la sienne, et la mienne aussi. */
+function reprendreContexte(k, nom){
+  const p = plan(openId); if (!p) return;
+  const v = saisiesDe(p, k)[nom]; if (v == null) return;
+  patch('plan', p.id, { [k]: v });
+  rouvrirFiche(); renderList();
+}
 const personneA2 = nom => AUTRES.liste.find(a => a.nom === nom)
   || { nom, coul: couleurDe(nom) };
 function decorerPlan(sb, p){
@@ -6750,17 +6809,40 @@ function decorerPlan(sb, p){
     .map(n => ({ a: personneA2(n), el: elementsDe(p, n, false) }));
   sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!mes[b.dataset.el], autres.filter(x => x.el[b.dataset.el]).map(x => x.a)));
   sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
-  // le contexte du shot est commun : le rond de qui l'a saisi (si ce n'est pas soi) se pose sur ce qu'il a
-  // choisi, comme sur les elements — a cote de la valeur quand la ligne est repliee, sur la tuile quand elle est ouverte
-  sb.querySelectorAll('.champ[data-champ]').forEach(c => {
-    c.querySelectorAll('.champ-nom .a2-pt.auteur').forEach(x => x.remove());
-    const k = c.dataset.champ, qui = de(k).concat(k === 'acteurs' && !de(k).length ? de('figu') : []);
-    const pt = qui.length ? pastilleA2(qui[0]).replace(/title="[^"]*"/, 'title="Saisi par ' + esc(qui[0].nom) + '"') : '';
-    const v = c.querySelector('.champ-val');
-    if (v && pt && !v.classList.contains('vide')) v.insertAdjacentHTML('beforeend', `<span class="a2-pts">${pt}</span>`);
-    const def = champsDe().find(d => d.k === k), x = p[k];
-    const vals = Array.isArray(x) ? x : !valRap(x) ? [] : def && def.sep ? morceaux(x, def.sep) : [valRap(x)];
-    c.querySelectorAll('.tuile[data-f]').forEach(b => decorerBulle(b, false, qui.length && vals.some(y => memeVal(y, b.dataset.f)) ? qui.slice(0, 1) : []));
+  // le contexte du shot : la valeur est commune, mais chacun garde ce qu'il a saisi (saisiesDe).
+  // Comme pour une prise : vert si tous ceux qui l'ont saisi ont mis pareil, rouge sinon (et ce que
+  // chacun a mis, avec son rond) ; saisi par un autre seul, sa couleur et son rond sur sa valeur.
+  const moi = (UI.nom || '').trim();
+  sb.querySelectorAll('.a2-row.ctx').forEach(x => x.remove());
+  CONTEXTE_DOUBLE.filter(k => k !== 'figu').forEach(k => {
+    const sp = sb.querySelector('.spec [data-k="' + k + '"]'), c = sb.querySelector('.champ[data-champ="' + k + '"]') || (sp && sp.closest('.spec'));
+    if (!c) return;
+    c.classList.remove('a2-autre', 'a2-accord', 'a2-ecart');
+    const def = champsDe().find(d => d.k === k);
+    const liste = x => Array.isArray(x) ? x : !valRap(x) ? [] : def && def.sep ? morceaux(x, def.sep) : [valRap(x)];
+    const pareil = (x, y) => { const a = liste(x), b = liste(y); return a.length === b.length && a.every(v => b.some(w => memeVal(v, w))); };
+    const s = saisiesDe(p, k), noms = Object.keys(s).filter(n => valRap(s[n]));
+    const autres = noms.filter(n => n !== moi);
+    if (!autres.length) return;
+    const etat = noms.length < 2 ? 'autre' : noms.every(n => pareil(s[n], s[noms[0]])) ? 'accord' : 'ecart';
+    c.classList.add('a2-' + etat);
+    c.style.setProperty('--c', personneA2(autres[0]).coul);
+    // ce que chacun a mis, quand ce n'est pas la valeur affichee (en desaccord), ou le rond de l'autre seul
+    const montrer = etat === 'autre' ? autres : etat === 'ecart' ? noms.filter(n => !pareil(s[n], p[k])) : [];
+    const pts = montrer.map(n => pastilleA2(personneA2(n)).replace(/title="[^"]*"/, 'title="Saisi par ' + esc(n) + '"')
+      + (etat === 'ecart' ? '<em>' + esc(liste(s[n]).join(', ')) + '</em>' : '')).join('');
+    if (c.classList.contains('champ')){
+      const v = c.querySelector('.champ-val');
+      if (v && pts) v.insertAdjacentHTML('beforeend', `<span class="a2-pts">${pts}</span>`);
+      // les tuiles : le rond de chacun sur ce qu'il a choisi ; choisie aussi par moi, entouree de vert
+      c.querySelectorAll('.tuile[data-f]').forEach(b => decorerBulle(b, moi in s && liste(s[moi]).some(y => memeVal(y, b.dataset.f)),
+        autres.filter(n => liste(s[n]).some(y => memeVal(y, b.dataset.f))).map(personneA2)));
+    } else if (montrer.length){
+      // une ligne tapee (la duree) : ce que chacun a mis, a reprendre d'un appui
+      c.insertAdjacentHTML('afterend', `<div class="a2-row ctx a2-${etat}" style="--c:${personneA2(autres[0]).coul}">${montrer.map(n =>
+        `<button type="button" class="a2-val" style="--c:${personneA2(n).coul}" onclick="reprendreContexte('${k}', '${esc(n)}')" title="Reprendre ce que ${esc(n)} a saisi">${
+          pastilleA2(personneA2(n))}<span>${esc(valRap(s[n]))}</span><b>reprendre</b></button>`).join('')}</div>`);
+    }
   });
   // mon texte a moi porte aussi mon rond, des qu'il est rempli : on voit qui a ecrit quoi
   sb.querySelectorAll('.spec > .a2-pt.moi').forEach(x => x.remove());
