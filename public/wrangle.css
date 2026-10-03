@@ -769,9 +769,16 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 /* l'editeur : plein ecran, le canevas au centre, les outils en bas */
 .voile-dessin{
   position:fixed;inset:0;z-index:95;background:var(--bg);
-  display:grid;grid-template-columns:168px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;
+  display:grid;grid-template-columns:168px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto;
 }
-.voile-dessin > .dtete,.voile-dessin > .doutils,.voile-dessin > .dconseil{grid-column:1 / -1}
+.voile-dessin > .dtete,.voile-dessin > .doutils,.voile-dessin > .dactions,.voile-dessin > .dconseil{grid-column:1 / -1}
+/* la derniere ligne d'outils : deplacer, gomme, supprimer, annuler, en icones */
+.dactions{display:flex;justify-content:center;gap:28px;padding:6px 16px;border-top:1px solid var(--line2)}
+.dact{width:52px;height:40px;border-radius:var(--r);border:1px solid var(--line2);background:none;color:var(--dim);display:grid;place-items:center;cursor:pointer;padding:0}
+.dact svg{width:21px;height:21px}
+.dact:hover{color:var(--txt);border-color:var(--txt)}
+.dact.on{background:var(--acc);border-color:var(--acc);color:var(--acc-txt)}
+.dact.d:hover{color:#e8675e;border-color:#e8675e}
 /* la palette d'objets : une colonne a gauche, un pictogramme et un mot par objet */
 .dpal{display:flex;flex-direction:column;gap:4px;padding:14px 12px;border-right:1px solid var(--line2);overflow-y:auto;min-height:0}
 .dpal h4{margin:0 4px 8px;font:700 11px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
@@ -786,13 +793,14 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .dobj.on svg{color:var(--acc-txt)}
 .doutils .btn.sm svg{width:15px;height:15px;margin-right:5px}
 @media(max-width:900px){
-  .voile-dessin{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto}
-  /* sur telephone : le canevas d'abord, les outils sous lui (crayon, deplacer, main, gomme, annuler),
-     puis la bande d'objets (camera… fond vert…) */
+  .voile-dessin{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto auto}
+  /* sur telephone : le canevas d'abord, les outils sous lui (couleurs, crayon, main), la bande
+     d'objets (camera… fond vert…), puis tout en bas les quatre icones (deplacer, gomme, supprimer, annuler) */
   .voile-dessin > .dzone{grid-row:2}
   .voile-dessin > .doutils{grid-row:3}
   .voile-dessin > .dpal{grid-row:4}
-  .voile-dessin > .dconseil{grid-row:5}
+  .voile-dessin > .dactions{grid-row:5;justify-content:space-around;gap:8px}
+  .voile-dessin > .dconseil{grid-row:6}
   .dpal{flex-direction:row;gap:6px;padding:8px 12px;border-right:none;border-top:1px solid var(--line2);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
   .dpal::-webkit-scrollbar{display:none}
   .dpal h4{display:none}

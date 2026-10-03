@@ -109,6 +109,7 @@
     <div id="dpivot"><canvas id="croquis" onpointerdown="debutTrait(event)" onpointermove="mouvTrait(event)" onpointerup="finTrait(event)" onpointercancel="finTrait(event)"></canvas></div>
   </div>
   <div class="doutils" id="doutils"></div>
+  <div class="dactions" id="dactions"></div>
   <div class="dconseil" id="dconseil"></div>
   <div class="dpick" id="dpick" hidden>
     <div class="dpick-sv" id="dpick-sv"><i id="dpick-pt"></i></div>
@@ -1895,7 +1896,11 @@ const ICONES = {
   croix:    ICO('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>', 18, 1.9),
   // le plan du decor : une carte pliee en trois
   decor:    ICO('<path d="M9 4.5L3.5 6.6v12.9L9 17.4l6 2.1 5.5-2.1V4.5L15 6.6z"/><path d="M9 4.5v12.9M15 6.6v12.9"/>', 18, 1.9),
-  corbeille:ICO('<path d="M4.5 7h15M9.5 7V4.8h5V7M6.8 7l.9 12.2h8.6L17.2 7M10 11v5M14 11v5"/>', 18, 1.9)
+  corbeille:ICO('<path d="M4.5 7h15M9.5 7V4.8h5V7M6.8 7l.9 12.2h8.6L17.2 7M10 11v5M14 11v5"/>', 18, 1.9),
+  // la barre du bas du croquis : deplacer, gommer, annuler
+  deplacer: ICO('<path d="M12 3.5v17M3.5 12h17M9.4 6.1L12 3.5l2.6 2.6M9.4 17.9l2.6 2.6 2.6-2.6M6.1 9.4L3.5 12l2.6 2.6M17.9 9.4l2.6 2.6-2.6 2.6"/>', 18, 1.9),
+  gomme:    ICO('<path d="M9 19.5h11"/><path d="M5.2 13.8l8.6-8.6a2 2 0 0 1 2.8 0l2.9 2.9a2 2 0 0 1 0 2.8L11 19.5H8.4l-3.2-3.2a1.8 1.8 0 0 1 0-2.5z"/><path d="M9.6 9.4l5.6 5.6"/>', 18, 1.9),
+  annuler:  ICO('<path d="M9 5.5L4.5 10 9 14.5"/><path d="M4.5 10h9.5a5 5 0 0 1 0 10H11"/>', 18, 1.9)
 };
 const CRITERES = [
   ['keep',   'À monter',         (p, pr) => pr.some(t => t.retenue), ICONES.etoile],
@@ -4206,6 +4211,15 @@ function viderCroquis(){
     dessin.traits = []; dessin.objets = []; dessin.sale = true; rendreCroquis();
   });
 }
+/* La corbeille : retire ce qui est saisi (un objet, un texte, un trait) ; rien de saisi, elle propose de tout effacer. */
+function supprimerCroquisSel(){
+  if (!dessin) return;
+  const o = dessin.selection;
+  if (!saisissable(o)) return viderCroquis();
+  souvenir();
+  dessin.objets = dessin.objets.filter(x => x !== o); dessin.traits = dessin.traits.filter(x => x !== o);
+  dessin.selection = null; dessin.sale = true; rendreCroquis();
+}
 function outilCroquis(k, v){
   if (!dessin) return;
   if (k === 'couleur'){ dessin.couleur = v; if (dessin.outil === 'gomme') dessin.outil = 'crayon'; }
@@ -4236,12 +4250,13 @@ function majOutils(){
     `<button type="button" class="btn sm${UI.lissage !== false ? ' p' : ''}" onclick="basculerLissage()" title="Lisse le crayon et la flèche libre : le trait suit la main avec un léger retard, sans tremblement">Lissage</button>` +
     `<i class="dsep"></i>` +
     `<button type="button" class="btn sm${crayon ? ' p' : ''}" onclick="outilCroquis('crayon')">${ICONES.crayon} Crayon</button>` +
-    `<button type="button" class="btn sm${o === 'move' ? ' p' : ''}" onclick="outilCroquis('move')">Déplacer</button>` +
-    `<button type="button" class="btn sm${o === 'main' ? ' p' : ''}" onclick="outilCroquis('main')" title="Déplacer la vue (ou barre d’espace + souris, ou deux doigts)">Main</button>` +
-    `<button type="button" class="btn sm${o === 'gomme' ? ' p' : ''}" onclick="outilCroquis('gomme')">Gomme</button>` +
-    `<i class="dsep"></i>` +
-    `<button type="button" class="btn sm" onclick="annulerTrait()" title="Défaire le dernier geste : tracé, objet, gomme, déplacement, rotation, tout effacer">&#8630; Annuler</button>` +
-    `<button type="button" class="btn sm d" onclick="viderCroquis()">Tout effacer</button>`;
+    `<button type="button" class="btn sm${o === 'main' ? ' p' : ''}" onclick="outilCroquis('main')" title="Déplacer la vue (ou barre d’espace + souris, ou deux doigts)">Main</button>`;
+  // la derniere ligne : quatre icones sous le pouce, ce qui revient le plus en retouchant un croquis
+  $('dactions').innerHTML =
+    `<button type="button" class="dact${o === 'move' ? ' on' : ''}" onclick="outilCroquis('move')" title="Déplacer, tourner, agrandir" aria-label="Déplacer">${ICONES.deplacer}</button>` +
+    `<button type="button" class="dact${o === 'gomme' ? ' on' : ''}" onclick="outilCroquis('gomme')" title="Gomme" aria-label="Gomme">${ICONES.gomme}</button>` +
+    `<button type="button" class="dact d" onclick="supprimerCroquisSel()" title="Supprimer ce qui est sélectionné (sans sélection : tout effacer)" aria-label="Supprimer">${ICONES.corbeille}</button>` +
+    `<button type="button" class="dact" onclick="annulerTrait()" title="Défaire le dernier geste : tracé, objet, gomme, déplacement, rotation, suppression" aria-label="Annuler">${ICONES.annuler}</button>`;
   $('dconseil').textContent =
     o === 'perso' ? 'Posez, puis tirez dans la direction du regard ; un nom peut suivre.' :
     o === 'soleil' ? 'Posez le soleil du côté d’où il vient, puis tirez vers où va sa lumière.' :

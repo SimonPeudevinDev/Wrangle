@@ -102,5 +102,19 @@ with Banc(8797, 9382) as banc:
     essais.verifier('le coin du bloc tire sa largeur et sa hauteur, autour du centre', r, [300, 300, 700, 500])
     essais.verifier('annuler rend le bloc d avant', banc.js("annulerTrait(); (o => [o.x1, o.x2])(dessin.objets.find(x => x.t === 'bloc'))"), [400, 600])
 
+    # -- la derniere ligne : quatre icones, deplacer, gomme, supprimer, annuler
+    essais.verifier('la derniere ligne porte quatre icones',
+                    banc.js("[...document.querySelectorAll('#dactions .dact')].map(b => b.getAttribute('aria-label'))"),
+                    ['Déplacer', 'Gomme', 'Supprimer', 'Annuler'])
+    essais.verifier('elle est sous la barre des couleurs',
+                    banc.js("$('dactions').getBoundingClientRect().top >= $('doutils').getBoundingClientRect().bottom - 1"), True)
+    r = banc.js("""(() => { const o = dessin.objets.find(x => x.t === 'cam'), n = dessin.objets.length; dessin.selection = o;
+      document.querySelector('#dactions .dact[aria-label=Supprimer]').click();
+      const apres = [dessin.objets.length === n - 1, dessin.objets.includes(o)];
+      annulerTrait(); return apres.concat([dessin.objets.some(x => x.n === o.n)]); })()""")
+    essais.verifier('la corbeille retire l objet saisi, Annuler le rend', r, [True, False, True])
+    banc.js("document.querySelector('#dactions .dact[aria-label=Gomme]').click()")
+    essais.verifier('l icone de la gomme s allume', banc.js("[dessin.outil, document.querySelector('#dactions .dact[aria-label=Gomme]').classList.contains('on')]"), ['gomme', True])
+
     essais.exceptions(banc)
 essais.bilan()
