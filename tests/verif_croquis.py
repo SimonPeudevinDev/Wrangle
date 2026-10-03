@@ -218,6 +218,18 @@ with Banc(8786, 9371) as banc:
     essais.verifier('saisie, elle prend la pastille touchee', banc.js("dessin.selection && dessin.selection.c"), '#e8675e')
     banc.js("annulerTrait()")
     essais.verifier('Annuler lui rend sa couleur', banc.js("dessin.objets[dessin.objets.length - 1].c"), '#4f8fd6')
+    # sa portee : pas d'anneau de rotation, un rond sur son cercle qu'on eloigne pour l'agrandir
+    banc.js("dessin.selection = dessin.objets[dessin.objets.length - 1]; rendreCroquis()")
+    pg = banc.js("poigneesDe(dessin.selection).map(p => p.rot ? 'rot' : p.rayon ? 'rayon' : p.taille ? 'taille' : '?')")
+    essais.verifier('la point light a une poignee de portee, pas de rotation', pg, ['rayon', 'taille'])
+    ry = banc.js("(() => { const p = poigneesDe(dessin.selection).find(q => q.rayon); return ecranDe([p.x, p.y]); })()")
+    banc.cdp.appel('Input.dispatchMouseEvent', type='mousePressed', x=ry[0], y=ry[1], button='left', buttons=1, clickCount=1)
+    for k in range(1, 6):
+        banc.cdp.appel('Input.dispatchMouseEvent', type='mouseMoved', x=ry[0] + 12 * k, y=ry[1], button='left', buttons=1)
+    banc.cdp.appel('Input.dispatchMouseEvent', type='mouseReleased', x=ry[0] + 60, y=ry[1], button='left', buttons=0, clickCount=1)
+    time.sleep(0.2)
+    essais.verifier('tirer le rond agrandit sa portee, par pas de 5',
+                    banc.js("(() => { const r = dessin.selection.r; return [r > RAYON_DEF, r % 5 === 0]; })()"), [True, True])
 
     # -- les volets du projecteur : le losange ouvre ou referme le faisceau, au degre pres
     banc.js("outilCroquis('objet', 'lum')")

@@ -3619,6 +3619,7 @@ function moletteCroquis(e){
     souvenir('molette' + o.n);
     // Maj + molette : la taille ; la molette seule : l'orientation
     if (e.shiftKey) o.s = Math.round(Math.min(TAILLE_MAX, Math.max(TAILLE_MIN, (o.s || 1) * ((e.deltaY || e.deltaX) > 0 ? 1 / 1.1 : 1.1))) * 20) / 20;
+    else if (o.t === 'ponct') o.r = Math.min(RAYON_MAX, Math.max(RAYON_MIN, Math.round(rayonPonct(o) * (e.deltaY > 0 ? 1 / 1.1 : 1.1) / 5) * 5));
     else o.a = (o.a || 0) + (e.deltaY > 0 ? 1 : -1) * Math.PI / 36;
     dessin.sale = true; rendreCroquis();
     return;
@@ -3687,6 +3688,9 @@ function faisceau(o){
   const b = o.bd != null ? o.bd : VOLET_DEF;
   return { b, x: 28 + 155 * Math.cos(b), y: 14 + 155 * Math.sin(b) };
 }
+/* la portee d'une point light : le rayon de son cercle, a sa taille d'origine (30 a 600) */
+const RAYON_DEF = 75, RAYON_MIN = 30, RAYON_MAX = 600;
+const rayonPonct = o => o.r || RAYON_DEF;
 const rgbaHex = (h, a) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || '') || [0, 'e7b04a'];
   return 'rgba(' + [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)).join(',') + ',' + a + ')'; };
 function dessinerObjet(g, o, k, u){
@@ -3870,12 +3874,13 @@ function dessinerObjet(g, o, k, u){
       g.beginPath(); g.moveTo(24 * u, -19 * u); g.lineTo(24 * u + vx, -19 * u - vy); g.moveTo(24 * u, 19 * u); g.lineTo(24 * u + vx, 19 * u + vy); g.stroke();
     } else if (o.t === 'ponct'){
       // une point light (ampoule nue, boule chinoise) : elle eclaire tout autour, dans sa couleur
-      g.rotate(-(o.a || 0));
-      const halo = g.createRadialGradient(0, 0, 10 * u, 0, 0, 120 * u);
+      // le cercle en pointille : sa portee (o.r), reglee a la poignee ; le halo deborde un peu au-dela
+      const R = rayonPonct(o) * u;
+      const halo = g.createRadialGradient(0, 0, 10 * u, 0, 0, R * 1.6);
       halo.addColorStop(0, rgbaHex(teinte, .45)); halo.addColorStop(1, rgbaHex(teinte, 0));
-      g.fillStyle = halo; g.beginPath(); g.arc(0, 0, 120 * u, 0, Math.PI * 2); g.fill();
+      g.fillStyle = halo; g.beginPath(); g.arc(0, 0, R * 1.6, 0, Math.PI * 2); g.fill();
       g.lineWidth = 3 * u; g.setLineDash([8 * u, 8 * u]);
-      g.beginPath(); g.arc(0, 0, 75 * u, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.stroke();
       g.setLineDash([]); g.lineWidth = 5 * u;
       g.fillStyle = '#fff'; g.beginPath(); g.arc(0, 0, 20 * u, 0, Math.PI * 2); g.fill(); g.stroke();
       g.fillStyle = teinte; g.beginPath(); g.arc(0, 0, 11 * u, 0, Math.PI * 2); g.fill();
@@ -3936,6 +3941,12 @@ function poigneesDe(o){
     const u = dessin.w / 1600, s = o.s || 1, a = o.a || 0, l = (largeurTexte(o.txt) + 40) * u * s, t = 50 * u * s, b = a - 3 * Math.PI / 4;
     return [{ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l, rot:true },
             { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
+  }
+  if (o.t === 'ponct'){
+    // pas de sens : au lieu de tourner, on tire sa portee, a droite sur le cercle ; le carre reste la taille
+    const u = dessin.w / 1600, s = o.s || 1, R = rayonPonct(o) * u * s, t = (PORTEE_TAILLE.ponct || 45) * u * s;
+    return [{ x: o.x + R, y: o.y, rayon:true },
+            { x: o.x + Math.cos(-Math.PI / 4) * t, y: o.y + Math.sin(-Math.PI / 4) * t, taille:true }];
   }
   if (OBJ_POSE.includes(o.t)){
     const u = dessin.w / 1600, s = o.s || 1, l = (BRAS[o.t] || 80) * u * s, a = o.a || 0, t = (PORTEE_TAILLE[o.t] || 60) * u * s;
@@ -4081,6 +4092,7 @@ function debutTrait(e){
     }
     if (pg && pg.taille && OBJ_RECT.includes(sel.t)){ dessin.courant = { tailleRect: sel }; return; }
     if (pg && pg.volet){ dessin.courant = { volet: sel }; return; }
+    if (pg && pg.rayon){ dessin.courant = { rayon: sel }; return; }
     if (pg){ dessin.courant = pg.rot ? { tourne: sel } : pg.taille ? { taille: sel } : pg.courbe ? { courbe: sel } : { bout: sel, quel: pg.bout }; return; }
     const s = saisir(pt);
     dessin.selection = s || null;
@@ -4164,6 +4176,12 @@ function mouvTrait(e){
     o.pts = c.base.map(q => { const x = q[0] - c.cx, y = q[1] - c.cy; return [Math.round((c.cx + x * cs - y * sn) * 10) / 10, Math.round((c.cy + x * sn + y * cs) * 10) / 10]; });
     c.deplace = true; rendreCroquis(); return;
   }
+  if (c && c.rayon){
+    // la distance au centre, a la taille d'origine, par pas de 5
+    const o = c.rayon, R = Math.round(Math.min(RAYON_MAX, Math.max(RAYON_MIN, Math.hypot(pt[0] - o.x, pt[1] - o.y) / ((o.s || 1) * dessin.w / 1600))) / 5) * 5;
+    if (R === rayonPonct(o)) return;
+    retenir(c); o.r = R; c.deplace = true; rendreCroquis(); return;
+  }
   if (c && c.volet){
     // la poignee, ramenee dans le repere du projecteur, donne l'angle du bord du faisceau (au degre pres)
     const o = c.volet, a = -(o.a || 0), sc = (o.s || 1) * dessin.w / 1600, dx = pt[0] - o.x, dy = pt[1] - o.y;
@@ -4215,6 +4233,10 @@ function mouvTrait(e){
     const dx = pt[0] - c.dernier[0], dy = pt[1] - c.dernier[1];
     if (!dx && !dy) return;
     retenir(c); translater(c.bouge, dx, dy); c.dernier = pt; c.deplace = true;
+  } else if (c.t === 'ponct'){
+    // la point light : on pose, puis on tire jusqu'ou elle eclaire
+    const d = Math.hypot(pt[0] - c.x, pt[1] - c.y) / (dessin.w / 1600);
+    if (d > 12) c.r = Math.round(Math.min(RAYON_MAX, Math.max(RAYON_MIN, d)) / 5) * 5;
   } else if (OBJ_POSE.includes(c.t)){
     // on pose, puis on tire dans la direction visee
     const dx = pt[0] - c.x, dy = pt[1] - c.y;
@@ -4235,7 +4257,7 @@ function finTrait(e){
   if (!dessin || !dessin.courant) return;
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
-  if (c.bouge || c.tourne || c.taille || c.volet || c.bout || c.courbe || c.tournePts || c.taillePts || c.tailleRect){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  if (c.bouge || c.tourne || c.taille || c.volet || c.rayon || c.bout || c.courbe || c.tournePts || c.taillePts || c.tailleRect){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
   if (c.pts) rejoindreMain(c);
   if (OBJ_TRACE.includes(c.t)){
     const u = dessin.w / 1600;
@@ -4406,7 +4428,7 @@ function majOutils(){
   $('ddecor').innerHTML = ICONES.decor; $('dsauver').innerHTML = ICONES.sauver; $('dsuppr').innerHTML = ICONES.corbeille;
   $('dconseil').textContent =
     o === 'perso' ? 'Posez, puis tirez dans la direction du regard ; un nom peut suivre.' :
-    o === 'ponct' ? 'Posez la point light : elle prend la couleur choisie. Pour la changer ensuite : Déplacer, touchez-la, puis une pastille.' :
+    o === 'ponct' ? 'Posez la point light, puis tirez jusqu’où elle éclaire ; elle prend la couleur choisie. Ensuite, avec Déplacer : le rond sur son cercle règle la portée (la molette aussi), une pastille change sa couleur.' :
     o === 'lum' ? 'Posez, puis tirez dans la direction visée. Le losange (outil Déplacer) ouvre ou referme les volets.' :
     o === 'soleil' ? 'Posez le soleil du côté d’où il vient, puis tirez vers où va sa lumière.' :
     OBJ_POSE.includes(o) ? 'Posez, puis tirez dans la direction visée.' :
