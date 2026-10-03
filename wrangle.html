@@ -6750,12 +6750,17 @@ function decorerPlan(sb, p){
     .map(n => ({ a: personneA2(n), el: elementsDe(p, n, false) }));
   sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!mes[b.dataset.el], autres.filter(x => x.el[b.dataset.el]).map(x => x.a)));
   sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
-  // le contexte du shot est commun : chaque ligne porte le rond de qui l'a saisie, si ce n'est pas soi
+  // le contexte du shot est commun : le rond de qui l'a saisi (si ce n'est pas soi) se pose sur ce qu'il a
+  // choisi, comme sur les elements — a cote de la valeur quand la ligne est repliee, sur la tuile quand elle est ouverte
   sb.querySelectorAll('.champ[data-champ]').forEach(c => {
-    const nom = c.querySelector('.champ-nom'); if (!nom) return;
-    nom.querySelectorAll('.a2-pt.auteur').forEach(x => x.remove());
+    c.querySelectorAll('.champ-nom .a2-pt.auteur').forEach(x => x.remove());
     const k = c.dataset.champ, qui = de(k).concat(k === 'acteurs' && !de(k).length ? de('figu') : []);
-    if (qui.length) nom.insertAdjacentHTML('beforeend', ' ' + pastilleA2(qui[0]).replace('class="a2-pt"', 'class="a2-pt auteur" title="Saisi par ' + esc(qui[0].nom) + '"'));
+    const pt = qui.length ? pastilleA2(qui[0]).replace(/title="[^"]*"/, 'title="Saisi par ' + esc(qui[0].nom) + '"') : '';
+    const v = c.querySelector('.champ-val');
+    if (v && pt && !v.classList.contains('vide')) v.insertAdjacentHTML('beforeend', `<span class="a2-pts">${pt}</span>`);
+    const def = champsDe().find(d => d.k === k), x = p[k];
+    const vals = Array.isArray(x) ? x : !valRap(x) ? [] : def && def.sep ? morceaux(x, def.sep) : [valRap(x)];
+    c.querySelectorAll('.tuile[data-f]').forEach(b => decorerBulle(b, false, qui.length && vals.some(y => memeVal(y, b.dataset.f)) ? qui.slice(0, 1) : []));
   });
   // mon texte a moi porte aussi mon rond, des qu'il est rempli : on voit qui a ecrit quoi
   sb.querySelectorAll('.spec > .a2-pt.moi').forEach(x => x.remove());

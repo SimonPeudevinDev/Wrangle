@@ -122,6 +122,16 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     essais.verifier('les elements que personne n a coches : rien', banc.js("document.querySelectorAll('#sbody .el:not(.on):not(.a2-lui) .a2-pt').length"), 0)
     essais.verifier('l anneau du Moteur a cote de la description', banc.js("!!document.querySelector('#sbody .lead-ligne .viser[data-vise=\"' + openId + '\"]')"), True)
     essais.verifier('pas de bandeau sur un plan : il n y a rien a comparer', banc.js("!!document.querySelector('#sbody .a2-tete')"), False)
+    # le contexte commun : le rond de Romain sur ce qu'il a choisi, pas sur le nom du champ
+    romain([{'op': 'patch', 'kind': 'plan', 'id': pid, 'data': {'momentJour': 'Aube', 'auteurs': {'el:hdri': 'Romain', 'momentJour': 'Romain'}}}])
+    patienter(lambda: banc.js("plan(openId).momentJour") == 'Aube', tours=40)
+    banc.js("ouvrirChamp('momentJour'); decorerFiche()")
+    essais.verifier('contexte : pas de rond a cote du nom du champ',
+                    banc.js("document.querySelectorAll('.champ[data-champ=\"momentJour\"] .champ-nom .a2-pt').length"), 0)
+    essais.verifier('contexte : son rond a cote de la valeur',
+                    banc.js("(document.querySelector('.champ[data-champ=\"momentJour\"] .champ-val .a2-pts') || {}).textContent"), 'R')
+    essais.verifier('contexte : la tuile Aube porte son rond', bulle(banc, '.champ[data-champ="momentJour"] .tuile[data-f="Aube"]'), 'a2-lui R')
+    essais.verifier('contexte : les autres tuiles, rien', bulle(banc, '.champ[data-champ="momentJour"] .tuile[data-f="Nuit"]'), '')
     # la note du plan est a chacun : celle de Romain en italique sous la sienne
     essais.verifier('sa note a lui, en italique sous la mienne',
                     banc.js("[...document.querySelectorAll('.textes-autres[data-texte=\"notesClient\"] .texte-autre')].map(d => d.querySelector('b').textContent + ' | ' + d.querySelector('i').textContent)"),
