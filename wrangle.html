@@ -1461,7 +1461,7 @@ function ouvrirMenu(btn){
 /* Une explication a cote d'un choix du menu, sans toucher a la valeur notee */
 const INDICES_MENU = {
   'dl-nd': { 'Aucun':'pas de filtre', '0.6':'2 diaphs de moins', '1.2':'4 diaphs de moins', '1.8':'6 diaphs de moins' },
-  'dl-prio': { '1':'haute', '2':'moyenne', '3':'basse' },
+  'dl-prio': { '1':'Principal', '2':'Optionnel', '3':'Plan de réserve' },
   'dl-sync': { 'Clap':'le clap à l’image', 'Jam TC':'timecode partagé caméra / son', 'MOS / muet':'sans son' }
 };
 function fermerMenu(){
@@ -2099,7 +2099,7 @@ function renderShoot(){
     const sk = p.seq + '|' + (p.seqTitre || '');
     if (sk !== lastSeq){
       lastSeq = sk;
-      html += `<div class="seq">Séquence ${esc(p.seq)} <em>${esc(p.seqTitre || '')}</em></div>`;
+      html += `<div class="seq seqbar"><b>Séquence ${esc(p.seq)}</b>${p.seqTitre ? `<em>${esc(p.seqTitre)}</em>` : ''}</div>`;
     }
     html += blocPlan(p, !!fCrit.keep, fQui);
   }
@@ -3196,14 +3196,14 @@ function htmlPtags(p){
   tags.filter(t => rangTag(t) === 9).forEach(t => out.push(`<span class="ptag">${esc(t)}</span>`));
   // la priorite du shot : une pastille a trois niveaux, en Tournage comme en Preparation ; un clic ouvre son menu
   const pr = niveauPrio(p);
-  out.push(pr ? `<button type="button" class="ptag prio p${pr}" data-g="prio" title="Priorité ${PRIOS[pr - 1]}"
-        onclick="event.stopPropagation();menuPrio(this, '${p.id}')">P${pr}</button>`
+  out.push(pr ? `<button type="button" class="ptag prio p${pr}" data-g="prio" title="Priorité : ${PRIOS[pr - 1]}"
+        onclick="event.stopPropagation();menuPrio(this, '${p.id}')">${PRIOS[pr - 1]}</button>`
              : `<button type="button" class="ptag vide prio" data-g="prio" title="Donner une priorité"
         onclick="event.stopPropagation();menuPrio(this, '${p.id}')">Prio</button>`);
   return out.join('');
 }
-/* La priorite : 1 haute, 2 moyenne, 3 basse. Les 4 et 5 d'avant (cinq niveaux) comptent comme basses. */
-const PRIOS = ['haute', 'moyenne', 'basse'];
+/* La priorite : 1 le plan principal, 2 optionnel, 3 le plan de reserve. Les 4 et 5 d'avant (cinq niveaux) comptent comme 3. */
+const PRIOS = ['Principal', 'Optionnel', 'Plan de réserve'];
 const niveauPrio = p => { const n = parseInt(String((p && p.prio) || '').trim(), 10); return n >= 1 ? Math.min(3, n) : 0; };
 function menuPrio(btn, id){
   const deja = btn.classList.contains('on');
@@ -3211,10 +3211,11 @@ function menuPrio(btn, id){
   if (deja) return;
   const actuel = niveauPrio(plan(id));
   const m = document.createElement('div');
-  m.className = 'menu puce';
-  m.innerHTML = PRIOS.map((nom, i) => `<button type="button" class="prio p${i + 1}${actuel === i + 1 ? ' on' : ''}"
-      onclick="event.stopPropagation();poserPrio('${id}', ${i + 1})">P${i + 1} · ${nom}</button>`).join('') +
-    (actuel ? `<button type="button" onclick="event.stopPropagation();poserPrio('${id}', 0)">Aucune</button>` : '');
+  // chaque niveau s'y montre tel qu'il sera sur la carte : sa pastille teintee
+  m.className = 'menu puce prios';
+  m.innerHTML = PRIOS.map((nom, i) => `<button type="button" class="${actuel === i + 1 ? 'on' : ''}"
+      onclick="event.stopPropagation();poserPrio('${id}', ${i + 1})"><span class="ptag prio p${i + 1}">${nom}</span></button>`).join('') +
+    (actuel ? `<button type="button" class="aucune" onclick="event.stopPropagation();poserPrio('${id}', 0)">Aucune</button>` : '');
   const r = btn.getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(r.left, innerWidth - 180)) + 'px'; m.style.top = (r.bottom + 5) + 'px';
   document.body.appendChild(m);
@@ -4943,6 +4944,13 @@ function cocherOnSet(id, b){
   if (i) i.value = texteOnSet(plan(id));
 }
 
+/* En Preparation, les plans suivent l'ordre de tournage : un bandeau marque chaque
+   changement de sequence (le premier plan du jour compris). */
+function bandeauSeq(ps, i){
+  const p = ps[i], cle = x => (x.seq || '') + '|' + (x.seqTitre || '');
+  if (i && cle(ps[i - 1]) === cle(p)) return '';
+  return `<div class="seqbar"><b>Séquence ${esc(p.seq || '—')}</b>${p.seqTitre ? `<em>${esc(p.seqTitre)}</em>` : ''}</div>`;
+}
 function renderPrep(){
   const l = $('l-prep'); if (!l) return;
   if (!prepare()) return renderPrepLecture(l);
@@ -4984,7 +4992,7 @@ function renderPrep(){
   (unJour ? [fJourP] : tous).forEach(j => {
     const ps = trierPlans(plansDuJour(j), false);
     html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span>${enteteJour(j, ps.length)}</div>` +
-            ps.map(rangPrep).join('') +
+            ps.map((p, i) => bandeauSeq(ps, i) + rangPrep(p)).join('') +
             `<button type="button" class="addplan" onclick="ajouterPlanPrep('${esc(j)}')">+ Plan${j ? ' ' + esc(nomJour(j).toLowerCase()) : ''}</button>`;
   });
   l.innerHTML = html; l.dataset.ids = ids;
@@ -5007,7 +5015,7 @@ function renderPrepLecture(l){
     <p class="pnote">Le découpage préparé par ${esc(PREPARATEURS.join(', '))}, jour par jour, à consulter. Pour noter une prise : Tournage.</p>`;
   (unJour ? [fJourP] : tous).forEach(j => {
     const ps = trierPlans(plansDuJour(j), false);
-    html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span></div>` + ps.map((p, i) => {
+    html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span></div>` + ps.map((p, i) => bandeauSeq(ps, i) + (() => {
       const ctx = [p.lieu && `<span><b>${esc(p.lieu)}</b></span>`, p.cadrage && `<span>${esc(p.cadrage)}</span>`,
                    p.focale && `<span>${esc(p.focale)}</span>`, p.mouv && `<span>${esc(p.mouv)}</span>`,
                    (p.acteurs || []).length && `<span>${esc(p.acteurs.join(', '))}</span>`,
@@ -5020,7 +5028,7 @@ function renderPrepLecture(l){
         ${p.vfxDesc ? `<div class="lprep-desc"><b>VFX</b> · ${esc(p.vfxDesc)}</div>` : ''}
         ${ctx ? `<div class="pctx">${ctx}</div>` : ''}
       </div>`;
-    }).join('');
+    })()).join('');
   });
   l.innerHTML = html; l.dataset.ids = '';
 }

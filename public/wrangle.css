@@ -349,6 +349,15 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
   color:var(--dim);
 }
 .seq em{font:500 13px var(--font);color:var(--dim2);letter-spacing:0;margin-left:6px}
+/* le bandeau d'une sequence : une bande teintee, un trait d'accent a gauche — on voit d'un coup d'oeil ou elle commence */
+.seqbar{
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  margin:26px 0 12px;padding:10px 14px;border-left:4px solid var(--acc);border-radius:0 var(--r) var(--r) 0;
+  background:color-mix(in srgb, var(--acc) 10%, var(--surface));
+}
+.seqbar b{font:700 16px var(--font-titre);color:var(--txt)}
+.seqbar em{font:500 13.5px var(--font);font-style:normal;color:var(--dim);margin:0}
+.jour + .seqbar{margin-top:16px}
 
 /* -------- Un plan : une entree du carnet, entre deux traits francs -------- */
 /* entre deux plans, un trait plein, epais et clair ; entre les prises d'un plan,
@@ -1734,12 +1743,18 @@ nav button[hidden]{display:none}
   .toast.on{transform:none}
 }
 .btns.centre{justify-content:center}
-/* la priorite d'un shot : P1 haute (rouge), P2 moyenne (orange), P3 basse (bleu) ; sans priorite, une pastille vide */
-.ptag.prio{border:1px solid currentColor;background:none;cursor:pointer}
-.ptag.prio.vide{border-style:dashed}
-.prio.p1{color:var(--ng);background:rgba(var(--ng-rgb),.14)}
-.prio.p2{color:var(--tag-orange);background:rgba(217,160,102,.12)}
-.prio.p3{color:var(--tag-bleu);background:rgba(134,165,201,.10)}
+/* la priorite d'un shot : une pastille pleine, teintee, ecrite en toutes lettres —
+   Principal (vert), Optionnel (orange), Plan de reserve (rouge) ; sans priorite, une pastille vide */
+.ptag.prio{border:none;cursor:pointer;text-transform:none;letter-spacing:0;font:600 12px/1 var(--font);border-radius:6px;padding:0 8px}
+.ptag.prio.vide{border:1px dashed var(--line2)}
+.prio.p1{color:var(--tag-vert);background:color-mix(in srgb, var(--tag-vert) 22%, transparent)}
+.prio.p2{color:var(--tag-orange);background:color-mix(in srgb, var(--tag-orange) 24%, transparent)}
+.prio.p3{color:var(--tag-rouge);background:color-mix(in srgb, var(--tag-rouge) 22%, transparent)}
+/* son menu : les pastilles elles-memes, l'une sous l'autre, la ligne survolee grisee */
+.menu.puce.prios{min-width:170px;padding:6px}
+.menu.puce.prios button{height:34px;padding:0 6px;border-radius:6px;text-transform:none;letter-spacing:0;justify-content:space-between}
+.menu.puce.prios button.on::after{border-color:var(--dim)}
+.menu.puce.prios button.aucune{margin-top:4px;border-top:1px solid var(--line2);border-radius:0 0 6px 6px;font:500 13px var(--font);color:var(--dim)}
 /* le fantome du clip : la suite attendue en gris, derriere ce qu'on tape */
 .clip-col > .clip{position:relative}
 .clip-col > .clip > .fantome{position:absolute;left:0;top:36px;font:600 23px/1.25 var(--font-titre);letter-spacing:.01em;font-variant-numeric:tabular-nums;
