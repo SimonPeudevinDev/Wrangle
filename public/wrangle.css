@@ -1540,6 +1540,10 @@ select option{background:var(--surface);color:var(--txt)}
 .spec.auto > .a2-pt.moi{margin-top:15px}
 /* les elements captes : les miens pleins suffisent, pas de liseré vert quand un autre a coche le meme */
 .el.a2-deux{box-shadow:none!important}
+/* le bloc des elements : la meme barre que les lignes, verte si l'on a coche pareil, rouge sinon */
+.elems.a2-accord,.elems.a2-ecart{margin-left:-12px;padding-left:12px}
+.elems.a2-accord{box-shadow:inset 3px 0 0 var(--ok)}
+.elems.a2-ecart{box-shadow:inset 3px 0 0 var(--ng)}
 
 /* Clip et carte cote a cote : le clip en grand, la carte a sa droite */
 .clip-duo{display:flex;align-items:flex-start;gap:18px}

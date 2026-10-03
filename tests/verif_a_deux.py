@@ -119,6 +119,11 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
     essais.verifier('Romain coche le Lidar de son cote : son rond, et la charte de Simon reste',
                     patienter(lambda: bulle(banc, '.el[data-el="lidar"]') == 'a2-lui R' and banc.js("!!mesElements(plan(openId)).chart"), tours=40), True)
     essais.verifier('la liste, les filtres et les PDF voient les elements de tous', sorted(banc.js("Object.keys(elementsTous(plan(openId)))")), ['chart', 'hdri', 'lidar'])
+    barre = lambda: (lambda c: 'vert' if 'a2-accord' in c else 'rouge' if 'a2-ecart' in c else '')(banc.js("document.querySelector('#sbody .elems').className"))
+    essais.verifier('elements differents (charte chez Simon, Lidar chez Romain) : barre rouge', barre(), 'rouge')
+    banc.js("toggleElement('chart'); toggleElement('hdri'); toggleElement('lidar')")
+    essais.verifier('les memes elements des deux cotes : barre verte', barre(), 'vert')
+    banc.js("toggleElement('hdri'); toggleElement('lidar'); toggleElement('chart')")
     essais.verifier('les elements que personne n a coches : rien', banc.js("document.querySelectorAll('#sbody .el:not(.on):not(.a2-lui) .a2-pt').length"), 0)
     essais.verifier('l anneau du Moteur a cote de la description', banc.js("!!document.querySelector('#sbody .lead-ligne .viser[data-vise=\"' + openId + '\"]')"), True)
     essais.verifier('pas de bandeau sur un plan : il n y a rien a comparer', banc.js("!!document.querySelector('#sbody .a2-tete')"), False)

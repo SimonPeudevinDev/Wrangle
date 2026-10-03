@@ -6808,6 +6808,13 @@ function decorerPlan(sb, p){
   const mes = mesElements(p), autres = quiAElements(p).filter(n => n !== (UI.nom || '').trim())
     .map(n => ({ a: personneA2(n), el: elementsDe(p, n, false) }));
   sb.querySelectorAll('.el[data-el]').forEach(b => decorerBulle(b, !!mes[b.dataset.el], autres.filter(x => x.el[b.dataset.el]).map(x => x.a)));
+  // la barre du bloc : vert si chacun a coche les memes elements, rouge sinon (ou si un autre seul en a coche)
+  const blocEl = sb.querySelector('.elems');
+  if (blocEl){
+    blocEl.classList.remove('a2-accord', 'a2-ecart');
+    const cles = o => Object.keys(o).filter(e => o[e]).sort().join(',');
+    if (autres.length) blocEl.classList.add(autres.every(x => cles(x.el) === cles(mes)) ? 'a2-accord' : 'a2-ecart');
+  }
   sb.querySelectorAll('#seg-etat button[data-et]').forEach(b => decorerBulle(b, false, p.etat === b.dataset.et ? de('etat') : []));
   // le contexte du shot : la valeur est commune, mais chacun garde ce qu'il a saisi (saisiesDe).
   // Comme pour une prise : vert si tous ceux qui l'ont saisi ont mis pareil, rouge sinon (et ce que
