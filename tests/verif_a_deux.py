@@ -132,6 +132,8 @@ with Banc(PORT, 9389, taille=(420, 900)) as banc:
                     banc.js("(document.querySelector('.champ[data-champ=\"momentJour\"] .champ-val .a2-pts') || {}).textContent"), 'R')
     essais.verifier('contexte : la tuile Aube porte son rond', bulle(banc, '.champ[data-champ="momentJour"] .tuile[data-f="Aube"]'), 'a2-lui R')
     essais.verifier('contexte : les autres tuiles, rien', bulle(banc, '.champ[data-champ="momentJour"] .tuile[data-f="Nuit"]'), '')
+    essais.verifier('contexte : saisi par Romain seul, la barre est rouge',
+                    banc.js("document.querySelector('.champ[data-champ=\"momentJour\"]').classList.contains('a2-ecart')"), True)
     ctx = lambda k: banc.js("""(() => { const c = document.querySelector('.champ[data-champ="%s"]');
       return (c.className.split(' ').find(x => x.indexOf('a2-') === 0) || '') + ' | ' + ((c.querySelector('.champ-val .a2-pts') || {}).textContent || ''); })()""" % k)
     # la double verification : Simon saisit autre chose, rouge ; la meme chose, vert

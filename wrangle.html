@@ -6825,7 +6825,8 @@ function decorerPlan(sb, p){
     const autres = noms.filter(n => n !== moi);
     if (!autres.length) return;
     const etat = noms.length < 2 ? 'autre' : noms.every(n => pareil(s[n], s[noms[0]])) ? 'accord' : 'ecart';
-    c.classList.add('a2-' + etat);
+    // saisi par un autre seul : ce n'est pas encore verifie a deux, la barre est rouge comme un desaccord
+    c.classList.add('a2-' + (etat === 'autre' ? 'ecart' : etat));
     c.style.setProperty('--c', personneA2(autres[0]).coul);
     // ce que chacun a mis, quand ce n'est pas la valeur affichee (en desaccord), ou le rond de l'autre seul
     const montrer = etat === 'autre' ? autres : etat === 'ecart' ? noms.filter(n => !pareil(s[n], p[k])) : [];
@@ -6839,7 +6840,7 @@ function decorerPlan(sb, p){
         autres.filter(n => liste(s[n]).some(y => memeVal(y, b.dataset.f))).map(personneA2)));
     } else if (montrer.length){
       // une ligne tapee (la duree) : ce que chacun a mis, a reprendre d'un appui
-      c.insertAdjacentHTML('afterend', `<div class="a2-row ctx a2-${etat}" style="--c:${personneA2(autres[0]).coul}">${montrer.map(n =>
+      c.insertAdjacentHTML('afterend', `<div class="a2-row ctx a2-${etat === 'autre' ? 'ecart' : etat}" style="--c:${personneA2(autres[0]).coul}">${montrer.map(n =>
         `<button type="button" class="a2-val" style="--c:${personneA2(n).coul}" onclick="reprendreContexte('${k}', '${esc(n)}')" title="Reprendre ce que ${esc(n)} a saisi">${
           pastilleA2(personneA2(n))}<span>${esc(valRap(s[n]))}</span><b>reprendre</b></button>`).join('')}</div>`);
     }
