@@ -1081,10 +1081,13 @@ select option{background:var(--surface);color:var(--txt)}
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
 }
 .tuiles.pictos .tuile{min-height:70px;color:var(--dim)}
-.tuiles.pictos .tuile span{color:var(--txt)}
+/* le libelle de la tuile seulement : le rond de qui l'a choisie (.a2-pts) garde sa couleur */
+.tuiles.pictos .tuile > span:not(.a2-pts){color:var(--txt)}
 .tuile:hover{border-color:var(--txt)}
 .tuile:active{background:var(--surface2)}
-.tuile.on,.tuiles.pictos .tuile.on,.tuiles.pictos .tuile.on span{background:var(--acc);border-color:var(--acc);color:var(--acc-txt)}
+.tuile.on,.tuiles.pictos .tuile.on,.tuiles.pictos .tuile.on > span:not(.a2-pts){background:var(--acc);border-color:var(--acc);color:var(--acc-txt)}
+/* choisie aussi par moi : comme un element capte, la tuile jaune et le rond suffisent, sans anneau vert */
+.tuile.a2-deux{box-shadow:none!important}
 .tuile.case{border-style:dashed}
 .tuile.case.on{border-style:solid}
 .tuile.plus,.tuile.fin{border-color:transparent;color:var(--acc);font-weight:700}
