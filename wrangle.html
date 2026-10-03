@@ -3270,7 +3270,8 @@ const CROQUIS_OBJETS = [
   ['cam',     'Caméra',     PICTO('<rect x="3" y="8" width="11" height="9" rx="1.5"/><path d="M14 11l6-3v9l-6-3z"/>')],
   ['chrono',  'Chronoscope', PICTO('<rect x="2" y="6.5" width="13" height="11" rx="3"/><circle cx="8.5" cy="12" r="2"/><path d="M5.5 9h6M5.5 15h6M15 10.5l5-2.5v8l-5-2.5"/>')],
   ['lum',     'Lumière',    PICTO('<path d="M4 8h8a3.5 3.5 0 0 1 3.5 3.5v1A3.5 3.5 0 0 1 12 16H4z"/><path d="M17.5 12h3M16.5 8.5l2.5-2M16.5 15.5l2.5 2M7 16v3"/>')],
-  ['soleil',  'Soleil',     PICTO('<circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>')],
+  ['ponct',   'Point light', PICTO('<circle cx="12" cy="12" r="3.5"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4"/>')],
+  ['soleil', 'Soleil',     PICTO('<circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>')],
   ['perso',   'Personnage', PICTO('<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>')],
   ['bloc',    'Bloc',       PICTO('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9h16M9 4v16"/>')],
   ['rond',    'Rond',       PICTO('<circle cx="12" cy="12" r="8"/>')],
@@ -3285,7 +3286,7 @@ const CROQUIS_OBJETS = [
   ['txt',     'Texte',      PICTO('<path d="M5 6h14M12 6v13"/>')]
 ];
 /* trois gestes : poser puis orienter ; tirer d'un bout a l'autre ; tirer coin a coin */
-const OBJ_POSE = ['cam', 'chrono', 'lum', 'soleil', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
+const OBJ_POSE = ['cam', 'chrono', 'lum', 'ponct', 'soleil', 'perso', 'table', 'chaise'], OBJ_SEG = ['mur', 'fenetre', 'vert', 'diffb', 'diffn', 'cote', 'fleche'], OBJ_RECT = ['bloc', 'rond'];
 /* la fleche libre : un trajet dessine a main levee, en pointille, la pointe a l'arrivee */
 const OBJ_TRACE = ['trajet'];
 let dessin = null;   // l'editeur ouvert
@@ -3679,6 +3680,15 @@ document.addEventListener('keyup', e => { if (e.key === ' '){ espaceTenu = false
 
 /* Les objets sont dessines a une taille fixe par rapport a une feuille de
    1600 de large : la meme camera sur un petit ou un grand plan de decor. */
+/* Les volets du projecteur : o.bd, le demi-angle du faisceau (en radians), entre 5° et 80°.
+   Le bord du faisceau part de la lentille ; f.x, f.y : son bout, f.b : l'angle. */
+const VOLET_DEF = .38, VOLET_MIN = 5 * Math.PI / 180, VOLET_MAX = 80 * Math.PI / 180;
+function faisceau(o){
+  const b = o.bd != null ? o.bd : VOLET_DEF;
+  return { b, x: 28 + 155 * Math.cos(b), y: 14 + 155 * Math.sin(b) };
+}
+const rgbaHex = (h, a) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || '') || [0, 'e7b04a'];
+  return 'rgba(' + [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)).join(',') + ',' + a + ')'; };
 function dessinerObjet(g, o, k, u){
   const X = v => v * k, Y = X;   // meme echelle sur les deux axes
   g.save();
@@ -3775,7 +3785,9 @@ function dessinerObjet(g, o, k, u){
     g.translate(X(o.x), Y(o.y)); g.rotate(o.a || 0);
     if (o.s && o.s !== 1) g.scale(o.s, o.s);   // sa taille, choisie a la poignee carree
     // la camera est toujours rouge, la lumiere toujours caramel : on les reconnait de loin
-    const teinte = o.t === 'cam' ? '#e8675e' : o.t === 'chrono' ? '#8e4ec6' : o.t === 'lum' ? '#e7b04a' : (o.c || '#1c1410');
+    // la point light prend la couleur choisie, sauf l'encre noire : une lumiere noire ne se lirait pas
+    const teinte = o.t === 'cam' ? '#e8675e' : o.t === 'chrono' ? '#8e4ec6' : o.t === 'lum' ? '#e7b04a'
+      : o.t === 'ponct' ? (o.c && o.c !== CROQUIS_COULEURS[0] ? o.c : '#e7b04a') : (o.c || '#1c1410');
     g.strokeStyle = teinte; g.fillStyle = teinte; g.lineCap = 'round'; g.lineJoin = 'round';
     if (o.t === 'cam'){
       // le corps, l'objectif devant, et le champ de vision en pointille
@@ -3845,15 +3857,28 @@ function dessinerObjet(g, o, k, u){
       });
     } else if (o.t === 'lum'){
       // un projecteur vu de dessus : le faisceau translucide, le corps arrondi,
-      // la lentille caramel devant et deux volets ouverts
+      // la lentille caramel devant et deux volets (barn doors), ouverts de l'angle choisi (o.bd)
+      const f = faisceau(o);
       g.fillStyle = 'rgba(231,176,74,.18)';
-      g.beginPath(); g.moveTo(28 * u, -14 * u); g.lineTo(175 * u, -72 * u); g.lineTo(175 * u, 72 * u); g.lineTo(28 * u, 14 * u); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(28 * u, -14 * u); g.lineTo(f.x * u, -f.y * u); g.lineTo(f.x * u, f.y * u); g.lineTo(28 * u, 14 * u); g.closePath(); g.fill();
       g.lineWidth = 3 * u; g.setLineDash([10 * u, 8 * u]);
-      g.beginPath(); g.moveTo(28 * u, -14 * u); g.lineTo(175 * u, -72 * u); g.moveTo(28 * u, 14 * u); g.lineTo(175 * u, 72 * u); g.stroke();
+      g.beginPath(); g.moveTo(28 * u, -14 * u); g.lineTo(f.x * u, -f.y * u); g.moveTo(28 * u, 14 * u); g.lineTo(f.x * u, f.y * u); g.stroke();
       g.setLineDash([]); g.lineWidth = 5 * u;
       g.fillStyle = '#fff'; g.beginPath(); g.roundRect(-30 * u, -20 * u, 50 * u, 40 * u, 9 * u); g.fill(); g.stroke();
       g.fillStyle = teinte; g.beginPath(); g.roundRect(18 * u, -16 * u, 10 * u, 32 * u, 3 * u); g.fill();
-      g.beginPath(); g.moveTo(24 * u, -19 * u); g.lineTo(40 * u, -28 * u); g.moveTo(24 * u, 19 * u); g.lineTo(40 * u, 28 * u); g.stroke();
+      const vx = Math.cos(f.b) * 20 * u, vy = Math.sin(f.b) * 20 * u;
+      g.beginPath(); g.moveTo(24 * u, -19 * u); g.lineTo(24 * u + vx, -19 * u - vy); g.moveTo(24 * u, 19 * u); g.lineTo(24 * u + vx, 19 * u + vy); g.stroke();
+    } else if (o.t === 'ponct'){
+      // une point light (ampoule nue, boule chinoise) : elle eclaire tout autour, dans sa couleur
+      g.rotate(-(o.a || 0));
+      const halo = g.createRadialGradient(0, 0, 10 * u, 0, 0, 120 * u);
+      halo.addColorStop(0, rgbaHex(teinte, .45)); halo.addColorStop(1, rgbaHex(teinte, 0));
+      g.fillStyle = halo; g.beginPath(); g.arc(0, 0, 120 * u, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 3 * u; g.setLineDash([8 * u, 8 * u]);
+      g.beginPath(); g.arc(0, 0, 75 * u, 0, Math.PI * 2); g.stroke();
+      g.setLineDash([]); g.lineWidth = 5 * u;
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(0, 0, 20 * u, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = teinte; g.beginPath(); g.arc(0, 0, 11 * u, 0, Math.PI * 2); g.fill();
     }
   }
   g.restore();
@@ -3902,9 +3927,9 @@ const centreObjet = o => OBJ_RECT.includes(o.t) ? [(o.x1 + o.x2) / 2, (o.y1 + o.
   : o.pts ? (b => [b.cx, b.cy])(boitePts(o.pts)) : [o.x, o.y];
 /* ce qui se saisit avec ses poignees : un objet, ou un trait de crayon */
 const saisissable = o => !!o && (dessin.objets.includes(o) || dessin.traits.includes(o));
-const BRAS = { cam:215, chrono:85, lum:200, soleil:200, perso:70 };
+const BRAS = { cam:215, chrono:85, lum:200, ponct:150, soleil:200, perso:70 };
 /* la poignee carree de la taille : de cote, a cette distance de l'objet (a sa taille d'origine) */
-const PORTEE_TAILLE = { txt:50, cam:60, chrono:55, lum:60, soleil:60, perso:55, table:85, chaise:40 };
+const PORTEE_TAILLE = { txt:50, cam:60, chrono:55, lum:60, ponct:45, soleil:60, perso:55, table:85, chaise:40 };
 const TAILLE_MIN = .3, TAILLE_MAX = 4;
 function poigneesDe(o){
   if (o.t === 'txt'){
@@ -3918,8 +3943,14 @@ function poigneesDe(o){
     // en haut a gauche si le bras de rotation pointe deja la
     const ecart = Math.abs(Math.atan2(Math.sin(a + Math.PI / 4), Math.cos(a + Math.PI / 4)));
     const b = ecart < Math.PI / 4 ? -3 * Math.PI / 4 : -Math.PI / 4;
-    return [{ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l, rot:true },
-            { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
+    const pg = [{ x: o.x + Math.cos(a) * l, y: o.y + Math.sin(a) * l, rot:true },
+                { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
+    if (o.t === 'lum'){
+      // les volets : un losange sur le bord du faisceau ; tire, il l'ouvre ou le referme
+      const f = faisceau(o), lx = (28 + 110 * Math.cos(f.b)) * u * s, ly = -(14 + 110 * Math.sin(f.b)) * u * s;
+      pg.push({ x: o.x + lx * Math.cos(a) - ly * Math.sin(a), y: o.y + lx * Math.sin(a) + ly * Math.cos(a), volet:true });
+    }
+    return pg;
   }
   if (OBJ_RECT.includes(o.t)){
     // un bloc, un rond : l'anneau au bout d'un bras, juste au-dela de son bord ; le carre a son coin
@@ -3996,6 +4027,18 @@ function dessinerPoignees(g, o, k){
     if (p.rot){ const [cx, cy] = centreObjet(o); g.setLineDash([5 * px * k, 5 * px * k]); g.beginPath(); g.moveTo(cx * k, cy * k); g.lineTo(p.x * k, p.y * k); g.stroke(); g.setLineDash([]); }
     // la poignee qui courbe la fleche est pleine : on la distingue des deux bouts ; celle de la taille est carree
     g.fillStyle = p.courbe || p.taille ? '#e7b04a' : '#fff';
+    if (p.volet){
+      // un losange plein, et l'ouverture du faisceau ecrite a cote
+      const c = 10 * px * k, x = p.x * k, y = p.y * k;
+      g.beginPath(); g.moveTo(x, y - c); g.lineTo(x + c, y); g.lineTo(x, y + c); g.lineTo(x - c, y); g.closePath();
+      g.fillStyle = '#e7b04a'; g.fill(); g.strokeStyle = '#fff'; g.stroke(); g.strokeStyle = '#e7b04a';
+      g.font = '700 ' + Math.round(13 * px * k) + 'px Figtree, "Segoe UI", sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      const txt = Math.round(faisceau(o).b * 360 / Math.PI) + '°';
+      g.lineWidth = 4 * px * k; g.strokeStyle = 'rgba(255,255,255,.9)'; g.strokeText(txt, x + c + 5 * px * k, y);
+      g.fillStyle = '#c4891f'; g.fillText(txt, x + c + 5 * px * k, y);
+      g.lineWidth = 2 * px * k; g.strokeStyle = '#e7b04a'; g.fillStyle = '#fff';
+      return;
+    }
     if (p.taille){ const c = 8 * px * k; g.fillRect(p.x * k - c, p.y * k - c, 2 * c, 2 * c); g.strokeStyle = '#fff'; g.strokeRect(p.x * k - c, p.y * k - c, 2 * c, 2 * c); g.strokeStyle = '#e7b04a'; return; }
     g.beginPath(); g.arc(p.x * k, p.y * k, (p.courbe ? 7 : 9) * px * k, 0, Math.PI * 2); g.fill(); g.stroke();
   });
@@ -4037,6 +4080,7 @@ function debutTrait(e){
       return;
     }
     if (pg && pg.taille && OBJ_RECT.includes(sel.t)){ dessin.courant = { tailleRect: sel }; return; }
+    if (pg && pg.volet){ dessin.courant = { volet: sel }; return; }
     if (pg){ dessin.courant = pg.rot ? { tourne: sel } : pg.taille ? { taille: sel } : pg.courbe ? { courbe: sel } : { bout: sel, quel: pg.bout }; return; }
     const s = saisir(pt);
     dessin.selection = s || null;
@@ -4120,6 +4164,14 @@ function mouvTrait(e){
     o.pts = c.base.map(q => { const x = q[0] - c.cx, y = q[1] - c.cy; return [Math.round((c.cx + x * cs - y * sn) * 10) / 10, Math.round((c.cy + x * sn + y * cs) * 10) / 10]; });
     c.deplace = true; rendreCroquis(); return;
   }
+  if (c && c.volet){
+    // la poignee, ramenee dans le repere du projecteur, donne l'angle du bord du faisceau (au degre pres)
+    const o = c.volet, a = -(o.a || 0), sc = (o.s || 1) * dessin.w / 1600, dx = pt[0] - o.x, dy = pt[1] - o.y;
+    const lx = (dx * Math.cos(a) - dy * Math.sin(a)) / sc, ly = Math.abs(dx * Math.sin(a) + dy * Math.cos(a)) / sc;
+    const deg = Math.PI / 180, b = Math.round(Math.min(VOLET_MAX, Math.max(VOLET_MIN, Math.atan2(ly - 14, lx - 28))) / deg) * deg;
+    if (Math.abs(b - faisceau(o).b) < 1e-9) return;
+    retenir(c); o.bd = b; c.deplace = true; rendreCroquis(); return;
+  }
   if (c && c.tailleRect){
     // le coin tire : la largeur et la hauteur, dans le sens du bloc, autour de son centre
     const o = c.tailleRect, [cx, cy] = centreObjet(o), a = -(o.a || 0), dx = pt[0] - cx, dy = pt[1] - cy, m = 8 * dessin.w / 1600;
@@ -4183,7 +4235,7 @@ function finTrait(e){
   if (!dessin || !dessin.courant) return;
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
-  if (c.bouge || c.tourne || c.taille || c.bout || c.courbe || c.tournePts || c.taillePts || c.tailleRect){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  if (c.bouge || c.tourne || c.taille || c.volet || c.bout || c.courbe || c.tournePts || c.taillePts || c.tailleRect){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
   if (c.pts) rejoindreMain(c);
   if (OBJ_TRACE.includes(c.t)){
     const u = dessin.w / 1600;
@@ -4246,7 +4298,7 @@ function touche(pt, o){
     const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
     return lx >= -r && lx <= largeurTexte(o.txt) * u * sc + r && Math.abs(ly) <= 26 * u * sc + r / 2;
   }
-  const port = { txt:60, table:90, chaise:36, cam:44, chrono:44, lum:44, perso:46 }[o.t] || 44;
+  const port = { txt:60, table:90, chaise:36, cam:44, chrono:44, lum:44, ponct:30, perso:46 }[o.t] || 44;
   return Math.hypot(o.x - pt[0], o.y - pt[1]) <= port * u * (o.s || 1);
 }
 function saisir(pt){
@@ -4311,7 +4363,12 @@ function supprimerCroquisSel(){
 }
 function outilCroquis(k, v){
   if (!dessin) return;
-  if (k === 'couleur'){ dessin.couleur = v; if (dessin.outil === 'gomme') dessin.outil = 'crayon'; }
+  if (k === 'couleur'){
+    dessin.couleur = v; if (dessin.outil === 'gomme') dessin.outil = 'crayon';
+    // un objet saisi prend la couleur (un cran d'Annuler par objet, meme en promenant le selecteur)
+    const o = dessin.outil === 'move' && dessin.selection;
+    if (saisissable(o) && o.c !== v){ souvenir('couleur' + o.n); o.c = v; dessin.sale = true; rendreCroquis(); }
+  }
   else if (k === 'largeur'){ dessin.largeur = v; dessin.outil = 'crayon'; }
   else if (k === 'objet') dessin.outil = dessin.outil === v ? 'crayon' : v;
   else if (k === 'move') dessin.outil = dessin.outil === 'move' ? 'crayon' : 'move';
@@ -4349,6 +4406,8 @@ function majOutils(){
   $('ddecor').innerHTML = ICONES.decor; $('dsauver').innerHTML = ICONES.sauver; $('dsuppr').innerHTML = ICONES.corbeille;
   $('dconseil').textContent =
     o === 'perso' ? 'Posez, puis tirez dans la direction du regard ; un nom peut suivre.' :
+    o === 'ponct' ? 'Posez la point light : elle prend la couleur choisie. Pour la changer ensuite : Déplacer, touchez-la, puis une pastille.' :
+    o === 'lum' ? 'Posez, puis tirez dans la direction visée. Le losange (outil Déplacer) ouvre ou referme les volets.' :
     o === 'soleil' ? 'Posez le soleil du côté d’où il vient, puis tirez vers où va sa lumière.' :
     OBJ_POSE.includes(o) ? 'Posez, puis tirez dans la direction visée.' :
     o === 'cote' ? 'Tirez la flèche d’un point à l’autre, puis tapez la mesure.' :

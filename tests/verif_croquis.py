@@ -206,6 +206,36 @@ with Banc(8786, 9371) as banc:
     tirer((0.80, 0.20), (0.70, 0.35))
     s = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.t, o.a > 0]; })()")
     essais.verifier('le soleil se pose, tourne vers ou va sa lumiere', s, ['soleil', True])
+
+    # -- la point light prend la couleur choisie ; saisie, une autre pastille la recolore (et Annuler revient)
+    banc.js("outilCroquis('couleur', '#4f8fd6'); outilCroquis('objet', 'ponct')")
+    tirer((0.30, 0.70), (0.30, 0.70))
+    s = banc.js("(() => { const o = dessin.objets[dessin.objets.length - 1]; return [o.t, o.c]; })()")
+    essais.verifier('la point light se pose dans la couleur choisie', s, ['ponct', '#4f8fd6'])
+    banc.js("outilCroquis('move')")
+    tirer((0.30, 0.70), (0.30, 0.70))
+    banc.js("outilCroquis('couleur', '#e8675e')")
+    essais.verifier('saisie, elle prend la pastille touchee', banc.js("dessin.selection && dessin.selection.c"), '#e8675e')
+    banc.js("annulerTrait()")
+    essais.verifier('Annuler lui rend sa couleur', banc.js("dessin.objets[dessin.objets.length - 1].c"), '#4f8fd6')
+
+    # -- les volets du projecteur : le losange ouvre ou referme le faisceau, au degre pres
+    banc.js("outilCroquis('objet', 'lum')")
+    tirer((0.50, 0.50), (0.60, 0.50))
+    banc.js("outilCroquis('move')")
+    tirer((0.50, 0.50), (0.50, 0.50))
+    vol = banc.js("(() => { const p = poigneesDe(dessin.selection).find(q => q.volet); return p && ecranDe([p.x, p.y]); })()")
+    essais.verifier('le projecteur saisi a sa poignee de volets', bool(vol), True)
+    o = banc.js("(() => { const o = dessin.selection; return ecranDe([o.x, o.y]); })()")
+    # tirer le losange vers l'axe du faisceau le referme
+    x0, y0 = vol
+    banc.cdp.appel('Input.dispatchMouseEvent', type='mousePressed', x=x0, y=y0, button='left', buttons=1, clickCount=1)
+    for k in range(1, 6):
+        banc.cdp.appel('Input.dispatchMouseEvent', type='mouseMoved', x=x0, y=y0 + (o[1] - y0) * k / 6, button='left', buttons=1)
+    banc.cdp.appel('Input.dispatchMouseEvent', type='mouseReleased', x=x0, y=y0 + (o[1] - y0) * 5 / 6, button='left', buttons=0, clickCount=1)
+    time.sleep(0.2)
+    bd = banc.js("(() => { const b = dessin.selection.bd; return [b != null && b < VOLET_DEF, b >= VOLET_MIN, Math.abs(b * 180 / Math.PI - Math.round(b * 180 / Math.PI)) < 1e-6]; })()")
+    essais.verifier('tirer le losange vers l axe referme les volets, au degre pres', bd, [True, True, True])
     banc.js("fermerCroquis()")
 
     essais.exceptions(banc)
