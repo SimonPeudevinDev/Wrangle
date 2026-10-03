@@ -94,7 +94,6 @@
   <div class="dtete">
     <button type="button" class="ico" onclick="fermerCroquis(true)" aria-label="Fermer">&#8592;</button>
     <div class="dtitre"><b></b><span></span></div>
-    <div class="deja" id="croq-deja" hidden></div>
     <div class="dzoomb">
       <button type="button" class="ico" onclick="zoomCroquis(1 / 1.25)" aria-label="Réduire" title="Réduire (Ctrl + molette)">&minus;</button>
       <button type="button" class="dzoom" id="dzoom" onclick="zoomCroquis(null)" title="Revenir à la vue entière, la feuille droite">100 %</button>
@@ -103,6 +102,7 @@
     </div>
     <button type="button" class="btn sm" onclick="choisirFond()" title="Plan du décor"><span class="long">Plan du décor</span><span class="court">Décor</span></button>
     <button type="button" class="btn sm p" onclick="enregistrerCroquis()">Enregistrer</button>
+    <button type="button" class="ico dsuppr" id="dsuppr" onclick="supprimerCroquisSel()" aria-label="Supprimer" title="Supprimer ce qui est sélectionné (sans sélection : tout effacer)"></button>
   </div>
   <div class="dpal" id="dpal"></div>
   <div class="dzone" id="dzone" onwheel="moletteCroquis(event)">
@@ -1005,8 +1005,15 @@ const texteDessine = l => l.length ? l.join(' et ') + (l.length > 1 ? ' modifien
 function majDejaCroquis(){
   // appelee des le demarrage, avant meme que l'editeur (dessin) soit declare : elle ne doit rien arreter
   try{
-    const z = $('croq-deja');
-    if (z){ const t = dessin ? texteDessine(quiDessine(dessin.planId)) : ''; z.textContent = t; z.hidden = !t; }
+    // l'editeur ouvert : une fenetre pour qui dessine deja ce schema, ou s'y met pendant qu'on dessine ;
+    // une seule fois par personne, et jamais par-dessus une autre question (elle attend la suivante)
+    if (dessin && dessin.prevenus && !DLG.resoudre){
+      const neufs = quiDessine(dessin.planId).filter(n => !dessin.prevenus.has(n));
+      if (neufs.length){
+        neufs.forEach(n => dessin.prevenus.add(n));
+        prevenir(texteDessine(neufs), { detail: 'Vous pouvez dessiner aussi, mais le dernier enregistré l’emporte.' });
+      }
+    }
     document.querySelectorAll('.croq-deja[data-plan]').forEach(e => { const t = texteDessine(quiDessine(e.dataset.plan)); e.textContent = t; e.hidden = !t; });
   }catch(e){}
 }
@@ -3425,8 +3432,9 @@ function ouvrirCroquis(id, i){
   chargerImage(fondDecor(lieuFond(p))).catch(() => null).then(img => {
     dessin = etatCroquis(p, img, i);
     dessin.rot = UI.rotCroquis || 0;   // le sens de la feuille choisi sur cet appareil
+    // qui le dessine deja : une fenetre le dit (majDejaCroquis), une fois par personne
+    dessin.prevenus = new Set();
     envoyerPresence(); majDejaCroquis();
-    { const l = quiDessine(p.id); if (l.length) toast(texteDessine(l) + ' : le dernier enregistré l’emporte'); }
     // l'editeur a sa marque dans l'historique : le Retour du telephone le ferme (en enregistrant), pas la fiche
     try{ if (!(history.state && history.state.dessin)) history.pushState(Object.assign({}, history.state, { dessin: 1 }), ''); }catch(e){}
     const v = $('voile-dessin');
@@ -3546,7 +3554,7 @@ function moletteCroquis(e){
 }
 /* Deux doigts sur le canevas : on pince pour zoomer, on tourne pour tourner la feuille,
    le trait en cours est abandonne. La rotation ne part qu'au-dela de quelques degres
-   (un pincement seul ne fait pas trembler la feuille) et se colle aux quarts de tour. */
+   (un pincement seul ne fait pas trembler la feuille) et se recolle a 0° quand on l'y ramene. */
 const doigts = new Map();
 let pince = null;
 const SEUIL_TOUR = 12, AIMANT_TOUR = 10;
@@ -3571,10 +3579,9 @@ function doigtBouge(e){
     // passe le seuil, la feuille part d'ou elle etait : pas de saut
     if (!pince.tourne && Math.abs(da) > SEUIL_TOUR){ pince.tourne = true; pince.a0 += Math.sign(da) * SEUIL_TOUR; }
     if (pince.tourne){
-      let r = pince.r0 + ((angleDoigts(a, b) - pince.a0) % 360 + 540) % 360 - 180;
-      const q = Math.round(r / 90) * 90;
-      if (Math.abs(r - q) < AIMANT_TOUR) r = q;
-      dessin.rot = (r % 360 + 360) % 360;
+      // l'aimant ne joue qu'au retour a l'origine : la feuille droite, a 0°
+      const r = ((pince.r0 + ((angleDoigts(a, b) - pince.a0) % 360 + 540) % 360 - 180) % 360 + 360) % 360;
+      dessin.rot = Math.min(r, 360 - r) < AIMANT_TOUR ? 0 : r;
     }
     tailleCroquis({ x:(a.x + b.x) / 2, y:(a.y + b.y) / 2, pt:pince.pt });
   }
@@ -4251,12 +4258,13 @@ function majOutils(){
     `<i class="dsep"></i>` +
     `<button type="button" class="btn sm${crayon ? ' p' : ''}" onclick="outilCroquis('crayon')">${ICONES.crayon} Crayon</button>` +
     `<button type="button" class="btn sm${o === 'main' ? ' p' : ''}" onclick="outilCroquis('main')" title="Déplacer la vue (ou barre d’espace + souris, ou deux doigts)">Main</button>`;
-  // la derniere ligne : quatre icones sous le pouce, ce qui revient le plus en retouchant un croquis
+  // la derniere ligne : trois icones sous le pouce, ce qui revient le plus en retouchant un croquis ;
+  // la corbeille, elle, est en haut a droite, loin des doigts qui dessinent
   $('dactions').innerHTML =
     `<button type="button" class="dact${o === 'move' ? ' on' : ''}" onclick="outilCroquis('move')" title="Déplacer, tourner, agrandir" aria-label="Déplacer">${ICONES.deplacer}</button>` +
     `<button type="button" class="dact${o === 'gomme' ? ' on' : ''}" onclick="outilCroquis('gomme')" title="Gomme" aria-label="Gomme">${ICONES.gomme}</button>` +
-    `<button type="button" class="dact d" onclick="supprimerCroquisSel()" title="Supprimer ce qui est sélectionné (sans sélection : tout effacer)" aria-label="Supprimer">${ICONES.corbeille}</button>` +
     `<button type="button" class="dact" onclick="annulerTrait()" title="Défaire le dernier geste : tracé, objet, gomme, déplacement, rotation, suppression" aria-label="Annuler">${ICONES.annuler}</button>`;
+  $('dsuppr').innerHTML = ICONES.corbeille;
   $('dconseil').textContent =
     o === 'perso' ? 'Posez, puis tirez dans la direction du regard ; un nom peut suivre.' :
     o === 'soleil' ? 'Posez le soleil du côté d’où il vient, puis tirez vers où va sa lumière.' :

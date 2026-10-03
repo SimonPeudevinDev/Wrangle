@@ -58,8 +58,10 @@ with Banc(8797, 9382) as banc:
     essais.verifier('sous la feuille de travers, le doigt touche le bon point', all(abs(v - w) <= 1 for v, w in zip(juste, [300, 200])), True)
 
     r = banc.js("geste([[20, 100], [50, 100], [72, 100]])")
-    essais.verifier('a 2 degres d un quart de tour : la feuille s y colle', r['rot'], 90)
-    essais.verifier('reposee droite : l appareil s en souvient', banc.js('UI.rotCroquis'), 90)
+    essais.verifier('a 2 degres de 90 : pas d aimant, la feuille reste a 88', round(r['rot']), 88)
+    r = banc.js("geste([[-20, 100], [-60, 100], [-98, 100]])")
+    essais.verifier('ramenee a 2 degres de l origine : la feuille se recolle a 0', r['rot'], 0)
+    essais.verifier('reposee droite : l appareil garde 0', banc.js('UI.rotCroquis'), 0)
 
     banc.js("dessin.rot = 37; pivoterCroquis()")
     essais.verifier('le bouton pivoter repart du quart de tour suivant', banc.js('dessin.rot'), 90)
@@ -102,19 +104,29 @@ with Banc(8797, 9382) as banc:
     essais.verifier('le coin du bloc tire sa largeur et sa hauteur, autour du centre', r, [300, 300, 700, 500])
     essais.verifier('annuler rend le bloc d avant', banc.js("annulerTrait(); (o => [o.x1, o.x2])(dessin.objets.find(x => x.t === 'bloc'))"), [400, 600])
 
-    # -- la derniere ligne : quatre icones, deplacer, gomme, supprimer, annuler
-    essais.verifier('la derniere ligne porte quatre icones',
+    # -- la derniere ligne : trois icones, deplacer, gomme, annuler ; la corbeille en haut a droite
+    essais.verifier('la derniere ligne porte trois icones',
                     banc.js("[...document.querySelectorAll('#dactions .dact')].map(b => b.getAttribute('aria-label'))"),
-                    ['Déplacer', 'Gomme', 'Supprimer', 'Annuler'])
+                    ['Déplacer', 'Gomme', 'Annuler'])
     essais.verifier('elle est sous la barre des couleurs',
                     banc.js("$('dactions').getBoundingClientRect().top >= $('doutils').getBoundingClientRect().bottom - 1"), True)
+    essais.verifier('la corbeille est le dernier bouton de l en-tete, a droite',
+                    banc.js("(t => t.lastElementChild.id === 'dsuppr' && !!t.lastElementChild.querySelector('svg'))(document.querySelector('#voile-dessin .dtete'))"), True)
+    essais.verifier('plus de bandeau dans l en-tete', banc.js("!!document.getElementById('croq-deja')"), False)
     r = banc.js("""(() => { const o = dessin.objets.find(x => x.t === 'cam'), n = dessin.objets.length; dessin.selection = o;
-      document.querySelector('#dactions .dact[aria-label=Supprimer]').click();
+      $('dsuppr').click();
       const apres = [dessin.objets.length === n - 1, dessin.objets.includes(o)];
       annulerTrait(); return apres.concat([dessin.objets.some(x => x.n === o.n)]); })()""")
     essais.verifier('la corbeille retire l objet saisi, Annuler le rend', r, [True, False, True])
     banc.js("document.querySelector('#dactions .dact[aria-label=Gomme]').click()")
     essais.verifier('l icone de la gomme s allume', banc.js("[dessin.outil, document.querySelector('#dactions .dact[aria-label=Gomme]').classList.contains('on')]"), ['gomme', True])
+
+    # -- quelqu'un d'autre ouvre ce schema : une fenetre le dit, une seule fois
+    banc.js("RESEAU.presence.push({ client:'autre-appareil', nom:'Simon', actif:'croquis:' + dessin.planId }); majDejaCroquis()")
+    essais.verifier('une fenetre : Simon modifie deja ce schema',
+                    [banc.js("$('dlg').hidden"), banc.js("$('dlg-titre').textContent")], [False, 'Simon modifie déjà ce schéma'])
+    banc.js("$('dlg-oui').click(); majDejaCroquis()")
+    essais.verifier('lue, elle ne revient pas', banc.js("$('dlg').hidden"), True)
 
     essais.exceptions(banc)
 essais.bilan()
