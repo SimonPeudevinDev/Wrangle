@@ -67,5 +67,40 @@ with Banc(8797, 9382) as banc:
     banc.js("dessin.rot = 37; zoomCroquis(null)")
     essais.verifier('100 % : la feuille revient droite, en vue entiere', [banc.js('dessin.rot'), banc.js('dessin.zoom'), banc.js("$('dzoom').textContent")], [90, 1, '100 %'])
 
+    # -- les objets : chacun a son anneau pour tourner et son carre pour la taille
+    banc.js("""
+      outilCroquis('move');
+      window.tirer = (o, quoi, vers) => {
+        dessin.selection = o;
+        const p = poigneesDe(o).find(q => q[quoi]), ev = (x, y) => ({ pointerId:9, button:0, buttons:1, clientX:0, clientY:0, preventDefault(){}, currentTarget:{ setPointerCapture(){} } });
+        const garde = pointCroquis; pointCroquis = () => [p.x, p.y]; debutTrait(ev());
+        pointCroquis = () => vers; mouvTrait(ev()); pointCroquis = garde; finTrait(ev());
+      };
+    """)
+    for t in ['bloc', 'rond', 'trajet', 'trait', 'txt', 'cam']:
+        r = banc.js("""(() => {
+          const t = '%s', n = ++dessin.seq;
+          const o = t === 'trait' ? { c:'#000', w:3, n, pts:[[400,400],[600,400]] }
+                  : t === 'trajet' ? { t, n, pts:[[400,400],[500,420],[600,400]] }
+                  : t === 'txt' ? { t, n, x:400, y:400, txt:'Hello' }
+                  : t === 'cam' ? { t, n, x:500, y:400, a:0 }
+                  : { t, n, x1:400, y1:350, x2:600, y2:450 };
+          (t === 'trait' ? dessin.traits : dessin.objets).push(o);
+          const h = poigneesDe(o);
+          return { rot: h.some(q => q.rot), taille: h.some(q => q.taille) }; })()""" % t)
+        essais.verifier(t + ' : un anneau pour tourner, un carre pour la taille', [r['rot'], r['taille']], [True, True])
+
+    r = banc.js("""(() => { const o = dessin.traits[dessin.traits.length - 1]; tirer(o, 'rot', [800, 410]);
+      return o.pts.map(q => q.map(Math.round)); })()""")
+    essais.verifier('le trait tourne d un quart de tour autour de son centre (cran a 45 degres)', r, [[500, 300], [500, 500]])
+    r = banc.js("""(() => { const o = dessin.traits[dessin.traits.length - 1]; const p = poigneesDe(o).find(q => q.taille);
+      const d = Math.hypot(p.x - 500, p.y - 400); tirer(o, 'taille', [500 + (p.x - 500) * 2, 400 + (p.y - 400) * 2]);
+      return o.pts.map(q => q.map(Math.round)); })()""")
+    essais.verifier('le trait double de taille', r, [[500, 200], [500, 600]])
+    r = banc.js("""(() => { const o = dessin.objets.find(x => x.t === 'bloc'); tirer(o, 'taille', [700, 300]);
+      return [o.x1, o.y1, o.x2, o.y2]; })()""")
+    essais.verifier('le coin du bloc tire sa largeur et sa hauteur, autour du centre', r, [300, 300, 700, 500])
+    essais.verifier('annuler rend le bloc d avant', banc.js("annulerTrait(); (o => [o.x1, o.x2])(dessin.objets.find(x => x.t === 'bloc'))"), [400, 600])
+
     essais.exceptions(banc)
 essais.bilan()

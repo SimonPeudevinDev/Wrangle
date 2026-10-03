@@ -3544,7 +3544,7 @@ function moletteCroquis(e){
    (un pincement seul ne fait pas trembler la feuille) et se colle aux quarts de tour. */
 const doigts = new Map();
 let pince = null;
-const SEUIL_TOUR = 12, AIMANT_TOUR = 6;
+const SEUIL_TOUR = 12, AIMANT_TOUR = 10;
 const angleDoigts = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
 function doigtPose(e){
   doigts.set(e.pointerId, { x:e.clientX, y:e.clientY });
@@ -3788,7 +3788,7 @@ function rendreCroquis(cv){
     g.stroke();
   });
   dessin.objets.concat(enCours && enCours.t ? [enCours] : []).forEach(o => dessinerObjet(g, o, k, u));
-  if (!cv && dessin.outil === 'move' && dessin.selection && dessin.objets.includes(dessin.selection)) dessinerPoignees(g, dessin.selection, k);
+  if (!cv && dessin.outil === 'move' && saisissable(dessin.selection)) dessinerPoignees(g, dessin.selection, k);
 }
 /* Les poignees de l'objet saisi : un anneau au bout d'un bras pour tourner ce qui
    s'oriente, un anneau a chaque bout pour ce qui se tire d'un point a l'autre. */
@@ -3797,7 +3797,10 @@ function rendreCroquis(cv){
 const MESURE_TXT = document.createElement('canvas').getContext('2d');
 function largeurTexte(t){ MESURE_TXT.font = '700 40px Figtree, "Segoe UI", sans-serif'; return MESURE_TXT.measureText(String(t || '')).width; }
 /* le centre d'un objet : son point pour ce qui se pose, le milieu pour un bloc ou un rond */
-const centreObjet = o => OBJ_RECT.includes(o.t) ? [(o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2] : [o.x, o.y];
+const centreObjet = o => OBJ_RECT.includes(o.t) ? [(o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2]
+  : o.pts ? (b => [b.cx, b.cy])(boitePts(o.pts)) : [o.x, o.y];
+/* ce qui se saisit avec ses poignees : un objet, ou un trait de crayon */
+const saisissable = o => !!o && (dessin.objets.includes(o) || dessin.traits.includes(o));
 const BRAS = { cam:215, chrono:85, lum:200, soleil:200, perso:70 };
 /* la poignee carree de la taille : de cote, a cette distance de l'objet (a sa taille d'origine) */
 const PORTEE_TAILLE = { txt:50, cam:60, chrono:55, lum:60, soleil:60, perso:55, table:85, chaise:40 };
@@ -3818,13 +3821,28 @@ function poigneesDe(o){
             { x: o.x + Math.cos(b) * t, y: o.y + Math.sin(b) * t, taille:true }];
   }
   if (OBJ_RECT.includes(o.t)){
-    // un bloc, un rond : l'anneau au bout d'un bras, juste au-dela de son bord
-    const [cx, cy] = centreObjet(o), l = Math.max(Math.abs(o.x2 - o.x1), Math.abs(o.y2 - o.y1)) / 2 + 45 * dessin.w / 1600, a = o.a || 0;
-    return [{ x: cx + Math.cos(a) * l, y: cy + Math.sin(a) * l, rot:true }];
+    // un bloc, un rond : l'anneau au bout d'un bras, juste au-dela de son bord ; le carre a son coin
+    // (tire, il change la largeur et la hauteur autour du centre)
+    const u = dessin.w / 1600, [cx, cy] = centreObjet(o), hw = Math.abs(o.x2 - o.x1) / 2, hh = Math.abs(o.y2 - o.y1) / 2;
+    const l = Math.max(hw, hh) + 45 * u, a = o.a || 0, lx = hw + 14 * u, ly = -hh - 14 * u;
+    return [{ x: cx + Math.cos(a) * l, y: cy + Math.sin(a) * l, rot:true },
+            { x: cx + lx * Math.cos(a) - ly * Math.sin(a), y: cy + lx * Math.sin(a) + ly * Math.cos(a), taille:true }];
   }
   if (OBJ_SEG.includes(o.t)) return [{ x: o.x1, y: o.y1, bout:1 }, { x: o.x2, y: o.y2, bout:2 }]
     .concat(o.t === 'fleche' ? [Object.assign({ courbe:true }, milieuFleche(o))] : []);
+  if (o.pts && o.pts.length > 1){
+    // un trait de crayon, une fleche libre : l'anneau au-dessus, le carre au coin d'en bas (loin de l'anneau,
+    // meme sur un trait tout droit)
+    const u = dessin.w / 1600, b = boitePts(o.pts);
+    return [{ x: b.cx, y: b.cy - b.hh - 45 * u, rot:true }, { x: b.cx + b.hw + 20 * u, y: b.cy + b.hh + 20 * u, taille:true }];
+  }
   return [];
+}
+/* le rectangle (droit) que couvrent des points : son centre et ses demi-cotes */
+function boitePts(l){
+  const xs = l.map(q => q[0]), ys = l.map(q => q[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, hw: (x1 - x0) / 2, hh: (y1 - y0) / 2 };
 }
 /* La fleche libre : sa longueur, le trajet sans ses derniers `d` points de feuille (la pointe
    les couvre), le point a `d` de l'arrivee (d'ou part la pointe), et le trace simplifie
@@ -3883,7 +3901,7 @@ function dessinerPoignees(g, o, k){
   g.restore();
 }
 function poigneeSous(pt){
-  const o = dessin.selection; if (!o || !dessin.objets.includes(o)) return null;
+  const o = dessin.selection; if (!saisissable(o)) return null;
   const r = 18 * parPixel();
   return poigneesDe(o).find(p => Math.hypot(p.x - pt[0], p.y - pt[1]) <= r) || null;
 }
@@ -3914,9 +3932,19 @@ function debutTrait(e){
   if (o === 'gomme'){ dessin.courant = { gomme:true }; gommer(pt); return; }
   if (o === 'move'){
     const pg = poigneeSous(pt);
-    if (pg){ dessin.courant = pg.rot ? { tourne: dessin.selection } : pg.taille ? { taille: dessin.selection } : pg.courbe ? { courbe: dessin.selection } : { bout: dessin.selection, quel: pg.bout }; return; }
+    const sel = dessin.selection;
+    // un trait de crayon, une fleche libre n'ont pas d'angle a eux : on tourne et on agrandit
+    // leurs points, depuis ceux du debut du geste, autour du centre de ce qu'ils couvrent
+    if (pg && sel.pts && (pg.rot || pg.taille)){
+      const [cx, cy] = centreObjet(sel);
+      dessin.courant = { [pg.rot ? 'tournePts' : 'taillePts']: sel, base: sel.pts.map(q => q.slice()), cx, cy,
+                         a0: Math.atan2(pt[1] - cy, pt[0] - cx), d0: Math.max(1, Math.hypot(pt[0] - cx, pt[1] - cy)) };
+      return;
+    }
+    if (pg && pg.taille && OBJ_RECT.includes(sel.t)){ dessin.courant = { tailleRect: sel }; return; }
+    if (pg){ dessin.courant = pg.rot ? { tourne: sel } : pg.taille ? { taille: sel } : pg.courbe ? { courbe: sel } : { bout: sel, quel: pg.bout }; return; }
     const s = saisir(pt);
-    dessin.selection = s && s.t ? s : null;
+    dessin.selection = s || null;
     dessin.courant = s ? { bouge:s, dernier:pt } : null;
     rendreCroquis(); return;
   }
@@ -3984,6 +4012,27 @@ function mouvTrait(e){
     if (a === (o.a || 0)) return;
     retenir(c); o.a = a; c.deplace = true; rendreCroquis(); return;
   }
+  if (c && (c.tournePts || c.taillePts)){
+    // le tour garde les crans des objets (aimante tous les 45°, Alt : libre) ; la taille, par pas de 5 %
+    const o = c.tournePts || c.taillePts, dx = pt[0] - c.cx, dy = pt[1] - c.cy;
+    let f = 1, da = 0;
+    if (c.tournePts){ const d0 = Math.atan2(dy, dx) - c.a0; da = e.altKey ? d0 : aimanterAngle(Math.atan2(Math.sin(d0), Math.cos(d0))); }
+    else f = Math.round(Math.min(TAILLE_MAX, Math.max(TAILLE_MIN, Math.hypot(dx, dy) / c.d0)) * 20) / 20;
+    if (da === c.da && f === c.f) return;
+    c.da = da; c.f = f;
+    const cs = Math.cos(da) * f, sn = Math.sin(da) * f;
+    retenir(c);
+    o.pts = c.base.map(q => { const x = q[0] - c.cx, y = q[1] - c.cy; return [Math.round((c.cx + x * cs - y * sn) * 10) / 10, Math.round((c.cy + x * sn + y * cs) * 10) / 10]; });
+    c.deplace = true; rendreCroquis(); return;
+  }
+  if (c && c.tailleRect){
+    // le coin tire : la largeur et la hauteur, dans le sens du bloc, autour de son centre
+    const o = c.tailleRect, [cx, cy] = centreObjet(o), a = -(o.a || 0), dx = pt[0] - cx, dy = pt[1] - cy, m = 8 * dessin.w / 1600;
+    const hw = Math.max(m, Math.abs(dx * Math.cos(a) - dy * Math.sin(a))), hh = Math.max(m, Math.abs(dx * Math.sin(a) + dy * Math.cos(a)));
+    retenir(c);
+    o.x1 = cx - hw; o.x2 = cx + hw; o.y1 = cy - hh; o.y2 = cy + hh;
+    c.deplace = true; rendreCroquis(); return;
+  }
   if (c && c.taille){
     // eloigner la poignee carree agrandit l'objet, la rapprocher le rapetisse (par pas de 5 %)
     const o = c.taille, base = (PORTEE_TAILLE[o.t] || 60) * dessin.w / 1600;
@@ -4040,7 +4089,7 @@ function finTrait(e){
   if (!dessin || !dessin.courant) return;
   const c = dessin.courant; dessin.courant = null;
   if (c.pan || c.gomme) return;
-  if (c.bouge || c.tourne || c.taille || c.bout || c.courbe){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
+  if (c.bouge || c.tourne || c.taille || c.bout || c.courbe || c.tournePts || c.taillePts || c.tailleRect){ if (c.deplace){ dessin.sale = true; } rendreCroquis(); return; }
   if (c.pts) rejoindreMain(c);
   if (OBJ_TRACE.includes(c.t)){
     const u = dessin.w / 1600;
@@ -4146,7 +4195,7 @@ function annulerTrait(){
   const s = dessin.histo.pop(); if (!s) return;
   const sel = dessin.selection;
   dessin.traits = s.traits; dessin.objets = s.objets;
-  dessin.selection = sel ? dessin.objets.find(o => o.n === sel.n) || null : null;
+  dessin.selection = sel ? dessin.objets.concat(dessin.traits).find(o => o.n === sel.n) || null : null;
   dessin.sale = true; rendreCroquis();
 }
 function viderCroquis(){
@@ -4204,7 +4253,7 @@ function majOutils(){
     o === 'rond' ? 'Tirez d’un bord à l’autre ; le rond s’inscrit dedans.' :
     OBJ_RECT.includes(o) ? 'Tirez d’un coin à l’autre.' :
     o === 'txt' ? 'Touchez l’endroit du texte.' :
-    o === 'move' ? 'Saisissez et glissez ; l’anneau au bout du bras fait tourner (la molette aussi), le carré agrandit ou rapetisse (Maj + molette aussi), les bouts d’un trait se déplacent, le point du milieu courbe une flèche.' :
+    o === 'move' ? 'Saisissez et glissez (un objet, un texte, un trait) ; l’anneau au bout du bras fait tourner (la molette aussi), le carré agrandit ou rapetisse (Maj + molette aussi) — sur un bloc ou un rond, il tire sa largeur et sa hauteur —, les bouts d’un trait se déplacent, le point du milieu courbe une flèche.' :
     o === 'main' ? 'Faites glisser la vue. Deux doigts ou la barre d’espace font pareil.' :
     o === 'gomme' ? 'Touchez un trait ou un objet pour le retirer.' : '';
 }
