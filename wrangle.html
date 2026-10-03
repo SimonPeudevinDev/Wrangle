@@ -97,7 +97,7 @@
     <div class="deja" id="croq-deja" hidden></div>
     <div class="dzoomb">
       <button type="button" class="ico" onclick="zoomCroquis(1 / 1.25)" aria-label="Réduire" title="Réduire (Ctrl + molette)">&minus;</button>
-      <button type="button" class="dzoom" id="dzoom" onclick="zoomCroquis(null)" title="Revenir à la vue entière">100 %</button>
+      <button type="button" class="dzoom" id="dzoom" onclick="zoomCroquis(null)" title="Revenir à la vue entière, la feuille droite">100 %</button>
       <button type="button" class="ico" onclick="zoomCroquis(1.25)" aria-label="Agrandir" title="Agrandir (Ctrl + molette)">+</button>
       <button type="button" class="ico" onclick="pivoterCroquis()" aria-label="Pivoter la feuille" title="Pivoter la feuille d'un quart de tour (la vue seule, le dessin ne bouge pas)">&#8635;</button>
     </div>
@@ -3487,32 +3487,42 @@ function fermerCroquis(enregistrer){
 
 /* Le canevas garde la resolution du fond (ou 1600 x 1200) et s'affiche a
    l'echelle dans la zone disponible. */
-/* ancre : un point de l'ecran (clientX/Y) qui doit rester sous le doigt apres le zoom */
+/* ancre : un point de l'ecran (clientX/Y) qui doit rester sous le doigt apres le zoom ;
+   ancre.pt, le point de la feuille a y garder (sinon celui qui s'y trouve maintenant).
+   La feuille tourne a n'importe quel angle (dessin.rot, en degres) : la vue seule. */
 function tailleCroquis(ancre){
   if (!dessin) return;
-  const c = $('croquis'), zone = $('dzone'), z = zone.getBoundingClientRect(), rot = dessin.rot || 0, debout = rot % 180 !== 0;
-  // la feuille tournee d'un quart de tour echange sa largeur et sa hauteur a l'ecran
+  const c = $('croquis'), zone = $('dzone'), z = zone.getBoundingClientRect(), rot = dessin.rot || 0;
+  const pt = ancre && (ancre.pt || feuilleSous(ancre.x, ancre.y));
+  // la vue entiere se cale sur le quart de tour le plus proche : tourner du bout des doigts ne fait pas sauter le zoom
+  const debout = Math.round(rot / 90) % 2 !== 0;
   const lw = debout ? dessin.h : dessin.w, lh = debout ? dessin.w : dessin.h;
   const fit = Math.min((z.width - 24) / lw, (z.height - 24) / lh), k = fit * (dessin.zoom || 1);
-  let fx = .5, fy = .5, sx = z.width / 2, sy = z.height / 2;
-  if (ancre){
-    const r = $('dpivot').getBoundingClientRect();
-    fx = ancre.fx != null ? ancre.fx : (ancre.x - r.left) / r.width; fy = ancre.fy != null ? ancre.fy : (ancre.y - r.top) / r.height;
-    sx = ancre.x - z.left; sy = ancre.y - z.top;
-  }
   c.width = dessin.w; c.height = dessin.h;
-  const cw = Math.floor(dessin.w * k), ch = Math.floor(dessin.h * k), dw = debout ? ch : cw, dh = debout ? cw : ch;
+  const a = rot * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+  // le cadre qui contient la feuille tournee
+  const cw = Math.floor(dessin.w * k), ch = Math.floor(dessin.h * k);
+  const dw = Math.ceil(cw * Math.abs(cs) + ch * Math.abs(sn)), dh = Math.ceil(cw * Math.abs(sn) + ch * Math.abs(cs));
   c.style.width = cw + 'px'; c.style.height = ch + 'px';
   const pv = $('dpivot'); pv.style.width = dw + 'px'; pv.style.height = dh + 'px';
   c.style.left = (dw - cw) / 2 + 'px'; c.style.top = (dh - ch) / 2 + 'px'; c.style.transform = rot ? 'rotate(' + rot + 'deg)' : '';
+  // ou tombe le point tenu dans le cadre, et ou il doit etre dans la zone
+  let px = dw / 2, py = dh / 2, sx = z.width / 2, sy = z.height / 2;
+  if (pt){
+    const kk = cw / dessin.w, ox = (pt[0] - dessin.w / 2) * kk, oy = (pt[1] - dessin.h / 2) * kk;
+    px = dw / 2 + ox * cs - oy * sn; py = dh / 2 + ox * sn + oy * cs;
+    sx = ancre.x - z.left; sy = ancre.y - z.top;
+  }
   // le canevas commence a 12 px du bord de la zone quand il deborde
-  zone.scrollLeft = Math.max(0, fx * dw + 12 - sx); zone.scrollTop = Math.max(0, fy * dh + 12 - sy);
-  const e = $('dzoom'); if (e) e.textContent = Math.round((dessin.zoom || 1) * 100) + ' %';
+  zone.scrollLeft = Math.max(0, px + 12 - sx); zone.scrollTop = Math.max(0, py + 12 - sy);
+  const e = $('dzoom'); if (e) e.textContent = Math.round((dessin.zoom || 1) * 100) + ' %' + (rot % 90 ? ' · ' + Math.round(rot) + '°' : '');
   rendreCroquis();
 }
+/* Revenir a la vue entiere remet aussi la feuille droite, dans le sens choisi sur l'appareil. */
 function zoomCroquis(facteur, ancre){
   if (!dessin) return;
   dessin.zoom = facteur == null ? 1 : Math.max(.5, Math.min(6, (dessin.zoom || 1) * facteur));
+  if (facteur == null) dessin.rot = UI.rotCroquis || 0;
   tailleCroquis(ancre);
 }
 /* Ctrl + molette (ou le pincement d'un pave tactile) zoome autour du curseur. */
@@ -3529,16 +3539,20 @@ function moletteCroquis(e){
     dessin.sale = true; rendreCroquis();
   }
 }
-/* Deux doigts sur le canevas : on pince pour zoomer, le trait en cours est abandonne. */
+/* Deux doigts sur le canevas : on pince pour zoomer, on tourne pour tourner la feuille,
+   le trait en cours est abandonne. La rotation ne part qu'au-dela de quelques degres
+   (un pincement seul ne fait pas trembler la feuille) et se colle aux quarts de tour. */
 const doigts = new Map();
 let pince = null;
+const SEUIL_TOUR = 12, AIMANT_TOUR = 6;
+const angleDoigts = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
 function doigtPose(e){
   doigts.set(e.pointerId, { x:e.clientX, y:e.clientY });
   if (doigts.size === 2 && dessin){
-    const [a, b] = [...doigts.values()], r = $('dpivot').getBoundingClientRect();
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    // on garde sous les deux doigts le point du croquis qu'ils tenaient : pincer zoome, glisser deplace
-    pince = { d0: Math.hypot(a.x - b.x, a.y - b.y), z0: dessin.zoom || 1, fx: (mx - r.left) / r.width, fy: (my - r.top) / r.height };
+    const [a, b] = [...doigts.values()];
+    // on garde sous les deux doigts le point du croquis qu'ils tenaient : pincer zoome, tourner tourne, glisser deplace
+    pince = { d0: Math.hypot(a.x - b.x, a.y - b.y), z0: dessin.zoom || 1, a0: angleDoigts(a, b), r0: dessin.rot || 0,
+              tourne: false, pt: feuilleSous((a.x + b.x) / 2, (a.y + b.y) / 2) };
     dessin.courant = null; rendreCroquis();
   }
 }
@@ -3548,10 +3562,25 @@ function doigtBouge(e){
   if (pince && doigts.size === 2){
     const [a, b] = [...doigts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
     dessin.zoom = Math.max(.5, Math.min(6, pince.z0 * d / Math.max(1, pince.d0)));
-    tailleCroquis({ x:(a.x + b.x) / 2, y:(a.y + b.y) / 2, fx:pince.fx, fy:pince.fy });
+    const da = ((angleDoigts(a, b) - pince.a0) % 360 + 540) % 360 - 180;
+    // passe le seuil, la feuille part d'ou elle etait : pas de saut
+    if (!pince.tourne && Math.abs(da) > SEUIL_TOUR){ pince.tourne = true; pince.a0 += Math.sign(da) * SEUIL_TOUR; }
+    if (pince.tourne){
+      let r = pince.r0 + ((angleDoigts(a, b) - pince.a0) % 360 + 540) % 360 - 180;
+      const q = Math.round(r / 90) * 90;
+      if (Math.abs(r - q) < AIMANT_TOUR) r = q;
+      dessin.rot = (r % 360 + 360) % 360;
+    }
+    tailleCroquis({ x:(a.x + b.x) / 2, y:(a.y + b.y) / 2, pt:pince.pt });
   }
 }
-function doigtLeve(e){ doigts.delete(e.pointerId); if (doigts.size < 2) pince = null; }
+function doigtLeve(e){
+  doigts.delete(e.pointerId);
+  if (doigts.size >= 2 || !pince) return;
+  // une feuille reposee droite devient le sens de l'appareil ; un angle de travail reste le temps du croquis
+  if (pince.tourne && dessin && dessin.rot % 90 === 0 && dessin.rot !== (UI.rotCroquis || 0)){ UI.rotCroquis = dessin.rot; ecrireUI(); }
+  pince = null;
+}
 /* la barre d'espace tenue : la vue se deplace a la souris, quel que soit l'outil */
 let espaceTenu = false;
 document.addEventListener('keydown', e => {
@@ -3858,15 +3887,19 @@ function poigneeSous(pt){
   const r = 18 * parPixel();
   return poigneesDe(o).find(p => Math.hypot(p.x - pt[0], p.y - pt[1]) <= r) || null;
 }
-function pointCroquis(e){
-  const r = $('dpivot').getBoundingClientRect(), u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
-  const [a, b] = ({ 90: [v, 1 - u], 180: [1 - u, 1 - v], 270: [1 - v, u] })[dessin.rot || 0] || [u, v];
-  return [Math.round(a * dessin.w), Math.round(b * dessin.h)];
+/* le point de la feuille sous un point de l'ecran, quel que soit l'angle : on part du centre du
+   cadre (celui de la feuille), on defait la rotation, puis l'echelle */
+function feuilleSous(x, y){
+  const r = $('dpivot').getBoundingClientRect(), k = ($('croquis').offsetWidth || 1) / dessin.w, a = (dessin.rot || 0) * Math.PI / 180;
+  const dx = x - r.left - r.width / 2, dy = y - r.top - r.height / 2;
+  return [(dx * Math.cos(a) + dy * Math.sin(a)) / k + dessin.w / 2, (dy * Math.cos(a) - dx * Math.sin(a)) / k + dessin.h / 2];
 }
-/* Pivoter la feuille d'un quart de tour : la vue seule (le dessin garde son sens) ; l'appareil s'en souvient. */
+function pointCroquis(e){ return feuilleSous(e.clientX, e.clientY).map(Math.round); }
+/* Pivoter la feuille d'un quart de tour : la vue seule (le dessin garde son sens) ; l'appareil s'en souvient.
+   Tournee a la main de travers, elle repart du quart de tour suivant. */
 function pivoterCroquis(){
   if (!dessin) return;
-  dessin.rot = ((dessin.rot || 0) + 90) % 360;
+  dessin.rot = (Math.floor((dessin.rot || 0) / 90 + 1e-6) + 1) * 90 % 360;
   UI.rotCroquis = dessin.rot; ecrireUI();
   tailleCroquis();
 }
