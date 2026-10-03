@@ -100,10 +100,12 @@
       <button type="button" class="ico" onclick="zoomCroquis(1.25)" aria-label="Agrandir" title="Agrandir (Ctrl + molette)">+</button>
       <button type="button" class="ico" onclick="pivoterCroquis()" aria-label="Pivoter la feuille" title="Pivoter la feuille d'un quart de tour (la vue seule, le dessin ne bouge pas)">&#8635;</button>
     </div>
-    <!-- a droite, trois icones : le plan du decor, enregistrer, la corbeille (dessinees par majOutils) -->
-    <button type="button" class="ico dicone" id="ddecor" onclick="choisirFond()" aria-label="Plan du décor" title="Plan du décor"></button>
-    <button type="button" class="ico dicone dsauver" id="dsauver" onclick="enregistrerCroquis()" aria-label="Enregistrer" title="Enregistrer"></button>
-    <button type="button" class="ico dicone dsuppr" id="dsuppr" onclick="supprimerCroquisSel()" aria-label="Supprimer" title="Supprimer ce qui est sélectionné (sans sélection : tout effacer)"></button>
+    <!-- a droite, trois icones serrees : le plan du decor, enregistrer, la corbeille (dessinees par majOutils) -->
+    <div class="ddroite">
+      <button type="button" class="ico dicone" id="ddecor" onclick="choisirFond()" aria-label="Plan du décor" title="Plan du décor"></button>
+      <button type="button" class="ico dicone dsauver" id="dsauver" onclick="enregistrerCroquis()" aria-label="Enregistrer" title="Enregistrer"></button>
+      <button type="button" class="ico dicone dsuppr" id="dsuppr" onclick="supprimerCroquisSel()" aria-label="Supprimer" title="Supprimer ce qui est sélectionné (sans sélection : tout effacer)"></button>
+    </div>
   </div>
   <div class="dpal" id="dpal"></div>
   <div class="dzone" id="dzone" onwheel="moletteCroquis(event)">

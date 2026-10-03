@@ -111,7 +111,7 @@ with Banc(8797, 9382) as banc:
     essais.verifier('elle est sous la barre des couleurs',
                     banc.js("$('dactions').getBoundingClientRect().top >= $('doutils').getBoundingClientRect().bottom - 1"), True)
     essais.verifier('la corbeille est le dernier bouton de l en-tete, a droite',
-                    banc.js("(t => t.lastElementChild.id === 'dsuppr' && !!t.lastElementChild.querySelector('svg'))(document.querySelector('#voile-dessin .dtete'))"), True)
+                    banc.js("(t => t.lastElementChild.lastElementChild.id === 'dsuppr' && !!$('dsuppr').querySelector('svg'))(document.querySelector('#voile-dessin .dtete'))"), True)
     essais.verifier('plus de bandeau dans l en-tete', banc.js("!!document.getElementById('croq-deja')"), False)
     r = banc.js("""(() => { const o = dessin.objets.find(x => x.t === 'cam'), n = dessin.objets.length; dessin.selection = o;
       $('dsuppr').click();
