@@ -123,7 +123,8 @@ with Banc(8786, 9371) as banc:
     # -- l'aimant : un mur presque droit se couche a l'horizontale ; un second mur
     #    commence au bout du premier ; avec Alt, a main levee
     banc.js('ouvrirCroquis(DB.plans[2].id)'); time.sleep(0.8)
-    r = banc.js("(() => { const r = $('croquis').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })()")
+    # la feuille a l'ecran : le canevas remplit la zone et la dessine, droite, en vue entiere
+    r = banc.js("(() => { const a = ecranDe([0, 0]), b = ecranDe([dessin.w, dessin.h]); return [a[0], a[1], b[0] - a[0], b[1] - a[1]]; })()")
     ecran = lambda fx, fy: (r[0] + r[2] * fx, r[1] + r[3] * fy)
 
     def tirer(de, a, alt=False):
@@ -184,7 +185,7 @@ with Banc(8786, 9371) as banc:
     # -- le lissage : un trait tremble au crayon en sort plus calme, et finit sous la main
     banc.js("outilCroquis('couleur', '#1c1410'); dessin.outil = 'crayon'; UI.lissage = true; majOutils()")
     tracer([(0.10 + 0.4 * k / 40, 0.45 + (0.012 if k % 2 else -0.012)) for k in range(41)])
-    li = banc.js("""(() => { const p = dessin.traits[dessin.traits.length - 1].pts, h = $('croquis').getBoundingClientRect().height / dessin.h;
+    li = banc.js("""(() => { const p = dessin.traits[dessin.traits.length - 1].pts;
       const ys = p.slice(5, -5).map(q => q[1]); return [Math.max(...ys) - Math.min(...ys), p[p.length - 1][0]]; })()""")
     brut = banc.js("0.024 * dessin.h")
     essais.verifier('le lissage calme le tremblement de moitie au moins', li[0] < brut / 2, True)

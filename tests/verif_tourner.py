@@ -49,13 +49,18 @@ with Banc(8797, 9382) as banc:
     essais.verifier('le point tenu reste sous les doigts (a moins de 2 unites)', r['ecart'] < 2, True)
     essais.verifier('l angle s affiche a cote du zoom', banc.js("$('dzoom').textContent"), '160 % · 28°')
 
-    # un point de la feuille, la ou l'ecran le montre : le canevas tourne en CSS et pointCroquis doit s'accorder
-    juste = banc.js("""
-      (() => { const c = $('croquis'), r = c.getBoundingClientRect(), k = c.offsetWidth / dessin.w, a = dessin.rot * Math.PI / 180;
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2, ox = (300 - dessin.w / 2) * k, oy = (200 - dessin.h / 2) * k;
-        return pointCroquis({ clientX: cx + ox * Math.cos(a) - oy * Math.sin(a), clientY: cy + ox * Math.sin(a) + oy * Math.cos(a) }); })()
-    """)
+    # un point de la feuille, la ou l'ecran le montre : le dessin et le doigt doivent s'accorder
+    juste = banc.js("(q => pointCroquis({ clientX: q[0], clientY: q[1] }))(ecranDe([300, 200]))")
     essais.verifier('sous la feuille de travers, le doigt touche le bon point', all(abs(v - w) <= 1 for v, w in zip(juste, [300, 200])), True)
+    essais.verifier('le canevas garde la taille de la zone, meme zoome (pas de bandes noires)',
+                    banc.js("(c => c.clientWidth === $('dzone').clientWidth && c.width <= c.clientWidth * (devicePixelRatio || 1) + 1)($('croquis'))"), True)
+
+    # en diagonale, la vue entiere ne bascule pas : le zoom reste le meme
+    r = banc.js("""(() => { const k0 = vueCroquis().k, ks = [];
+      for (const d of [30, 44, 46, 60, 89]){ geste([[0, 100], [d, 100]]); ks.push(vueCroquis().k / k0); }
+      return ks.map(x => Math.round(x * 1000) / 1000); })()""")
+    essais.verifier('tourner en diagonale ne zoome pas', r, [1, 1, 1, 1, 1])
+    banc.js("dessin.rot = 28; tailleCroquis()")
 
     r = banc.js("geste([[20, 100], [50, 100], [72, 100]])")
     essais.verifier('a 2 degres de 90 : pas d aimant, la feuille reste a 88', round(r['rot']), 88)

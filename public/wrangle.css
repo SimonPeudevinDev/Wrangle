@@ -821,9 +821,10 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
 .croq-deja{display:inline-block;margin-bottom:10px}
 .deja[hidden],.croq-deja[hidden]{display:none}
 /* la zone defile quand le croquis est zoome ; centre tant qu'il tient */
-.dzone{min-height:0;min-width:0;display:flex;padding:12px;background:var(--surface);touch-action:none;overflow:auto;overscroll-behavior:contain}
-#dpivot{position:relative;flex:none;margin:auto}
-#croquis{display:block;position:absolute;transform-origin:center center;background:#fff;border-radius:4px;box-shadow:0 12px 34px rgba(0,0,0,.45);touch-action:none;cursor:crosshair}
+/* la zone : le canevas la remplit et y dessine la feuille, zoomee et tournee (tailleCroquis) */
+.dzone{position:relative;min-height:0;min-width:0;background:var(--surface);touch-action:none;overflow:hidden;overscroll-behavior:contain}
+#dpivot{position:absolute;inset:0}
+#croquis{display:block;position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
 .dzone.main #croquis{cursor:grab}
 .dzone.main #croquis:active{cursor:grabbing}
 /* le zoom : une seule pastille, moins · pourcentage · plus · pivoter */
