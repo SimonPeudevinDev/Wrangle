@@ -369,6 +369,7 @@ main{padding:0 0 calc(var(--nav) + var(--safe) + 96px)}
 /* « Shot 01 » ; un plan tourne le dit en toutes lettres, en vert */
 .pno{display:inline-flex;align-items:baseline;gap:.28em}
 .pno small{font:inherit;letter-spacing:inherit;color:inherit}   /* « Shot 01 » d'une seule typo */
+.pno small.pno-seq{font:400 13px/1 var(--font);letter-spacing:0;color:var(--dim)}   /* la sequence en petit devant, comme dans la liste du decoupage */
 .ptourne{font:700 11px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--ok);order:1}
 .plan.drop{opacity:.45}
 .plan.drop .pno{text-decoration:line-through}   /* le numero seul : « fusionne dans 01 » reste lisible */
@@ -597,11 +598,11 @@ body.en-rec:has(#voile-dessin:not([hidden])) .fabs{bottom:calc(env(safe-area-ins
    REC qui clignote (net, une fois par seconde), le chrono, le carre pour couper */
 .fab.rec{background:#120b0a;color:#fff;box-shadow:inset 0 0 0 2px var(--ng)}   /* le rouge du site, comme le Moteur */
 .fab.rec:hover{background:#1d1110}
-.fab .rec-point{width:12px;height:12px;border-radius:50%;flex:none;background:var(--ng);box-shadow:0 0 10px 1px rgba(var(--ng-rgb),.8);
+.fab .rec-point,.rec-cam .rec-point{width:12px;height:12px;border-radius:50%;flex:none;background:var(--ng);box-shadow:0 0 10px 1px rgba(var(--ng-rgb),.8);
   animation:rec-clig 1s linear infinite}
 @keyframes rec-clig{0%,48%{opacity:1}52%,96%{opacity:.12}100%{opacity:1}}
-.fab .rec-mot{font-weight:800;letter-spacing:.1em;color:var(--ng)}
-.fab .rec-stop{display:inline-flex;margin-left:6px;opacity:.85}
+.fab .rec-mot,.rec-cam .rec-mot{font-weight:800;letter-spacing:.1em;color:var(--ng)}
+.fab .rec-stop,.rec-cam .rec-stop{display:inline-flex;margin-left:6px;opacity:.85}
 .fab.rec em{opacity:.9;font-variant-numeric:tabular-nums;color:#fff}
 @keyframes rec{
   from{box-shadow:0 0 0 0 rgba(var(--ng-rgb),.55)}
@@ -1781,3 +1782,33 @@ nav button[hidden]{display:none}
 .plan.fusionne .pno{color:var(--tag-orange);text-decoration:none}
 .plan.fusionne .pfusion{color:#1c1410;background:var(--tag-orange);padding:3px 9px;border-radius:var(--rp);font-weight:700}
 .plan.fusionne .pdesc,.plan.fusionne .pctx,.plan.fusionne .pelem,.plan.fusionne .addtake{display:none}
+/* un shot abandonne (kill) : la meme carte a part, en rouge, le numero barre */
+.plan.drop:not(.fusionne){opacity:1;margin:10px -12px 10px -16px;padding:14px 12px 12px 16px;border:1px solid rgba(var(--ng-rgb),.5);border-radius:14px;
+  background:linear-gradient(90deg,rgba(var(--ng-rgb),.16),rgba(var(--ng-rgb),.04) 70%)}
+.plan.drop:not(.fusionne) .pno{color:var(--ng)}
+/* compacte, comme la carte verte du shot termine : le nom, ses etiquettes, le compte des prises */
+.plan.drop:not(.fusionne) .ptourne{color:var(--ng-txt);background:var(--ng);padding:3px 9px;border-radius:var(--rp)}
+.plan.drop:not(.fusionne) .pdesc,.plan.drop:not(.fusionne) .pctx,.plan.drop:not(.fusionne) .pelem,
+.plan.drop:not(.fusionne) .addtake,.plan.drop:not(.fusionne) .viser{display:none}
+.plan.drop:not(.fusionne) .prises-repliees,.plan.drop:not(.fusionne) .prises-replier{margin-top:8px}
+
+/* La presaisie : ce que la Preparation a prevu (mouvement, elements On set) s'affiche en bleu
+   pointille tant que personne ne l'a saisi au tournage ; « Valider » le garde, un clic le change. */
+.champ.prevu{position:relative}
+.champ.prevu .champ-val{color:var(--tag-bleu);font-style:italic;padding-right:84px}
+.champ.prevu .prevu-ok{position:absolute;right:26px;top:10px}
+.prevu-ok{height:30px;padding:0 12px;font-size:12px;color:var(--tag-bleu);border:1px dashed var(--tag-bleu);background:none}
+.prevu-ok:hover{background:color-mix(in srgb, var(--tag-bleu) 14%, transparent)}
+.prevu-note{font-size:12.5px;color:var(--tag-bleu);margin-right:10px;font-style:italic}
+#elems-prevu{display:flex;align-items:center;justify-content:flex-end}
+.el.on.prevu{background:color-mix(in srgb, var(--tag-bleu) 14%, transparent);border:1px dashed var(--tag-bleu);color:var(--tag-bleu)}
+/* la focale prevue au decoupage, rappelee a cote de celle de la prise quand elles different */
+.champ-val .prevu-tag{font-style:italic;font-weight:500;font-size:13px;color:var(--tag-bleu);margin-left:10px}
+.tuile.prevu:not(.on){border:1px dashed var(--tag-bleu);color:var(--tag-bleu)}
+
+/* REC a la place du Moteur, au pied de la fiche du plan qui tourne : le meme bouton camera que la
+   pastille flottante, qui s'efface alors (un seul REC a l'ecran) */
+.btn.rec.rec-cam{background:#120b0a;color:#fff;border-color:var(--ng);box-shadow:inset 0 0 0 1px var(--ng);gap:10px;justify-content:center}
+.btn.rec.rec-cam:hover{background:#1d1110}
+.btn.rec.rec-cam em{opacity:.9;color:#fff}
+body.rec-fiche #fab{display:none}

@@ -35,7 +35,7 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
     essais.verifier('le bilan : ecarts, complements, prises chez un seul', [r['total']['ecarts'], r['total']['complements'], r['total']['seuls']], [2, 4, 1])
     b = r['plans'][0]
     essais.verifier('un seul plan en cause', len(r['plans']), 1)
-    essais.verifier('l etat du plan ne concorde pas', [[e['champ'], [v[1] for v in e['valeurs']]] for e in b['plan_']['ecarts']], [['État', ['Tourné', 'Abandonné']]])
+    essais.verifier('l etat du plan ne concorde pas', [[e['champ'], [v[1] for v in e['valeurs']]] for e in b['plan_']['ecarts']], [['État', ['À tourner', 'Abandonné']]])
     p1 = [t for t in b['prises'] if t['n'] == '1'][0]
     essais.verifier('prise 1 : le statut est un ecart', [[e['champ'], [v[0] + ' ' + v[1] for v in e['valeurs']]] for e in p1['ecarts']], [['Statut', ['Simon OK', 'Alice NG']]])
     essais.verifier('prise 1 : le clip et la carte, seulement chez Simon', sorted(c['champ'] for c in p1['complements']), ['Carte', 'Clip'])
@@ -67,7 +67,7 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
 
     # -- la fusion : Simon fait foi, Alice comble et apporte sa prise 3
     f = banc.js('(() => { const f = fusionRap(sourcesRap()); const p = f.plans[0]; return { etat: p.etat, prises: f.prises.filter(t => t.planId === p.id).map(t => [t.n, t.statut, t.clip, t.carte, t.notes]) }; })()')
-    essais.verifier('l etat du plan reste celui de Simon', f['etat'], 'done')
+    essais.verifier('l etat du plan reste celui de Simon', f['etat'], 'todo')   # des prises ne font pas « Tourne » : il reste a tourner
     essais.verifier('les prises : Simon fait foi, Alice comble, sa prise 3 arrive', f['prises'],
                     [[1, 'OK', 'A001C001', 'A001', ''], [2, 'NG', 'A001C002', 'A001', 'boom'], [3, 'OK', 'A001C003', '', '']])
     banc.js('garderFusion()'); time.sleep(0.3)

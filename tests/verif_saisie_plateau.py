@@ -145,12 +145,14 @@ with Banc(8784, 9384, taille=(420, 900)) as banc:
     retour()
     essais.verifier('et Retour encore la ferme', [banc.js("view"), banc.js("openType")], ['shoot', None])
 
-    # -- « Tourne » : une fois passe au shot suivant
-    banc.js("patch('plan', p0.id, { etat: 'done' }); patch('plan', p1.id, { etat: 'todo' }); ajouterPrise(p0.id); renderList()"); time.sleep(0.3)
+    # -- « Tourne » : seulement quand on le marque a la main, jamais tout seul
+    banc.js("patch('plan', p0.id, { etat: 'todo' }); patch('plan', p1.id, { etat: 'todo' }); ajouterPrise(p0.id); renderList()"); time.sleep(0.3)
     tourneAff = lambda pid: banc.js("!!document.querySelector('#l-shoot .plan[data-id=\"' + %s + '\"] .ptourne')" % pid)
-    essais.verifier('on tourne encore le shot : pas de « Tourne »', tourneAff('p0.id'), False)
+    essais.verifier('des prises ne font pas « Tourne »', [tourneAff('p0.id'), banc.js("plan(p0.id).etat")], [False, 'todo'])
     banc.js("viser(p1.id, true); ajouterPrise(p1.id); renderList()"); time.sleep(0.3)
-    essais.verifier('premiere prise du shot suivant : le precedent passe « Tourne »', [tourneAff('p0.id'), tourneAff('p1.id')], [True, False])
+    essais.verifier('passer au shot suivant non plus', [tourneAff('p0.id'), tourneAff('p1.id')], [False, False])
+    banc.js("patch('plan', p0.id, { etat: 'done' }); renderList()"); time.sleep(0.3)
+    essais.verifier('marque « Tourne » a la main : il l est', tourneAff('p0.id'), True)
     # -- une prise neuve : Alexa 35 a 24 i/s, en Sigma Classic Prime ; un menu decoche sa valeur
     banc.js("window.tn = ajouterPrise(DB.plans[0].id); openPrise(tn.id)"); time.sleep(0.5)
     essais.verifier('prise neuve : 24 i/s, Sigma Classic Prime', banc.js("[prise(tn.id).fps, prise(tn.id).objectif]"), ['24', 'Sigma Classic Prime'])

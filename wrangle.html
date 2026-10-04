@@ -238,10 +238,16 @@ function elementsTous(p){
   const out = {};
   if (!p) return out;
   Object.keys(p.elements || {}).forEach(k => { if (p.elements[k]) out[k] = true; });
+  let saisis = false;
   Object.keys(p).forEach(c => {
     if (c.indexOf('elements@') !== 0 || !p[c] || typeof p[c] !== 'object') return;
+    saisis = true;
     Object.keys(p[c]).forEach(k => { if (p[c][k]) out[k] = true; });
   });
+  // personne n'a rien saisi sur un plan tourne : la presaisie (On set de la Preparation), laissee telle quelle, fait foi
+  if (!saisis && !Object.keys(out).length && (p.onSet || []).length &&
+      (p.etat === 'done' || p.termine || DB.prises.some(t => t.planId === p.id)))
+    p.onSet.forEach(k => { out[k] = true; });
   return out;
 }
 /* Ceux qui ont coche des elements sur ce plan : leurs prenoms. */
@@ -297,6 +303,8 @@ const ACTEUR_ANCIEN = { 'homme de main':'Homme de main A' };
 const HERITE = ['cam', 'camModel', 'carte', 'objectif', 'focale', 'focaleStop', 'diaph', 'filtre',
                 'codec', 'reso', 'fps', 'shutter', 'ei', 'wb', 'nd', 'lut',
                 'mesureDepuis', 'sonRoll', 'sync', 'mouvement', 'support', 'meteo'];
+// propres a un shot : ils ne passent pas d'un shot a l'autre, seulement d'une prise a la suivante du meme shot
+const HERITE_SHOT = ['focale', 'focaleStop', 'mouvement'];
 
 /* L'objectif et la LUT sont verrouilles pour tout le projet : chaque prise porte ceux des
    reglages (DB.prod), quoi qu'elle ait herite ; sur la fiche de prise, ils se lisent sans se changer. */
@@ -727,6 +735,8 @@ function saisiesDe(p, k){
 }
 function avecAuteurs(o, data){
   if (!UI.nom || 'auteurs' in data) return data;
+  // la page Preparation prevoit, elle ne saisit pas : ce qu'on y tape reste la presaisie du tournage
+  if (view === 'prep' && openType !== 'plan') return data;
   const au = Object.assign({}, o.auteurs || {}), cleS = 'saisie@' + UI.nom.trim();
   let change = false, mes = null;
   const leurs = {};
@@ -1684,13 +1694,16 @@ function htmlChamp(p, c){
   if (!multi && !sep && v && !liste.some(x => memeVal(x, v))){ liste.push(v); if (c.trier) c.trier(liste); }
   const lu = multi ? v.concat((c.cases || []).filter(x => p[x[0]]).map(x => x[1])).join(', ') : v;
   const ouvert = champOuvert === c.k, pris = x => multi ? v.some(y => memeVal(y, x)) : sep ? parts.some(y => memeVal(y, x)) : memeVal(x, v);
-  return `<div class="champ${ouvert ? ' ouvert' : ''}" data-champ="${c.k}">
+  const prevu = openType === 'plan' && estPrevu(p, c.k);
+  // la focale d'une prise qui s'ecarte de celle du decoupage (ou pas encore notee) : la prevue, en bleu
+  const prevuF = openType === 'prise' && c.k === 'focale' ? focalePrevue(p) : '';
+  return `<div class="champ${ouvert ? ' ouvert' : ''}${prevu ? ' prevu' : ''}" data-champ="${c.k}">
     <button type="button" class="champ-tete" onclick="ouvrirChamp('${c.k}')" aria-expanded="${ouvert}">
-      <span class="champ-nom">${c.nom}</span><span class="champ-val${lu ? '' : ' vide'}">${lu ? esc(lu) : '—'}</span><i></i>
-    </button>
+      <span class="champ-nom">${c.nom}</span><span class="champ-val${lu ? '' : ' vide'}">${lu ? esc(lu) : '—'}${prevuF ? `<em class="prevu-tag">prévu ${esc(prevuF)}</em>` : ''}</span><i></i>
+    </button>${prevu ? `<button type="button" class="mini prevu-ok" onclick="validerPrevu('${c.k}')" title="Garder ce qui était prévu">Valider</button>` : ''}
     ${ouvert ? `<div class="tuiles${c.court ? ' courtes' : ''}${c.ico ? ' pictos' : ''}">
       ${c.aucun ? `<button type="button" class="tuile aucun${v ? '' : ' on'}" onclick="choisirChamp('${c.k}', '')"><span>${esc(c.aucun)}</span></button>` : ''}
-      ${liste.map(x => `<button type="button" class="tuile${pris(x) ? ' on' : ''}" data-f="${esc(x)}"
+      ${liste.map(x => `<button type="button" class="tuile${pris(x) ? ' on' : ''}${prevuF && memeVal(x, prevuF) ? ' prevu' : ''}" data-f="${esc(x)}"
           onclick="choisirChamp('${c.k}', this.dataset.f)">${c.ico ? ICO_AMBIANCE[cleSimple(x)] || '' : ''}<span>${esc(x)}</span></button>`).join('')}
       ${(c.cases || []).map(x => `<button type="button" class="tuile case${p[x[0]] ? ' on' : ''}"
           onclick="basculerCaseChamp('${x[0]}')"><span>${x[1]}</span></button>`).join('')}
@@ -1702,6 +1715,16 @@ function htmlChamp(p, c){
       ${multi || sep ? `<button type="button" class="tuile fin" onclick="ouvrirChamp('${c.k}')"><span>Terminé</span></button>` : ''}
     </div>` : ''}
   </div>`;
+}
+/* La presaisie : ce que la Preparation a prevu pour le tournage s'affiche dans la fiche du plan
+   d'une autre couleur, tant que personne ne l'a saisi au tournage. On le valide d'un geste, ou
+   on le change ; laisse tel quel, il compte quand meme dans les rapports. */
+const PREVUS_PLAN = ['mouv'];
+const estPrevu = (p, k) => !!p && PREVUS_PLAN.includes(k) && !!valRap(p[k]) && !Object.keys(saisiesDe(p, k)).length;
+function validerPrevu(k){
+  const p = plan(openId); if (!p) return;
+  patch('plan', p.id, { [k]: p[k] });   // la meme valeur, saisie a son nom : elle n'est plus seulement prevue
+  majChamps(); majResumes(); renderList();
 }
 /* Un bloc de lignes dans la fiche : il retient ses cles pour se redessiner seul. Une fiche
    peut en porter plusieurs (la prise : la meteo sous la note, le reste dans les releves). */
@@ -1914,6 +1937,11 @@ function focaleHorsPlan(t){
   const bon = v => { const n = nombresDe(v)[0]; if (n == null) return true;
     return zoom ? n >= Math.min(prevue[0], prevue[1]) && n <= Math.max(prevue[0], prevue[1]) : n === prevue[0]; };
   return [t.focale, t.focaleStop].filter(x => String(x || '').trim()).every(bon) ? '' : p.focale.trim();
+}
+/* La focale prevue au decoupage, a rappeler sur la prise : quand celle-ci s'en ecarte ou n'est pas notee. */
+function focalePrevue(t){
+  const p = t && plan(t.planId), pf = p ? String(p.focale || '').trim() : '';
+  return pf && (!String(t.focale || '').trim() || focaleHorsPlan(t)) ? pf : '';
 }
 /* Qui a saisi la prise : le prenom note dessus. */
 const quiDe = t => (t.par || '').trim();
@@ -2168,6 +2196,7 @@ function terminerShot(id){
   const appliquer = v => {
     patch('plan', id, { termine: v });
     if (v && UI.vise === id){ UI.vise = null; ecrireUI(); }   // un shot valide ne se tourne plus
+    if (v) OUVERTS.delete(id);                                 // et ses prises se replient
     renderList(); if (openType === 'plan' || openType === 'prise') rouvrirFiche();
     toast('Shot ' + (p.plan || '') + (v ? ' validé : verrouillé' : ' rouvert'));
   };
@@ -2175,13 +2204,9 @@ function terminerShot(id){
   confirmer('Valider le shot ' + (p.plan || 'sans n°') + ' ?', { detail: 'Toutes ses prises sont faites : il passe en vert, pour toute l’équipe.', ok: 'Valider' })
     .then(oui => { if (oui && plan(id)) appliquer(true); });
 }
-/* Tourne : marque a la main dans la fiche, ou passe tout seul quand on enchaine sur un autre shot */
-const estTourne = p => tourne(p) || (p.etat === 'done' && !!p.tourneMain);
-function tourne(p){
-  if (p.etat !== 'done') return false;
-  const derniere = DB.prises[DB.prises.length - 1];
-  return !derniere || derniere.planId !== p.id;
-}
+/* Tourne : seulement quand on le marque a la main (« Tourne » dans la fiche). Des prises ne suffisent
+   pas : un shot reste a tourner tant qu'on n'a pas dit qu'il etait fini, puis se verrouille d'un geste. */
+const estTourne = p => p.etat === 'done';
 /* Une fusion se lit sur la carte : « + 06 » sur le shot garde, « dans 05 » sur l'autre. */
 function htmlFusion(p){
   const dans = p.fusionDans && plan(p.fusionDans);
@@ -2227,8 +2252,9 @@ function blocPlan(p, seulementRetenues, qui){
   return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}${p.termine ? ' termine' : ''}${p.fusionDans ? ' fusionne' : ''}" data-id="${p.id}">
     <div class="phead" onclick="openPlan('${p.id}')">
       <div class="pmain">
-        <div class="pnum"><span class="pno"><small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}${plusFusion(p)}</span>${
-          p.termine ? '<span class="ptourne">Terminé</span>' : estTourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
+        <div class="pnum"><span class="pno">${p.seq ? `<small class="pno-seq">Séq ${esc(p.seq)}</small>` : ''}<small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}${plusFusion(p)}</span>${
+          p.termine ? '<span class="ptourne">Terminé</span>' : p.etat === 'drop' && !p.fusionDans ? '<span class="ptourne">Abandonné</span>'
+          : estTourne(p) ? '<span class="ptourne">Tourné</span>' : ''}${htmlFusion(p)}<span class="ptags">${htmlPtags(p)}</span>
           <span class="pactions">${estTourne(p) || p.termine ? `<button type="button" class="fini${p.termine ? ' on' : ''}" onclick="event.stopPropagation();terminerShot('${p.id}')"
             title="${p.termine ? 'Shot terminé : toucher pour le rouvrir' : 'Marquer le shot terminé, pour toute l’équipe'}" aria-pressed="${!!p.termine}"
             aria-label="Shot terminé">${p.termine ? ICO_FINI : ICO_FINI_OUVERT}</button>` : ''}
@@ -2451,7 +2477,8 @@ const ICO_VISER = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" 
 const ICO_MOTEUR = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', 17, 2);
 const ICO_COUPEZ = ICO('<rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" stroke="none"/>', 17, 2);
 function planVise(){
-  return (UI.vise && plan(UI.vise)) || (dernierPlan && plan(dernierPlan)) || null;
+  const p = (UI.vise && plan(UI.vise)) || (dernierPlan && plan(dernierPlan)) || null;
+  return p && !p.termine && p.etat !== 'drop' ? p : null;   // un shot valide ne se tourne plus : il ne reste pas vise, ses prises se replient
 }
 /* toucher l'anneau du plan deja vise rend la main au suivi automatique */
 /* Viser un plan : le Moteur et + Prise enregistrent dessus, et il deplie ses
@@ -2568,14 +2595,19 @@ function ajouterPrise(planId, ouvrir, extra){
   const t = Object.assign({ id: uid(), planId, seq: p.seq, plan: p.plan, jour: p.jour || '' },
                           NEUVE(), { n, par: UI.nom || '', heure: maintenant() }, extra || {});
   if (modele) HERITE.forEach(k => { if (modele[k]) t[k] = modele[k]; });
-  else { if (p.focale) t.focale = p.focale; if (p.mouv) t.mouvement = p.mouv; if (p.meteo) t.meteo = p.meteo; }
+  // la premiere prise d'un shot : la camera suit la prise d'avant, mais l'optique et le mouvement
+  // sont ceux du shot (prevus au decoupage), jamais ceux d'un autre shot
+  if (!sœurs.length){
+    HERITE_SHOT.forEach(k => { t[k] = ''; });
+    if (p.focale) t.focale = p.focale; if (p.mouv) t.mouvement = p.mouv;
+    if (!modele && p.meteo) t.meteo = p.meteo;
+  }
   VERROU_PROJET.forEach(k => { if (DB.prod[k]) t[k] = DB.prod[k]; });
   // le nom de clip suit la numerotation de la camera : AA005 puis AA006, sans rien taper
   if (!t.clip){ const s = clipSuivant(t); if (s) t.clip = s; }
   { const c = carteDuClip(t.clip); if (c && (!t.carte || FORME_BOBINE.test(String(t.carte).trim()))) t.carte = c; }
   DB.prises.push(t);
   operer({ op:'add', kind:'prise', data: t });
-  if (p.etat === 'todo') patch('plan', p.id, { etat:'done' });
   dernierPlan = planId;
 
   if (ouvrir){ renderAll(); openPrise(t.id); return t; }
@@ -2860,8 +2892,8 @@ function openPrise(id, y){
       <div class="clip-duo">
         <div class="clip-col"><div class="clip">
           <div class="clip-ligne"><label for="clip-in">Clip</label></div>
-          <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1" data-sug="${esc(sug || '')}"
-            value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C007')}" autocapitalize="characters" autocomplete="off">
+          <input id="clip-in" ${liaison(t, 'clip')} data-refresh="1" data-sug="${esc(sug || 'A_0001C001')}"
+            value="${esc(t.clip)}" placeholder="${esc(sug || 'A_0001C001')}" autocapitalize="characters" autocomplete="off">
           <span class="fantome" aria-hidden="true"></span>
         </div></div>
         <div class="clip-col"><div class="clip">
@@ -3164,15 +3196,20 @@ function voisinPlan(sens){
 /* Le Moteur du pied de fiche : lance une prise sur ce plan, puis devient
    Coupez tant que son chrono tourne. */
 function majMoteurFiche(){
-  const b = $('moteur-fiche'); if (!b) return;
-  const p = plan(openId); if (!p) return;
-  const t = chrono && prise(chrono.priseId);
-  if (t && t.planId === p.id){
-    b.className = 'btn rec'; b.disabled = false;
-    b.innerHTML = `${ICO_COUPEZ} Coupez <em>${fmtChrono(Date.now() - chrono.debut)}</em>`;
+  const b = $('moteur-fiche'), p = openType === 'plan' && plan(openId);
+  const t = chrono && prise(chrono.priseId), ici = !!(b && p && t && t.planId === p.id);
+  // la prise tourne sur ce plan : REC prend la place du Moteur, la pastille flottante s'efface
+  document.body.classList.toggle('rec-fiche', ici);
+  if (!b || !p) return;
+  if (ici){
+    const cls = 'btn rec rec-cam', html = `<i class="rec-point"></i><b class="rec-mot">REC</b><em>${fmtChrono(Date.now() - chrono.debut)} · prise ${t.n}</em><span class="rec-stop" title="Coupez">${ICO_COUPEZ}</span>`;
+    if (b.className !== cls) b.className = cls;
+    b.disabled = false;
+    // redessine deux fois par seconde : seulement si le texte change, sinon le point clignote de travers
+    if (b.dataset.html !== html){ b.dataset.html = html; b.innerHTML = html; }
     b.onclick = couper;
   } else {
-    b.className = 'btn moteur'; b.disabled = !!chrono; b.innerHTML = ICO_MOTEUR + ' Moteur';
+    b.className = 'btn moteur'; b.disabled = !!chrono; b.innerHTML = ICO_MOTEUR + ' Moteur'; b.dataset.html = '';
     b.onclick = chrono ? null : () => moteurSur(p.id);
   }
 }
@@ -3281,8 +3318,8 @@ const CROQUIS_OBJETS = [
   ['mur',     'Mur',        PICTO('<path d="M4 12h16" stroke-width="4"/>')],
   ['fenetre', 'Fenêtre',    PICTO('<path d="M4 10h16M4 14h16"/>')],
   ['vert',    'Fond vert',  PICTO('<path d="M4 12h16" stroke-width="4"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#fff" stroke-width="1.6"/>')],
-  ['diffb',   'Diffuseur blanc', PICTO('<path d="M4 12h16" stroke-width="4" stroke="#b9b3ac"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#fff" stroke-width="1.6"/>')],
-  ['diffn',   'Diffuseur noir',  PICTO('<path d="M4 12h16" stroke-width="4"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#8a8480" stroke-width="1.6"/>')],
+  ['diffb',   'Réflecteur blanc', PICTO('<path d="M4 12h16" stroke-width="4" stroke="#b9b3ac"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#fff" stroke-width="1.6"/>')],
+  ['diffn',   'Réflecteur noir',  PICTO('<path d="M4 12h16" stroke-width="4"/><path d="M6 12h2M11 12h2M16 12h2" stroke="#8a8480" stroke-width="1.6"/>')],
   ['cote',    'Mesure',     PICTO('<path d="M4 12h16M4 12l3-3M4 12l3 3M20 12l-3-3M20 12l-3 3"/>')],
   ['txt',     'Texte',      PICTO('<path d="M5 6h14M12 6v13"/>')]
 ];
@@ -3529,6 +3566,22 @@ function supprimerCroquis(id){
    decor change ? Il n'y a plus rien a refaire dans le projet, on redessine.
    La largeur du canvas ne part nulle part : elle peut etre genereuse. */
 const APERCU = 900;
+/* Autour de la feuille, une marge ou l'on dessine aussi : une lumiere derriere la fenetre,
+   une camera dans le couloir. Elle vaut un quart de la feuille de chaque cote. */
+const MARGE_CROQUIS = .25;
+const margeCroquis = () => ({ x0: -MARGE_CROQUIS * dessin.w, y0: -MARGE_CROQUIS * dessin.h,
+                              x1: (1 + MARGE_CROQUIS) * dessin.w, y1: (1 + MARGE_CROQUIS) * dessin.h });
+/* Ce que couvre le dessin : la feuille, agrandie de ce qui en deborde (dans la marge). L'apercu et
+   la feuille VFX s'elargissent d'autant ; sans rien dehors, ils restent la feuille seule. */
+function bornesCroquis(){
+  const m = margeCroquis(), pad = 70 * dessin.w / 1600, b = { x0: 0, y0: 0, x1: dessin.w, y1: dessin.h };
+  const voir = (x, y) => { if (x == null || y == null) return;
+    b.x0 = Math.min(b.x0, x - pad); b.y0 = Math.min(b.y0, y - pad); b.x1 = Math.max(b.x1, x + pad); b.y1 = Math.max(b.y1, y + pad); };
+  dessin.traits.forEach(t => t.pts.forEach(q => voir(q[0], q[1])));
+  dessin.objets.forEach(o => { voir(o.x, o.y); voir(o.x1, o.y1); voir(o.x2, o.y2); voir(o.mx, o.my); (o.pts || []).forEach(q => voir(q[0], q[1])); });
+  return { x0: Math.max(m.x0, b.x0), y0: Math.max(m.y0, b.y0), x1: Math.min(m.x1, b.x1), y1: Math.min(m.y1, b.y1) };
+}
+const hauteurApercu = l => { const b = bornesCroquis(); return Math.round(l * (b.y1 - b.y0) / (b.x1 - b.x0)); };
 function dessinerApercu(p){
   const cv = $('croq-apercu');
   if (!cv) return;
@@ -3537,7 +3590,7 @@ function dessinerApercu(p){
     if ($('croq-apercu') !== cv) return;
     const garde = dessin;
     dessin = etatCroquis(p, img);
-    cv.width = APERCU; cv.height = Math.round(APERCU * dessin.h / dessin.w);
+    cv.width = APERCU; cv.height = hauteurApercu(APERCU);
     rendreCroquis(cv);
     dessin = garde;
   });
@@ -3591,7 +3644,8 @@ function tailleCroquis(ancre){
   }
   // la feuille ne part jamais tout entiere hors de la zone : le centre de la vue reste dessus
   const v = dessin.vue || [dessin.w / 2, dessin.h / 2];
-  dessin.vue = [Math.max(0, Math.min(dessin.w, v[0])), Math.max(0, Math.min(dessin.h, v[1]))];
+  const mg = margeCroquis();
+  dessin.vue = [Math.max(mg.x0, Math.min(mg.x1, v[0])), Math.max(mg.y0, Math.min(mg.y1, v[1]))];
   const rot = dessin.rot || 0, e = $('dzoom');
   if (e) e.textContent = Math.round((dessin.zoom || 1) * 100) + ' %' + (rot % 90 ? ' · ' + Math.round(rot) + '°' : '');
   rendreCroquis();
@@ -3768,14 +3822,14 @@ function dessinerObjet(g, o, k, u){
     g.strokeStyle = '#fff'; g.lineWidth = 4 * u;
     g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
   } else if (o.t === 'mur' || o.t === 'vert' || o.t === 'diffb' || o.t === 'diffn'){
-    // le fond vert et les diffuseurs (blanc : gris clair ; noir) se tirent comme un mur, en plus epais
+    // le fond vert et les reflecteurs (blanc : gris clair ; noir) se tirent comme un mur, en plus epais
     const TEINTE = { mur:'#3a3330', vert:'#5fb36d', diffb:'#b9b3ac', diffn:'#1d1a18' };
     g.lineCap = 'butt';
-    // le mur prend la couleur choisie ; le fond vert et les diffuseurs gardent la leur
+    // le mur prend la couleur choisie ; le fond vert et les reflecteurs gardent la leur
     g.strokeStyle = o.t === 'mur' ? o.c || TEINTE.mur : TEINTE[o.t]; g.lineWidth = (o.t === 'mur' ? 12 : 16) * u;
     g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
     if (o.t !== 'mur'){
-      // une hachure : un fond ou un diffuseur se distingue d'un mur peint
+      // une hachure : un fond ou un reflecteur se distingue d'un mur peint
       g.strokeStyle = o.t === 'diffn' ? 'rgba(160,152,146,.8)' : 'rgba(255,255,255,.6)'; g.lineWidth = 3 * u; g.setLineDash([8 * u, 8 * u]);
       g.beginPath(); g.moveTo(X(o.x1), Y(o.y1)); g.lineTo(X(o.x2), Y(o.y2)); g.stroke();
     }
@@ -3896,15 +3950,26 @@ function rendreCroquis(cv){
   g.setLineDash([]);
   g.clearRect(0, 0, c.width, c.height);
   // l'editeur : la feuille placee, zoomee et tournee dans la zone ; un apercu (cv) : la feuille sur tout le canevas
+  const mg = margeCroquis();
   if (!cv){
     const { k: kv, a, v } = vueCroquis(), dpr = c.width / Math.max(1, c.clientWidth || 1);
     g.translate(c.width / 2, c.height / 2); g.rotate(a); g.scale(kv * dpr, kv * dpr); g.translate(-v[0], -v[1]);
+    // la marge : un fond discret et un pointille, pour voir jusqu'ou l'on peut dessiner
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(mg.x0, mg.y0, mg.x1 - mg.x0, mg.y1 - mg.y0);
+    g.save(); g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1.5 / (kv * dpr) * dpr; g.setLineDash([8 / kv, 6 / kv]);
+    g.strokeRect(mg.x0, mg.y0, mg.x1 - mg.x0, mg.y1 - mg.y0); g.restore();
     g.save(); g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 34 * kv * dpr; g.shadowOffsetY = 12 * kv * dpr;
     g.fillStyle = '#fff'; g.fillRect(0, 0, dessin.w, dessin.h); g.restore();
-    // le dessin s'arrete au bord de la feuille ; les poignees, elles, peuvent deborder (restore plus bas)
-    g.save(); g.beginPath(); g.rect(0, 0, dessin.w, dessin.h); g.clip();
+    // le dessin s'arrete au bord de la marge ; les poignees, elles, peuvent deborder (restore plus bas)
+    g.save(); g.beginPath(); g.rect(mg.x0, mg.y0, mg.x1 - mg.x0, mg.y1 - mg.y0); g.clip();
+  } else {
+    // un apercu : ce que couvre le dessin, a l'echelle du canevas ; ce qui deborde de la feuille sur un fond gris clair
+    const b = bornesCroquis(), sc = c.width / (b.x1 - b.x0);
+    g.setTransform(sc, 0, 0, sc, -b.x0 * sc, -b.y0 * sc);
+    if (b.x0 < 0 || b.y0 < 0 || b.x1 > dessin.w || b.y1 > dessin.h){ g.fillStyle = '#ebe8e3'; g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+    g.save(); g.beginPath(); g.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); g.clip();
   }
-  const fw = cv ? c.width : dessin.w, fh = cv ? c.height : dessin.h;
+  const fw = dessin.w, fh = dessin.h;
   if (dessin.fond) g.drawImage(dessin.fond, 0, 0, fw, fh);
   else { g.fillStyle = '#fff'; g.fillRect(0, 0, fw, fh); }
   const k = fw / dessin.w, u = k * dessin.w / 1600;
@@ -3919,7 +3984,7 @@ function rendreCroquis(cv){
     g.stroke();
   });
   dessin.objets.concat(enCours && enCours.t ? [enCours] : []).forEach(o => dessinerObjet(g, o, k, u));
-  if (!cv) g.restore();
+  g.restore();
   if (!cv && dessin.outil === 'move' && saisissable(dessin.selection)) dessinerPoignees(g, dessin.selection, k);
 }
 /* Les poignees de l'objet saisi : un anneau au bout d'un bras pour tourner ce qui
@@ -4127,7 +4192,7 @@ function rejoindreMain(c){
   [.45, .75, .92, 1].forEach(k => c.pts.push([Math.round((a[0] + (b[0] - a[0]) * k) * 10) / 10, Math.round((a[1] + (b[1] - a[1]) * k) * 10) / 10]));
   delete c.lisse; delete c.brut;
 }
-/* L'aimant : un trait (mur, fond, diffuseur, fleche…) ou une orientation proche
+/* L'aimant : un trait (mur, fond, reflecteur, fleche…) ou une orientation proche
    d'un multiple de 45° s'y colle, a 7° pres ; un bout qui passe pres du bout d'un
    autre trait s'y accroche (les coins se ferment). Alt : a main levee. */
 const AIMANT = Math.PI / 4, PRISE_AIMANT = 7 * Math.PI / 180;
@@ -4628,9 +4693,9 @@ function openPlan(id, y){
     </div>
 
     <div class="sec">
-      <h3>Éléments captés</h3>
+      <div class="sec-tete"><h3>Éléments captés</h3><span class="res" id="elems-prevu">${htmlElemsPrevu(p)}</span></div>
       <div class="elems">
-        ${ELEMENTS.map(e => `<button class="el${mesElements(p)[e[0]] ? ' on' : ''}"
+        ${ELEMENTS.map(e => `<button class="${classeEl(p, e[0])}"
           data-el="${e[0]}" onclick="toggleElement('${e[0]}')">${e[1]}</button>`).join('')}
       </div>
       <div class="specs suite">
@@ -4699,8 +4764,8 @@ function openPlan(id, y){
 function majBoutonsPlan(){
   const p = plan(openId); if (!p) return;
   majSeg('#seg-etat', 'et', ETATS_SEG, p.etat);
-  const mes = mesElements(p);
-  document.querySelectorAll('#sbody .el[data-el]').forEach(b => { b.className = 'el' + (mes[b.dataset.el] ? ' on' : ''); });
+  document.querySelectorAll('#sbody .el[data-el]').forEach(b => { b.className = classeEl(p, b.dataset.el); });
+  const ep = $('elems-prevu'); if (ep) ep.innerHTML = htmlElemsPrevu(p);
   majChoix(); majResumes(); majNavPlan();
   const pt = $('ptags-fiche'); if (pt) pt.innerHTML = htmlPtags(p);
   decorerFiche();
@@ -4710,16 +4775,40 @@ function majBoutonsPlan(){
    en haut a chaque clic et deviendrait impossible a remplir. */
 /* Mes elements sur ce plan (sans prenom, sur un appareil seul : ceux du plan). */
 const mesElements = p => UI.nom ? elementsDe(p, UI.nom.trim(), true) : Object.assign({}, p.elements || {});
+/* La presaisie des elements : ceux que la Preparation a prevus (On set), tant que je n'ai
+   rien coche moi-meme sur ce plan. Un clic part de la : on garde, on retire, on ajoute. */
+const elementsPrevus = p => { const o = {}; (p.onSet || []).forEach(k => { o[k] = true; }); return o; };
+function elementsEnPrevu(p){
+  if (!p || !(p.onSet || []).length) return false;
+  if (!UI.nom) return !Object.keys(p.elements || {}).some(k => p.elements[k]);
+  const cle = 'elements@' + UI.nom.trim();
+  return !(p[cle] && typeof p[cle] === 'object') && !Object.keys(mesElements(p)).length;
+}
+function classeEl(p, k){
+  const prevu = elementsEnPrevu(p), mes = prevu ? elementsPrevus(p) : mesElements(p);
+  return 'el' + (mes[k] ? (prevu ? ' on prevu' : ' on') : '');
+}
+const htmlElemsPrevu = p => elementsEnPrevu(p)
+  ? `<em class="prevu-note">Prévu en préparation</em><button type="button" class="mini prevu-ok" onclick="validerElements()">Valider</button>` : '';
+function validerElements(){
+  const p = plan(openId); if (!p) return;
+  poserMesElements(p, elementsPrevus(p));
+  majBoutonsPlan();
+  renderList();
+}
 function toggleElement(k){
   const p = plan(openId); if (!p) return;
+  const mien = elementsEnPrevu(p) ? elementsPrevus(p) : mesElements(p);
+  if (mien[k]) delete mien[k]; else mien[k] = true;
+  poserMesElements(p, mien);
+  majBoutonsPlan();
+  renderList();
+}
+function poserMesElements(p, mien){
   if (!UI.nom){
-    const el = Object.assign({}, p.elements || {});
-    el[k] = !el[k];
-    patch('plan', p.id, { elements: el });
+    patch('plan', p.id, { elements: mien });
   } else {
     const nom = UI.nom.trim(), cle = 'elements@' + nom;
-    const mien = mesElements(p);
-    if (mien[k]) delete mien[k]; else mien[k] = true;
     const d = { [cle]: mien };
     // la premiere fois, les elements communs qui sont a moi passent sous mon prenom ;
     // ceux coches par d'autres restent aux autres
@@ -4730,8 +4819,6 @@ function toggleElement(k){
     }
     patch('plan', p.id, d);
   }
-  majBoutonsPlan();
-  renderList();
 }
 
 function setEtatPlan(e){
@@ -5285,16 +5372,17 @@ function choisirFusion(aId){
   const a = plan(aId); if (!a) return;
   openId = null; openType = 'picker';
   videEntete();
-  $('stitle').textContent = 'Fusionner dans le shot ' + (a.plan || 'sans n°');
+  $('stitle').textContent = 'Fusionner dans ' + (a.seq ? 'Séq ' + a.seq + ' · ' : '') + 'Shot ' + (a.plan || 'sans n°');
   $('ssub').textContent = 'Le shot tourné avec lui : ses prises le rejoignent';
-  const libre = p => p.id !== a.id && !p.fusionDans;
+  // ni un shot verrouille (valide), ni un shot abandonne ou deja fusionne : ils ne bougent plus
+  const libre = p => p.id !== a.id && !p.fusionDans && !p.termine && p.etat !== 'drop';
   const duJour = DB.plans.filter(p => libre(p) && (p.jour || '') === (a.jour || ''));
   const autres = DB.plans.filter(p => libre(p) && (p.jour || '') !== (a.jour || ''));
   const ligneF = p => {
     const n = prisesDe(p.id).length;
     return `<div class="plan pick"><div class="phead" onclick="confirmerFusion('${a.id}', '${p.id}')">
       <div class="pmain">
-        <div class="pnum" style="font-size:17px">Shot ${p.plan ? esc(p.plan) : 'sans n°'}
+        <div class="pnum" style="font-size:17px"><span class="pno">${p.seq ? `<small class="pno-seq">Séq ${esc(p.seq)}</small>` : ''}<small>Shot</small>${p.plan ? esc(p.plan) : 'sans n°'}</span>
           <span style="font-size:12px;color:var(--dim2);font-weight:600;margin-left:8px">${esc(nomJour(p.jour || ''))}${n ? ' · ' + n + ' pr.' : ''}</span></div>
         <div class="pdesc" style="font-size:13.5px;color:var(--dim);margin-top:4px;
           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(p.desc || '')}</div>
@@ -5863,7 +5951,8 @@ function modeleDIT(j){
       jour, titre: p.titre || 'Projet sans titre', sauvegarde, ecarts, listeEcarts,
       sous: ['Journal DIT', nomJour(jour), dec, dateJourFr(jour), p.dit && 'DIT ' + p.dit,
              saisis.length && 'Wrangler' + plur(saisis.length) + ' ' + saisis.join(', ')].filter(Boolean).join(' · '),
-      chiffres: [[P.filter(x => x.etat === 'done').length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
+      // les plans tournes du journal : ceux qui ont des prises (ou marques a la main), comme sa liste
+      chiffres: [[tournes.length, 'plans tournés sur ' + P.length], [reste.length, 'à tourner'],
                  [T.length, 'fichier' + plur(T.length) + ' à sauvegarder'], [gardees.length, 'prises à monter'],
                  [T.filter(t => t.statut === 'OK').length, 'OK'], [T.filter(t => t.statut === 'NG').length, 'NG'],
                  [cartes.length, 'carte' + plur(cartes.length) + (cartes.length && cartes.length <= 6 ? ' · ' + cartes.join(', ') : '')]],
@@ -6352,7 +6441,7 @@ function imageCroquis(p, i){
     try{
       dessin = etatCroquis(p, img, i || 0);
       const cv = document.createElement('canvas');
-      cv.width = 1400; cv.height = Math.round(1400 * dessin.h / dessin.w);
+      cv.width = 1400; cv.height = hauteurApercu(1400);
       rendreCroquis(cv);
       return { l: cv.width, h: cv.height, octets: atob(cv.toDataURL('image/jpeg', .85).split(',')[1]) };
     } finally { dessin = garde; }
