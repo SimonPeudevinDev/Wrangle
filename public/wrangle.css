@@ -319,6 +319,12 @@ button{transition:background .2s,color .2s,border-color .2s,opacity .2s}
      tient jamais, et elles decaleraient les tiers */
   .chip:first-child{margin-left:0}
   .chip:last-child{margin-right:0}
+  /* moins de trois onglets (« Tout » et un seul jour) : ils tiennent, on les centre */
+  .chip:only-child{margin:0 auto}
+  .chip:first-child:nth-last-child(2){margin-left:auto}
+  .chip:last-child:nth-child(2){margin-right:auto}
+  /* et le centre est celui de l ecran : a gauche, une cale de la largeur du bouton Filtres de droite */
+  .jours::before{content:"";flex:none;width:var(--cale,0px)}
   /* le trait de l onglet actif se resserre sous le mot plutot que sous le tiers */
   .chip.on::after{left:14px;right:14px}
 }

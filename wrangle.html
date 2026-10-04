@@ -8241,6 +8241,11 @@ function barresJours(){
   $('fbar-shoot').insertAdjacentHTML('afterbegin', htmlJours('shoot', 'c-jour', true));
   $('fbar-report').innerHTML = htmlJours('report', 'c-jourr', false);
   $('fbar-prep').innerHTML = htmlJours('prep', 'c-jourp', false);
+  // la cale de gauche (telephone) suit la largeur du bouton Filtres : les jours se centrent sur l'ecran
+  const bf = $('btn-filtres');
+  if (bf && window.ResizeObserver) new ResizeObserver(() => {
+    const j = bf.closest('.jours'); if (j) j.style.setProperty('--cale', (bf.offsetWidth + (parseFloat(getComputedStyle(bf).marginLeft) || 0)) + 'px');
+  }).observe(bf);
 }
 
 /* La rangee des jours colle sous la barre haute : sa hauteur depend de
