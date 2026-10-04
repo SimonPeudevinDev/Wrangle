@@ -1986,7 +1986,9 @@ function cadrerJour(id, actif){
   if (cadreFait === cle) return;
   const el = row.querySelector('.chip.on'); if (!el) return;
   cadreFait = cle;
-  row.scrollLeft = Math.max(0, el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2);
+  // la place de l'onglet dans la rangee elle-meme (offsetLeft compte depuis le bandeau : fleche et cale comprises)
+  const x = el.getBoundingClientRect().left - row.getBoundingClientRect().left + row.scrollLeft;
+  row.scrollLeft = Math.max(0, x - (row.clientWidth - el.offsetWidth) / 2);
   bordsChips(row);
 }
 
@@ -8244,7 +8246,12 @@ function barresJours(){
   // la cale de gauche (telephone) suit la largeur du bouton Filtres : les jours se centrent sur l'ecran
   const bf = $('btn-filtres');
   if (bf && window.ResizeObserver) new ResizeObserver(() => {
-    const j = bf.closest('.jours'); if (j) j.style.setProperty('--cale', (bf.offsetWidth + (parseFloat(getComputedStyle(bf).marginLeft) || 0)) + 'px');
+    const j = bf.closest('.jours'); if (!j) return;
+    const cale = (bf.offsetWidth + (parseFloat(getComputedStyle(bf).marginLeft) || 0)) + 'px';
+    if (j.style.getPropertyValue('--cale') === cale) return;
+    j.style.setProperty('--cale', cale);
+    // la rangee a change de largeur : le jour actif se recale au milieu
+    cadreFait = null; cadrerJour('c-jour', fJour);
   }).observe(bf);
 }
 
