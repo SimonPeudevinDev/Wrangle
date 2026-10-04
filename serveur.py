@@ -79,7 +79,7 @@ HTML = 'text/html; charset=utf-8'
 TYPES = {'.html': HTML, '.js': 'text/javascript; charset=utf-8',
          '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8',
          '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml',
-         '.webp': 'image/webp', '.woff2': 'font/woff2'}
+         '.webp': 'image/webp', '.woff2': 'font/woff2', '.pdf': 'application/pdf'}
 
 # ----------------------------------------------------------------- État ---
 

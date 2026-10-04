@@ -61,9 +61,12 @@ with Banc(8778, 9378, taille=(1200, 900)) as banc:
     essais.verifier('la prise 3, notee par Alice seule', [(x['qui'], [t['n'] for t in x['prises']]) for x in m[0]['seuls']], [('Alice', ['3'])])
     pdf = banc.js("Array.from(pdfWrangling('*'), b => String.fromCharCode(b)).join('')")
     essais.verifier('le PDF est un PDF entier', [pdf[:8], pdf.rstrip().endswith('%%EOF')], ['%PDF-1.4', True])
-    essais.verifier('il nomme les personnes, une colonne chacune, et le champ en ecart',
-                    ['Saisies de Simon, Alice)' in pdf, '(SIMON)' in pdf and '(ALICE)' in pdf, '(Statut)' in pdf], [True, True, True])
-    essais.verifier('une case a cocher par ligne', pdf.count(' l S') > 8, True)
+    # le releve : chaque shot et ses prises, ce qui est a reprendre en rouge et detaille sous le shot
+    essais.verifier('il nomme les personnes et detaille le desaccord sous le shot',
+                    ['Saisies de Simon, Alice)' in pdf, 'Statut : Simon' in pdf, '(STATUT)' in pdf], [True, True, True])
+    sh = m[0]['shots'][0]
+    essais.verifier('le releve : le shot et toutes ses prises', [sh['ref'].endswith('Shot ' + banc.js('DB.plans[0].plan')), len(sh['prises'])], [True, 3])
+    essais.verifier('les erreurs de saisie, prise par prise : la 3 d Alice sans carte', [[q[1] for q in t['erreurs']] for t in sh['prises']], [[], [], ['Carte manquante']])
 
     # -- la fusion : Simon fait foi, Alice comble et apporte sa prise 3
     f = banc.js('(() => { const f = fusionRap(sourcesRap()); const p = f.plans[0]; return { etat: p.etat, prises: f.prises.filter(t => t.planId === p.id).map(t => [t.n, t.statut, t.clip, t.carte, t.notes]) }; })()')

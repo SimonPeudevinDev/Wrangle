@@ -303,8 +303,9 @@ const ACTEUR_ANCIEN = { 'homme de main':'Homme de main A' };
 const HERITE = ['cam', 'camModel', 'carte', 'objectif', 'focale', 'focaleStop', 'diaph', 'filtre',
                 'codec', 'reso', 'fps', 'shutter', 'ei', 'wb', 'nd', 'lut',
                 'mesureDepuis', 'sonRoll', 'sync', 'mouvement', 'support', 'meteo'];
-// propres a un shot : ils ne passent pas d'un shot a l'autre, seulement d'une prise a la suivante du meme shot
-const HERITE_SHOT = ['focale', 'focaleStop', 'mouvement'];
+// propres a un shot : ils ne passent pas d'un shot a l'autre, seulement d'une prise a la suivante du meme shot ;
+// la camera, le lens set, le codec, la cadence et la carte, eux, suivent tout le tournage
+const HERITE_SHOT = ['focale', 'focaleStop', 'diaph', 'filtre', 'ei', 'wb', 'nd', 'shutter', 'mouvement', 'support', 'mesureDepuis'];
 
 /* L'objectif et la LUT sont verrouilles pour tout le projet : chaque prise porte ceux des
    reglages (DB.prod), quoi qu'elle ait herite ; sur la fiche de prise, ils se lisent sans se changer. */
@@ -1550,7 +1551,7 @@ function majChoix(racine){
 
 /* Plusieurs a la fois : les acteurs d'un plan. Chaque capsule s'allume ou
    s'eteint seule ; le « + » ajoute un nom, connu ensuite de tous les plans. */
-const ACTEURS = ['Edward', 'Lord Halloway', 'Président Académie', 'Académicien', 'Homme de main A', 'Homme de main B',
+const ACTEURS = ['Edward', 'Lord Halloway', 'Associé d’Halloway', 'Président Académie', 'Académicien', 'Homme de main A', 'Homme de main B',
                  'Portier', 'Ménagère'];
 const acteursConnus = () => fusion(ACTEURS, DB.plans.flatMap(p => p.acteurs || []));
 const MULTI = (o, label, k, liste, opt) => {
@@ -1929,8 +1930,8 @@ const priseIncomplete = t => !t.pasSaisie && (!!t.differee || !String(t.clip || 
    prevue, sinon ''. « 14 mm » et « 14 » sont la meme ; un zoom prevu
    (« 18-35 zoom ») accepte tout ce qui tombe dedans. Depart et arrivee comptent. */
 const nombresDe = s => (String(s || '').replace(/,/g, '.').match(/\d+(\.\d+)?/g) || []).map(Number);
-function focaleHorsPlan(t){
-  const p = t && plan(t.planId);
+function focaleHorsPlan(t, pl){
+  const p = pl || (t && plan(t.planId));
   if (!p || !String(p.focale || '').trim() || !String(t.focale || '').trim()) return '';
   const prevue = nombresDe(p.focale); if (!prevue.length) return '';
   const zoom = prevue.length > 1 && /[-–]|à/.test(p.focale);
@@ -3344,7 +3345,7 @@ const fondImporte = lieu => (DB.prod.fonds || {})[(lieu || '').trim()] || '';
    (« fond:… »). Sans serveur, il reste dans le projet, en image (data:…). */
 const urlFond = v => String(v || '').indexOf('fond:') === 0 ? API('fond') + '?f=' + encodeURIComponent(v.slice(5)) : v || '';
 const fondDecor = lieu => urlFond(fondImporte(lieu)) || planIntegre(lieu);
-/* L'adresse reelle d'un decor (prod.adresse_<decor>), reglee dans Decors, pour le rapport VFX */
+/* L'adresse reelle d'un decor (prod.adresse_<decor>), reglee dans Decors, pour le data wrangling */
 const adresseDecor = lieu => String(DB.prod['adresse_' + String(lieu || '').trim()] || '').trim();
 /* Envoie l'image au serveur et rend ce que le projet en gardera : son nom, ou
    l'image elle-meme si le serveur n'est pas la (elle partira a la prochaine occasion). */
@@ -3431,7 +3432,7 @@ function openDecors(){
       <div class="btns" style="margin-top:12px">
         <button type="button" class="btn p" onclick="ajouterDecor().then(openDecors)">+ Ajouter un décor</button>
       </div>
-      <div class="note">Modifier renomme le décor sur tous les plans qui le portent ; Retirer les laisse sans décor. L’adresse va dans « Location » du rapport VFX. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
+      <div class="note">Modifier renomme le décor sur tous les plans qui le portent ; Retirer les laisse sans décor. L’adresse va dans « Location » du data wrangling. Le plan du décor pour le croquis s’importe depuis la fiche d’un plan.</div>
     </div>`;
   montrerFiche(0);
 }
@@ -5752,15 +5753,15 @@ function renderBilan(perimetre, rapprochement){
 
     <div class="btns noprint" style="margin-bottom:30px">
       <button class="btn p" onclick="telechargerDIT()">DIT (PDF)</button>
-      <button class="btn p" onclick="telechargerVFX()">Rapport VFX (PDF)</button>
-      <button class="btn p" onclick="telechargerWrangling()">Data wrangling (PDF)</button>
+      <button class="btn p" onclick="telechargerWrangling()">Rapport VFX (PDF)</button>
+      <button class="btn p" onclick="telechargerVFX()">Data wrangling (PDF)</button>
       <button class="btn rouge droite" onclick="telechargerBackup()" title="Tous les jours, chacun avec ses trois PDF, dans un seul fichier ZIP sur cet appareil">Backup (ZIP)</button>
     </div>
     <div class="note noprint" style="margin:-18px 0 30px">Les trois PDF reprennent le jour choisi en haut.
-      Data wrangling d’abord : les écarts entre les saisies de chacun, à corriger avant d’exporter les
-      deux autres. Le DIT : les prises retenues pour le montage. Le rapport VFX : la feuille caméra
-      du plateau, une par plan — les réglages et relevés de chaque prise, les éléments captés, les
-      notes, le croquis du décor et les distances.</div>`;
+      Le DIT : les prises retenues pour le montage. Le rapport VFX : tout ce que l’équipe a saisi, une
+      page par shot, avec en rouge les erreurs de saisie et les désaccords à corriger. Le data wrangling :
+      la feuille caméra du plateau, une par plan — les réglages et relevés de chaque prise, les éléments
+      captés, les notes, le croquis du décor et les distances.</div>`;
 }
 
 /* -------------------------------------- Fiche de transmission a la post */
@@ -5893,8 +5894,9 @@ function modeleDIT(j){
   const prise = t => ({ n: String(t.n || ''), clip: t.clip || '', carte: t.carte || '', statut: t.statut || '',
                         retenue: !!t.retenue, tcIn: t.tcIn || '', tcOut: t.tcOut || '', duree: t.duree || '',
                         note: t.notes || '', qui: qui(t), par: t.par || '', heure: t.heure || '', seq: t.seq || '', plan: t.plan || '',
-                        ecarts: t.ecarts || [] });
+                        dureePrevue: (plan(t.planId) || {}).duree || '', ecarts: t.ecarts || [] });
   const ordre = new Map(DB.plans.map((x, i) => [x.id, i]));
+  const refShot = x => (x.seq ? 'Séq ' + x.seq + ' · ' : '') + 'Shot ' + (x.plan || '—');
 
   return jours.map(jour => {
     const P = plansDuJour(jour), T = prisesDuJour(jour);
@@ -5910,6 +5912,14 @@ function modeleDIT(j){
       const pr = prisesDe(x.id);
       const meta = [x.cadrage, x.mouv, x.support, x.focale].filter(Boolean).join(' · ');
       const ref = 'Séquence ' + (x.seq || '—') + ' · Plan ' + (x.plan || '—');
+      // un shot fusionne ou abandonne est dit a part, avec ce qu'il est devenu : le DIT ne le cherche pas
+      if (x.etat === 'drop'){
+        const dans = x.fusionDans && plan(x.fusionDans);
+        abandonnes.push({ ref, meta, ou: refShot(x), fusion: !!dans,
+          etat: dans ? 'Fusionné dans ' + refShot(dans) + ' : ses prises y sont'
+                     : 'Abandonné' + (pr.length ? ' · ' + pr.length + ' prise' + plur(pr.length) + ' tournée' + plur(pr.length) : '') });
+        return;
+      }
       if (pr.length || x.etat === 'done'){
         const ok = pr.filter(t => t.statut === 'OK').length, ng = pr.filter(t => t.statut === 'NG').length,
               ret = pr.filter(t => t.retenue).length;
@@ -5923,8 +5933,7 @@ function modeleDIT(j){
           b.seq = 'Séquence ' + (seqCourante || '—'); b.seqTitre = x.seqTitre || '';
         }
         tournes.push(b);
-      } else if (x.etat === 'drop') abandonnes.push({ ref, meta });
-      else reste.push({ ref, meta });
+      } else reste.push({ ref, meta });
     });
     /* 3. Ce qu'il y a a sauvegarder : un fichier par prise, carte par carte,
        du premier au dernier clip ; et ce qui manque pour les retrouver. */
@@ -6262,21 +6271,19 @@ function pdfDIT(j){
   const COLONNES = {
     n:      ['Pr.', 22, 'H', t => t.n],
     clip:   ['Clip', 68, 'C', t => t.clip || '—'],
-    ou:     ['Plan · prise', 84, 'H', t => [t.seq, t.plan].filter(Boolean).join(' · ') + (t.n ? ' · pr. ' + t.n : '')],
+    // la sequence, le shot et la prise en toutes lettres : « Séq 06 · Shot 01 · Prise 2 »
+    ou:     ['Séq · Shot · Prise', 128, 'H', t => [t.seq && 'Séq ' + t.seq, t.plan && 'Shot ' + t.plan, t.n && 'Prise ' + t.n].filter(Boolean).join(' · ')],
     statut: ['Statut', 42, 'H', t => statut(t.statut)],
-    ret:    ['Montage', 54, 'H', t => t.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
-    duree:  ['Durée', 34, 'H', t => t.duree],
+    // la duree chronometree de la prise ; a defaut, celle prevue pour le shot, en tan
+    duree:  ['Durée', 58, 'H', t => t.duree || (t.dureePrevue ? { t: t.dureePrevue + ' prévue', couleur: 'tan' } : '')],
     carte:  ['Carte', 52, 'H', t => t.carte ? { t: t.carte, police: 'HB', couleur: 'encre' } : { t: '—', couleur: 'tan' }],
     note:   ['Note', 0, 'H', t => t.note],
-    qui:    ['Saisi par', 64, 'H', saisi],
-    champ:  ['Écart', 64, 'HB', t => ({ t: t.champ, police: 'HB', couleur: 'ng' })],
-    saisies:['Saisies', 0, 'H', t => ({ parts: t.valeurs.flatMap(([n, v], k) =>
-              [{ t: (k ? '  ·  ' : '') + n + ' ', police: 'HB', couleur: 'encre' }, { t: v, couleur: 'ng' }]) })]
+    qui:    ['Saisi par', 64, 'H', saisi]
   };
   const colonnes = (fixes, prises, taille) => {
     const avec = k => prises.some(t => t[k]);
     const ids = fixes.slice(0, -1)
-      .concat(avec('duree') ? ['duree'] : [],
+      .concat(avec('duree') && !fixes.includes('duree') ? ['duree'] : [],
               avec('note') ? ['note'] : [], fixes.slice(-1));
     const cols = ids.map(id => COLONNES[id].slice());
     // « Saisi par » s'elargit quand trois personnes ont saisi la meme prise
@@ -6289,14 +6296,15 @@ function pdfDIT(j){
   };
   const rangee = (cols, t, extra) => Object.assign({ v: cols.map(c => c[3](t)) }, extra || {});
 
-  /* Deux parties, et rien d'autre : ce que le montage attend, avec tout le
-     compte de la journee en tete ; puis, s'il y en a, les ecarts entre les
-     saisies, une ligne chacun, pour que le DIT sache quoi verifier. */
+  /* Ce que le montage attend, avec tout le compte de la journee en tete ; puis,
+     s'il y en a, les shots fusionnes ou abandonnes : ce que chacun est devenu.
+     Les ecarts entre les saisies n'y sont pas : ils se reglent dans le rapprochement. */
   jours.forEach((m, i) => {
     if (i) doc.nouvellePage();
     // la carte est toujours la : le DIT voit d'un coup d'oeil sur quelle carte est chaque prise
-    const colsM = colonnes(['clip', 'ou', 'statut', 'carte', 'qui'], m.montage, 8.5);
-    const chiffres = m.chiffres.filter(c => c[1] !== 'à tourner').concat(m.ecarts ? [[m.ecarts, 'écart' + plur(m.ecarts) + ' entre saisies']] : []);
+    // la duree du shot est toujours la : le monteur sait ce que dure chaque prise retenue
+    const colsM = colonnes(['clip', 'ou', 'statut', 'duree', 'carte', 'qui'], m.montage, 8.5);
+    const chiffres = m.chiffres.filter(c => c[1] !== 'à tourner');
     entetePdf(doc, m.titre, m.sous, chiffres);
 
     // 1. ce que le montage attend
@@ -6304,12 +6312,12 @@ function pdfDIT(j){
     if (m.montage.length) tableauPdf(doc, colsM, m.montage.map(t => rangee(colsM, t, { gras: true })), 8.5, 'Prises retenues, suite');
     else vide('Aucune prise marquée à monter pour l’instant.');
 
-    // 2. les ecarts entre saisies : la prise, le champ, ce que chacun a saisi
-    if (m.listeEcarts.length){
-      const colsE = ['ou', 'clip', 'ret', 'champ', 'saisies'].map(id => COLONNES[id].slice());
-      colsE[colsE.length - 1][1] = L - colsE.reduce((a, c) => a + c[1], 0);
-      section('2. Écarts entre les saisies — ' + m.listeEcarts.length + ' à vérifier');
-      tableauPdf(doc, colsE, m.listeEcarts.map(e => rangee(colsE, e, { fond: e.retenue })), 8, 'Écarts, suite');
+    // 2. les shots fusionnes ou abandonnes : ce que chacun est devenu, pour que le DIT ne cherche pas leurs prises
+    if (m.abandonnes.length){
+      const colsA = [['Shot', 128, 'HB', a => ({ t: a.ou, police: 'HB', couleur: 'encre' })],
+                     ['Ce qu’il est devenu', L - 128, 'H', a => ({ t: a.etat, police: 'HB', couleur: a.fusion ? 'caramel' : 'ng' })]];
+      section('2. Shots fusionnés ou abandonnés — ' + m.abandonnes.length);
+      tableauPdf(doc, colsA, m.abandonnes.map(a => rangee(colsA, a)), 8.5, 'Shots fusionnés ou abandonnés, suite');
     }
   });
   return doc.fichier(jours.length ? jours[0].pied : '');
@@ -6479,6 +6487,20 @@ function pdfVFX(j, images, imposees){
     const [v, t] = ajuste(s, larg, taille, police);
     T(centre ? x + (larg - largeurPdf(v, t, police)) / 2 : x, y, v, { taille: t, police, couleur });
   };
+  /* une case de prise : le texte rapetisse pour tenir (« 100 mm macro ») ; trop long meme a 5 points,
+     il passe sur deux lignes, coupe au blanc le plus proche du milieu, avant de se couper */
+  const ecrireCase = (x, yl, s, larg, taille, police, couleur, centre) => {
+    s = String(s || ''); larg -= 2; x += 1;
+    let t = taille;
+    while (t > 5 && largeurPdf(s, t, police) > larg) t -= .25;
+    const blancs = [...s.matchAll(/ /g)].map(m => m.index);
+    if (largeurPdf(s, t, police) <= larg || !blancs.length) return ecrire(x, yl - 11, s, larg, taille, police, couleur, centre);
+    const i = blancs.reduce((a, b) => Math.abs(b - s.length / 2) < Math.abs(a - s.length / 2) ? b : a);
+    const deux = [s.slice(0, i), s.slice(i + 1)];
+    let t2 = Math.min(taille, 6);
+    while (t2 > 4 && deux.some(l => largeurPdf(l, t2, police) > larg)) t2 -= .25;
+    deux.forEach((l, k) => ecrire(x, yl - 7.6 - k * (t2 + 1.2), l, larg, t2, police, couleur, centre));
+  };
   // une barre de titre : encre, petites capitales claires ; une mention a droite
   const barre = (x, yh, w, titre, droite) => {
     doc.rect(x, yh - 11, w, 11, 'encre');
@@ -6565,13 +6587,13 @@ function pdfVFX(j, images, imposees){
           const v = lire(t);
           if (Array.isArray(v)){
             // un depart sans arrivee n'a rien bouge : la case d'arrivee reste vide
-            ecrire(x, yb, v[0], w / 2, 6.6, t.retenue ? 'HB' : 'H', 'encre', true);
-            if (v[1] && v[1] !== v[0]) ecrire(x + w / 2, yb, v[1], w / 2, 6.6, t.retenue ? 'HB' : 'H', 'encre', true);
+            ecrireCase(x, yl, v[0], w / 2, 6.6, t.retenue ? 'HB' : 'H', 'encre', true);
+            if (v[1] && v[1] !== v[0]) ecrireCase(x + w / 2, yl, v[1], w / 2, 6.6, t.retenue ? 'HB' : 'H', 'encre', true);
           } else if (titre === 'Notes'){
             const l = lignesPdf(v, w - 6, 5.8, 'H');
             if (l.length > 2){ l.length = 2; l[1] = ajuste(l[1] + '…', w - 6, 5.8, 'H')[0]; }
             l.forEach((s, k) => T(x + 3, yl - (l.length > 1 ? 7 : 11) - k * 6.5, s, { taille: 5.8, couleur: 'brun' }));
-          } else ecrire(x + 2, yb, v, w - 4, 6.6, police === 'C' ? (t.retenue ? 'CB' : 'C') : (t.retenue ? 'HB' : 'H'), 'encre', police !== 'C');
+          } else ecrireCase(x + 1, yl, v, w - 2, 6.6, police === 'C' ? (t.retenue ? 'CB' : 'C') : (t.retenue ? 'HB' : 'H'), 'encre', police !== 'C');
         }
         x += w;
       });
@@ -6607,7 +6629,7 @@ function pdfVFX(j, images, imposees){
     }
     const titre = f.titre || 'Untitled project';
     T(xd - largeurPdf(titre, 19, 'HB'), haut - 16, titre, { taille: 19, police: 'HB', couleur: 'encre' });
-    const ligne = ['VFX camera report' + (suite || sous ? ' · continued' : ''),
+    const ligne = ['Data wrangling' + (suite || sous ? ' · continued' : ''),
                    f.plan ? 'Seq ' + (f.seq || '—') + ' · Shot ' + f.plan : '', sous || (suite ? 'Takes ' + suite : ''),
                    'Page ' + (vierge ? BLANC : page + ' / ' + total)].filter(Boolean).join(' · ');
     T(xd - largeurPdf(ligne, 8.5, 'H'), haut - 29, ligne, { taille: 8.5, couleur: 'tan' });
@@ -6623,7 +6645,8 @@ function pdfVFX(j, images, imposees){
     const champ = (xg, xdr, y, lib, v, lw) => {
       T(xg, y, lib, { taille: 6, couleur: 'tan' });
       doc.ligne(xg + lw - 2, y - 2.5, xdr, y - 2.5, .35, 'filet');
-      if (v && v.choix) choix(xg + lw, y, v.choix, 6.8, null, xdr - xg - lw);
+      // saisi sur le shot : seulement ce qui l'a ete (INT, NIGHT) ; rien de saisi : tous les choix, a entourer
+      if (v && v.choix) choix(xg + lw, y, v.choix.some(c => c[1]) ? v.choix.filter(c => c[1]) : v.choix, 6.8, null, xdr - xg - lw);
       else if (v) ecrire(xg + lw, y, v, xdr - xg - lw - 1, 7, 'HB', 'encre');
     };
     [['Project', f.projet], ['Shoot', f.tournage], ['Script', f.script]].forEach(([titre, champs], k) => {
@@ -6750,8 +6773,8 @@ function pdfVFX(j, images, imposees){
     });
   });
   const d = new Date(), p = DB.prod;
-  if (vierge) return doc.fichier([p.titre || '', 'VFX camera report', 'Wrangle'].filter(Boolean).join(' · '), () => BLANC);
-  return doc.fichier([p.titre || '', 'VFX camera report · ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+  if (vierge) return doc.fichier([p.titre || '', 'Data wrangling', 'Wrangle'].filter(Boolean).join(' · '), () => BLANC);
+  return doc.fichier([p.titre || '', 'Data wrangling · ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
                       ' ' + hhmm(d) + (UI.nom ? ' · ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · '));
 }
 /* La feuille vierge : l'en-tete du projet rempli (equipe, camera, objectif), tout le reste au stylo. */
@@ -6765,15 +6788,15 @@ function feuilleVierge(){
 }
 function telechargerVFXVierge(){
   chargerLogo().then(() => {
-    download(fname('VFX-camera-report-vierge', 'pdf'), pdfVFX('*', {}, [feuilleVierge()]), 'application/pdf');
+    download(fname('data-wrangling-vierge', 'pdf'), pdfVFX('*', {}, [feuilleVierge()]), 'application/pdf');
     toast('Feuille vierge téléchargée');
   });
 }
 function telechargerVFX(){
   const j = fJourR;
   chargerLogo().then(() => avecEquipeAJour(() => surLePerimetre(() => imagesVFX(j)).then(ims => {
-    surLePerimetre(() => download(fname('VFX-camera-report' + (j === '*' ? '' : '-' + j), 'pdf'), pdfVFX(j, ims), 'application/pdf'));
-    direPerimetre('VFX camera report exporté');
+    surLePerimetre(() => download(fname('data-wrangling' + (j === '*' ? '' : '-' + j), 'pdf'), pdfVFX(j, ims), 'application/pdf'));
+    direPerimetre('Data wrangling exporté');
   })));
 }
 
@@ -7315,8 +7338,55 @@ function garderFusion(){
    l'app. Puis les prises qu'une seule personne a notees : un oubli chez les
    autres, ou une prise en trop. Ce qu'un seul a rempli n'y est pas : la
    fusion le reprend d'elle-meme, ce n'est pas un desaccord. */
+/* Un shot du releve : son etat, son contexte tel que saisi (une ligne par champ, les desaccords
+   entre personnes en clair), et ses prises avec ce qui y manque ou s'ecarte du prevu. */
+const CTX_WRANGLING = [['lieu', 'Décor'], ['intExt', 'Int / Ext'], ['momentJour', 'Moment'], ['meteo', 'Météo'],
+  ['cadrage', 'Cadrage'], ['mouv', 'Mouvement'], ['support', 'Support'], ['focale', 'Focale prévue'], ['acteurs', 'Distribution'],
+  ['duree', 'Durée prévue']];
+const TEXTES_WRANGLING = [['elements', 'Éléments captés'], ['elementsAutre', 'Autre élément'], ['vfxDesc', 'Description VFX'],
+  ['notesClient', 'Note client'], ['notesInternes', 'Note interne']];
+const nomElement = k => (ELEMENTS.find(e => e[0] === k) || [k, k])[1];
+function shotWrangling(x, f, r, compte, doublons){
+  const rb = r.plans.find(b => b.seq === (x.seq || '') && b.plan === (x.plan || ''));
+  const ecPlan = new Map((rb ? rb.plan_.ecarts.filter(compte) : []).map(e => [e.champ, e.valeurs]));
+  const dans = x.fusionDans && f.plans.find(y => y.id === x.fusionDans);
+  // le contexte : la valeur commune, et si chacun a saisi autre chose, ce que chacun a mis
+  const contexte = CTX_WRANGLING.map(([k, label]) => {
+    const vals = Object.entries(saisiesDe(x, k)).map(([n, v]) => [n, valRap(v)]).filter(v => v[1]);
+    return { label, v: valRap(x[k]), ecart: new Set(vals.map(v => v[1].toLowerCase())).size > 1 ? vals : null };
+  }).concat(TEXTES_WRANGLING.map(([k, label]) => {
+    const lab = (RAP_PLAN.find(q => q[0] === k) || [])[1];
+    const v = k === 'elements' ? elementsCoches(x).map(e => e[1]).join(', ') : texteDe(x, k);
+    // les elements sont a chacun : un desaccord, c'est deux personnes qui n'ont pas coche les memes
+    const parQui = k === 'elements' ? quiAElements(x).map(n => [n, ELEMENTS.filter(e => elementsDe(x, n, false)[e[0]]).map(e => e[1]).join(', ') || 'aucun']) : [];
+    const ec = k === 'elements' ? (new Set(parQui.map(q => q[1])).size > 1 ? parQui : null) : ecPlan.get(lab) || null;
+    return { label, v, ecart: ec };
+  }));
+  const prises = f.prises.filter(t => t.planId === x.id).sort((a, b) => (a.n || 0) - (b.n || 0)).map(t => {
+    const erreurs = [];
+    if (!t.pasSaisie){
+      if (!valRap(t.clip)) erreurs.push(['clip', 'Clip manquant']);
+      if (!valRap(t.carte)) erreurs.push(['carte', 'Carte manquante']);
+      if (t.statut !== 'OK' && t.statut !== 'NG') erreurs.push(['statut', 'Ni OK ni NG']);
+    }
+    const fh = focaleHorsPlan(t, x);
+    if (fh) erreurs.push(['focale', 'Focale ' + fleche(t.focale, t.focaleStop) + ', prévue ' + fh]);
+    // le meme nom de clip sur deux prises de la journee : l'une des deux est fausse
+    const autres = ((doublons && doublons.get(cleSimple(t.clip))) || []).filter(q => q.t !== t);
+    if (valRap(t.clip) && autres.length) erreurs.push(['clip', 'Clip ' + t.clip + ' en double (aussi ' + autres.map(q => q.ref).join(', ') + ')']);
+    return Object.assign({}, t, { erreurs, ecarts: t.ecarts || [] });
+  });
+  return {
+    ref: (x.seq ? 'Séq ' + x.seq + ' · ' : '') + 'Shot ' + (x.plan || '—'), seqTitre: x.seqTitre || '', desc: x.desc || '',
+    etat: dans ? 'Fusionné dans ' + (dans.seq ? 'Séq ' + dans.seq + ' · ' : '') + 'Shot ' + (dans.plan || '—')
+        : x.termine ? 'Terminé' : ETATS[x.etat] || '',
+    couleurEtat: dans ? 'caramel' : x.etat === 'drop' ? 'ng' : x.etat === 'done' ? 'ok' : 'tan',
+    ecartEtat: ecPlan.get('État') || (x.ecarts || []).filter(e => e.champ === 'État').map(e => e.valeurs)[0] || null,
+    contexte, prises
+  };
+}
 function modeleWrangling(j){
-  const s = sourcesRap(), r = rapprocher(s), p = DB.prod, d = new Date();
+  const s = sourcesRap(), r = rapprocher(s), f = fusionRap(s), p = DB.prod, d = new Date();
   // le plan et les prises de chacun, par cle : pour le jour, le clip et « retenue »
   const planDe = new Map(), prisesDe_ = new Map();
   s.forEach(src => {
@@ -7333,7 +7403,7 @@ function modeleWrangling(j){
   const compte = e => CHAMPS_ECART.some(c => c[1] === e.champ) || ['État', 'Éléments captés', 'Autre élément', 'Description VFX'].indexOf(e.champ) >= 0;
   const lesPrises = (b, n) => prisesDe_.get((b.seq || '') + '|' + (b.plan || '') + '|' + n) || [];
   const jours = j === '*' ? joursConnus().filter(x => r.plans.some(b => jourDe(b) === x)) : [j];
-  const pied = [p.titre || '', 'fiche data wrangling éditée le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
+  const pied = [p.titre || '', 'rapport VFX édité le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
                 ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · ');
   return (jours.length ? jours : ['*']).map(jour => {
     const P = r.plans.filter(b => jour === '*' || jourDe(b) === jour);
@@ -7357,9 +7427,18 @@ function modeleWrangling(j){
       const x = src.db.plans.find(y => y.id === t.planId);
       return x && (jour === '*' || x.jour === jour);
     })).map(src => src.nom);
+    const duJour = f.plans.filter(x => jour === '*' || x.jour === jour);
+    // les noms de clip de la journee, pour reperer ceux qui servent deux fois
+    const doublons = new Map();
+    duJour.forEach(x => f.prises.filter(t => t.planId === x.id && valRap(t.clip)).forEach(t => {
+      const k = cleSimple(t.clip);
+      doublons.set(k, (doublons.get(k) || []).concat([{ t, ref: (x.seq ? 'Séq ' + x.seq + ' · ' : '') + 'Shot ' + (x.plan || '—') + ' · Prise ' + t.n }]));
+    }));
+    const shots = duJour.filter(x => f.prises.some(t => t.planId === x.id) || x.etat !== 'todo')
+      .map(x => shotWrangling(x, f, r, compte, doublons));
     return {
-      jour, titre: p.titre || 'Projet sans titre', pied, ecarts, seuls, noms,
-      sous: ['Data wrangling', jour === '*' ? 'Tout le tournage' : nomJour(jour), noms.length ? 'Saisies de ' + noms.join(', ') : '']
+      jour, titre: p.titre || 'Projet sans titre', pied, ecarts, seuls, noms, shots,
+      sous: ['Rapport VFX', jour === '*' ? 'Tout le tournage' : nomJour(jour), noms.length ? 'Saisies de ' + noms.join(', ') : '']
               .filter(Boolean).join(' · '),
       chiffres: [[ecarts.length, 'écart' + plur(ecarts.length) + ' à trancher'],
                  [ecarts.filter(e => e.retenue).length, 'sur des prises retenues'],
@@ -7368,46 +7447,120 @@ function modeleWrangling(j){
     };
   });
 }
+/* Le releve de ce que l'equipe a saisi : une page par shot, toutes de la meme forme, en paysage.
+   En tete le bilan du shot ; son titre, son etat, sa description ; le contexte et le VFX cote a
+   cote, tous leurs champs a la meme place (« — » quand rien n'est saisi) ; ses prises, toujours
+   les memes colonnes ; enfin ce qui est a reprendre. En rouge : une saisie qui manque ou s'ecarte
+   du prevu, et un desaccord entre deux saisies (chacun avec ses initiales). */
 function pdfWrangling(j){
-  const jours = modeleWrangling(j), doc = nouveauPdf(), L = doc.largeur - 2 * PDF_M;
-  const ou = x => [x.seq, x.plan].filter(Boolean).join(' · ') + (x.n ? ' · pr. ' + x.n : '');
-  const vide = t => { doc.texte(PDF_M, doc.y - 8, t, { taille: 8.5, couleur: 'tan' }); doc.y -= 13; };
-  jours.forEach((m, i) => {
-    if (i) doc.nouvellePage();
-    entetePdf(doc, m.titre, m.sous, m.chiffres);
-    doc.y -= 4;
-    doc.texte(PDF_M, doc.y - 8, 'À trancher avant d’exporter le journal DIT et la fiche VFX : corriger la saisie fautive dans l’app, puis cocher la case.',
-              { taille: 8, couleur: 'tan' });
-    doc.y -= 12;
+  const jours = modeleWrangling(j), doc = nouveauPdf(true), L = doc.largeur - 2 * PDF_M;
+  const ini = n => String(n || '').slice(0, 2);
+  const desaccord = vals => vals.map(([n, v]) => ini(n) + ' ' + v).join(' / ');
+  const ROUGE = { police: 'HB', couleur: 'ng' };
+  const COLS = [['n', 'Pr.', 22, 'HB', t => t.n], ['clip', 'Clip', 72, 'C', t => t.clip], ['carte', 'Carte', 46, 'H', t => t.carte],
+    ['statut', 'Statut', 54, 'HB', t => t.statut], ['retenue', 'Montage', 48, 'H', t => t.retenue ? 'retenue' : ''],
+    ['focale', 'Focale', 66, 'H', t => fleche(t.focale, t.focaleStop)], ['diaph', 'Diaph', 34, 'H', t => t.diaph],
+    ['ei', 'ISO', 32, 'H', t => t.ei], ['wb', 'Balance', 44, 'H', t => t.wb], ['shutter', 'Obtur.', 38, 'H', t => t.shutter],
+    ['mouvement', 'Mouvement', 64, 'H', t => t.mouvement], ['support', 'Support', 50, 'H', t => t.support],
+    ['duree', 'Durée', 32, 'H', t => t.duree], ['heure', 'Heure', 32, 'H', t => t.heure],
+    ['par', 'Saisi par', 40, 'H', t => String(t.par || '').split(/\s*,\s*/).filter(Boolean).map(ini).join(', ')],
+    ['notes', 'Note', 0, 'H', t => t.notes]];
+  COLS[COLS.length - 1][2] = L - COLS.reduce((a, c) => a + c[2], 0);
+  const labelDe = k => (RAP_PRISE.find(q => q[0] === k) || [])[1];
+  const ecartDe = (t, k) => t.ecarts.find(e => e.champ === labelDe(k) || (k === 'focale' && e.champ === 'Focale fin'));
+  const tcols = COLS.map(([k, titre, w, police, lire]) => [titre, w, police, t => {
+    const e = ecartDe(t, k), err = t.erreurs.find(q => q[0] === k), v = valRap(lire(t));
+    if (e) return Object.assign({ t: desaccord(e.valeurs) }, ROUGE);
+    if (err) return Object.assign({ t: v || 'manque' }, ROUGE);
+    if (k === 'statut') return { t: v, police: 'HB', couleur: v === 'OK' ? 'ok' : 'ng' };
+    if (k === 'retenue' && v) return { t: v, puce: 'caramel', police: 'HB', couleur: 'encre' };
+    return k === 'n' ? { t: v, police: 'HB', couleur: 'encre' } : v;
+  }]);
+  // un titre de bloc : petites capitales encre, un filet dessous
+  const titreBloc = (x, y, w, titre) => {
+    doc.texte(x, y - 8, titre.toUpperCase(), { taille: 7.2, police: 'HB', couleur: 'encre', esp: .9 });
+    doc.ligne(x, y - 12, x + w, y - 12, .7, 'filet2');
+    return y - 20;
+  };
+  // un champ : le libelle a gauche, la valeur a sa droite (trois lignes au plus) ; rend sa hauteur
+  const lignesChamp = (c, w) => {
+    const l = lignesPdf(c.ecart ? desaccord(c.ecart) : c.v || '—', w, 8.2, c.ecart ? 'HB' : 'H');
+    if (l.length > 3){ l.length = 3; l[2] = l[2].replace(/\s*\S*$/, '') + ' …'; }
+    return l;
+  };
+  const champ = (x, y, wl, c, l) => {
+    doc.texte(x, y - 8.2, c.label.toUpperCase(), { taille: 5.8, police: 'HB', couleur: 'tan', esp: .5 });
+    l.forEach((s, n) => doc.texte(x + wl, y - 8.6 - n * 10.2, s, c.ecart ? Object.assign({ taille: 8.2 }, ROUGE)
+                                                              : { taille: 8.2, couleur: c.v ? 'encre' : 'filet2', esp: 0 }));
+    return l.length * 10.2 + 3.5;
+  };
+  const texte = (s, o) => lignesPdf(s, L, o.taille, o.police || 'H').forEach(l => {
+    doc.place(o.taille * 1.5); doc.texte(PDF_M, doc.y - o.taille, l, o); doc.y -= o.taille * 1.45;
+  });
 
-    // 1. les ecarts : une colonne par personne, sa valeur en rouge
-    sectionPdf(doc, '1. Écarts à trancher — ' + m.ecarts.length);
-    if (m.ecarts.length){
-      const noms = m.noms.filter(n => m.ecarts.some(e => e.valeurs.some(([q]) => q === n)));
-      const fixes = [['', 18, 'H', () => ({ caseVide: true })], ['Plan · prise', 82, 'H', e => ou(e)], ['Clip', 66, 'C', e => e.clip || '—'],
-                     ['Montage', 52, 'H', e => e.retenue ? { t: 'retenue', puce: 'caramel', police: 'HB', couleur: 'encre' } : ''],
-                     ['Champ', 62, 'HB', e => ({ t: e.champ, police: 'HB', couleur: 'encre' })]];
-      const reste = (L - fixes.reduce((a, c) => a + c[1], 0)) / Math.max(1, noms.length);
-      const cols = fixes.concat(noms.map(n => [n, reste, 'H', e => {
-        const v = (e.valeurs.find(([q]) => q === n) || [])[1];
-        return v ? { t: v, police: 'HB', couleur: 'ng' } : { t: '—', couleur: 'tan' };
-      }]));
-      tableauPdf(doc, cols, m.ecarts.map(e => ({ v: cols.map(c => c[3](e)), fond: e.retenue })), 8.5, 'Écarts à trancher, suite');
-    } else vide('Aucun écart : les saisies de la journée concordent.');
+  let pages = 0;
+  jours.forEach(m => {
+    const legende = m.noms.length > 1 ? 'Initiales : ' + m.noms.map(n => ini(n) + ' = ' + n).join(', ') + '.' : '';
+    if (!m.shots.length){
+      if (pages++) doc.nouvellePage();
+      entetePdf(doc, m.titre, m.sous, [[0, 'shot']]);
+      texte('Aucun shot tourné ce jour-là.', { taille: 9, couleur: 'tan' });
+      return;
+    }
+    m.shots.forEach(x => {
+      if (pages++) doc.nouvellePage();
+      const nErr = x.prises.reduce((a, t) => a + t.erreurs.length, 0);
+      const nEc = x.contexte.filter(c => c.ecart).length + (x.ecartEtat ? 1 : 0) + x.prises.reduce((a, t) => a + t.ecarts.length, 0);
+      entetePdf(doc, m.titre, m.sous, [[x.prises.length, 'prise' + plur(x.prises.length)],
+        [x.prises.filter(t => t.statut === 'OK').length, 'OK'], [x.prises.filter(t => t.statut === 'NG').length, 'NG'],
+        [x.prises.filter(t => t.retenue).length, 'à monter'], [nErr, 'erreur' + plur(nErr) + ' de saisie'],
+        [nEc, 'désaccord' + plur(nEc) + ' entre saisies']]);
 
-    // 2. les prises qu'une seule personne a notees
-    sectionPdf(doc, '2. Prises notées par une seule personne — ' + m.seuls.reduce((a, x) => a + x.prises.length, 0));
-    if (m.seuls.length){
-      const cols = [['', 18, 'H', () => ({ caseVide: true })], ['Plan', 62, 'H', x => ou(x)],
-                    ['Seulement chez', 84, 'HB', x => ({ t: x.qui, police: 'HB', couleur: 'encre' })],
-                    ['Prises', 0, 'H', x => x.prises.map(t => 'pr. ' + t.n + (t.clip ? ' ' + t.clip : '') + (t.statut ? ' ' + t.statut : '') +
-                                                               (t.retenue ? ' (retenue)' : '')).join(' · ')]];
-      cols[3][1] = L - cols.reduce((a, c) => a + c[1], 0);
-      tableauPdf(doc, cols, m.seuls.map(x => ({ v: cols.map(c => c[3](x)), fond: x.prises.some(t => t.retenue) })), 8.5, 'Prises notées par une seule personne, suite');
-      doc.y -= 4;
-      doc.texte(PDF_M, doc.y - 8, 'Un oubli chez les autres, ou une prise en trop : à vérifier avec la personne.', { taille: 7.5, couleur: 'tan' });
-      doc.y -= 12;
-    } else vide('Toutes les prises ont été notées par au moins deux personnes.');
+      // le titre du shot, son etat en pastille a droite, sa description
+      const yT = doc.y - 4;
+      doc.texte(PDF_M, yT - 17, x.ref, { taille: 17, police: 'HB', couleur: 'encre' });
+      if (x.seqTitre) doc.texte(PDF_M + largeurPdf(x.ref, 17, 'HB') + 12, yT - 17, x.seqTitre, { taille: 10, couleur: 'tan' });
+      const et = x.etat || 'À tourner', wp = largeurPdf(et, 8, 'HB') + 18, clair = x.couleurEtat === 'tan';
+      doc.rect(PDF_M + L - wp, yT - 21, wp, 16, clair ? 'creme2' : x.couleurEtat);
+      doc.texte(PDF_M + L - wp + 9, yT - 15.6, et, { taille: 8, police: 'HB', couleur: clair ? 'encre' : 'blanc' });
+      doc.y = yT - 26;
+      const desc = lignesPdf(x.desc || '', L, 9, 'H');
+      if (desc.length > 2){ desc.length = 2; desc[1] = desc[1].replace(/\s*\S*$/, '') + ' …'; }
+      desc.forEach(l => { doc.texte(PDF_M, doc.y - 9, l, { taille: 9, couleur: 'brun' }); doc.y -= 12.5; });
+      if (x.ecartEtat){ doc.texte(PDF_M, doc.y - 8.5, 'État : ' + desaccord(x.ecartEtat), Object.assign({ taille: 8.5 }, ROUGE)); doc.y -= 12.5; }
+      doc.y -= 6;
+
+      // le contexte (deux colonnes) et le VFX, cote a cote
+      const g = 22, wl = (L - g) * .52, wr = L - g - wl, xr = PDF_M + wl + g, y0 = doc.y;
+      const ctx = x.contexte.slice(0, CTX_WRANGLING.length), vfx = x.contexte.slice(CTX_WRANGLING.length);
+      let yl = titreBloc(PDF_M, y0, wl, 'Contexte du shot'), yr = titreBloc(xr, y0, wr, 'VFX');
+      const cw = (wl - 14) / 2, lab = 64, labV = 82;
+      for (let a = 0; a < ctx.length; a += 2){
+        const paire = ctx.slice(a, a + 2).map(c => [c, lignesChamp(c, cw - lab - 4)]);
+        const h = Math.max(...paire.map(([, l]) => l.length * 10.2 + 3.5));
+        paire.forEach(([c, l], k) => champ(PDF_M + k * (cw + 14), yl, lab, c, l));
+        yl -= h;
+      }
+      vfx.forEach(c => { yr -= champ(xr, yr, labV, c, lignesChamp(c, wr - labV - 4)); });
+      doc.y = Math.min(yl, yr) - 4;
+
+      // les prises : toujours les memes colonnes, d'une page a l'autre
+      const yP = titreBloc(PDF_M, doc.y, L, 'Prises — ' + x.prises.length);
+      doc.y = yP + 6;
+      if (x.prises.length) tableauPdf(doc, tcols, x.prises.map(t => ({ v: tcols.map(c => c[3](t)), fond: t.retenue })), 7.8, x.ref + ', prises, suite');
+      else { doc.texte(PDF_M, doc.y - 9, 'Aucune prise sur ce shot.', { taille: 8.5, couleur: 'tan' }); doc.y -= 14; }
+
+      // ce qui est a reprendre : le contexte, puis prise par prise ; ou rien, en vert
+      const items = x.contexte.filter(c => c.ecart).map(c => c.label + ' : ' + c.ecart.map(([n, v]) => n + ' « ' + v + ' »').join(', '))
+        .concat(x.prises.map(t => [t, t.erreurs.map(q => q[1]).concat(t.ecarts.map(e =>
+          e.champ + ' : ' + e.valeurs.map(([n, v]) => n + ' « ' + v + ' »').join(', ')))]).filter(q => q[1].length)
+          .map(([t, l]) => 'Prise ' + t.n + ' — ' + l.join(' · ')));
+      doc.place(40); doc.y -= 6;
+      doc.y = titreBloc(PDF_M, doc.y, L, 'À reprendre — ' + items.length) + 6;
+      if (items.length) items.forEach(s => texte('•  ' + s, { taille: 8.3, couleur: 'ng' }));
+      else texte('Rien à reprendre : les saisies de ce shot sont complètes et concordent.', { taille: 8.3, police: 'HB', couleur: 'ok' });
+      if (legende){ doc.y -= 2; texte(legende, { taille: 7.3, couleur: 'tan' }); }
+    });
   });
   return doc.fichier(jours.length ? jours[0].pied : '');
 }
@@ -7416,9 +7569,8 @@ function pdfWrangling(j){
 function telechargerWrangling(){
   const j = fJourR;
   chargerLogo().then(() => (RESEAU.possible ? recupererEspaces() : Promise.resolve())).then(() => {
-    if (sourcesRap().length < 2) return prevenir('Personne d’autre n’a encore saisi.', { detail:'La fiche data wrangling compare les saisies de plusieurs personnes.' });
-    download(fname('data-wrangling' + (j === '*' ? '' : '-' + j), 'pdf'), pdfWrangling(j), 'application/pdf');
-    toast('Fiche data wrangling exportée : ' + sourcesRap().map(x => x.nom).join(', '));
+    download(fname('rapport-VFX' + (j === '*' ? '' : '-' + j), 'pdf'), pdfWrangling(j), 'application/pdf');
+    toast('Rapport VFX exporté : ' + sourcesRap().map(x => x.nom).join(', '));
   });
 }
 
@@ -7726,22 +7878,22 @@ function zipStore(fichiers){
   return out;
 }
 /* Le backup : tous les jours de tournage, chacun dans son dossier avec ses trois PDF (DIT,
-   rapport VFX, data wrangling s'il y a de quoi comparer), dans un seul ZIP telecharge sur cet appareil. */
+   rapport VFX, data wrangling), dans un seul ZIP telecharge sur cet appareil. */
 function telechargerBackup(){
   const d = new Date();
   toast('Backup en préparation…');
   const octets = x => x instanceof Uint8Array ? x : new TextEncoder().encode(String(x));
   chargerLogo().then(() => (RESEAU.possible ? recupererEspaces() : Promise.resolve())).then(() => avecEquipeAJour(() => {
     const jours = surLePerimetre(() => joursConnus().filter(j => j && plansDuJour(j).length));
-    const fichiers = [], deux = sourcesRap().length >= 2;
-    // un jour apres l'autre : les croquis du rapport VFX se rendent en images, en asynchrone
+    const fichiers = [];
+    // un jour apres l'autre : les croquis du data wrangling se rendent en images, en asynchrone
     return jours.reduce((suite, j) => suite.then(() => surLePerimetre(() => imagesVFX(j)).then(ims => {
       const dossier = nomJour(j) + '/', sfx = '-' + j;
       surLePerimetre(() => {
         fichiers.push([dossier + fname('journal-DIT' + sfx, 'pdf'), octets(pdfDIT(j))]);
-        fichiers.push([dossier + fname('VFX-camera-report' + sfx, 'pdf'), octets(pdfVFX(j, ims))]);
+        fichiers.push([dossier + fname('rapport-VFX' + sfx, 'pdf'), octets(pdfWrangling(j))]);
+        fichiers.push([dossier + fname('data-wrangling' + sfx, 'pdf'), octets(pdfVFX(j, ims))]);
       });
-      if (deux) fichiers.push([dossier + fname('data-wrangling' + sfx, 'pdf'), octets(pdfWrangling(j))]);
     })), Promise.resolve()).then(() => {
       if (!fichiers.length) return prevenir('Rien à sauvegarder pour l’instant.');
       download(fname('backup-' + deuxCh(d.getDate()) + '-' + deuxCh(d.getMonth() + 1) + '-' + deuxCh(d.getHours()) + 'h' + deuxCh(d.getMinutes()), 'zip'),
