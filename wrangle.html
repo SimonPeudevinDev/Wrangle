@@ -7206,6 +7206,9 @@ function fusionRap(sources){
   sources = sansPasSaisies(sources);
   const base = structuredClone(sources[0].db), nomBase = sources[0].nom || '';
   const parCle = new Map(base.plans.map(p => [clePlan(p), p]));
+  // qui a apporte chaque prise ou plan ajoute a la base : un ecart nomme la vraie personne,
+  // pas celle de la base (le DIT qui ne saisit rien et fabrique le rapport, par exemple)
+  const origine = new Map(), deQui = o => origine.get(o) || nomBase;
   const combler = (b, o, sauf) => Object.keys(o).forEach(k => {
     if (sauf.indexOf(k) >= 0 || (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]))) return;
     if (!valRap(b[k]) && valRap(o[k])) b[k] = o[k];
@@ -7213,10 +7216,10 @@ function fusionRap(sources){
   sources.slice(1).forEach(s => {
     s.db.plans.forEach(p => {
       let b = parCle.get(clePlan(p));
-      if (!b){ b = structuredClone(p); base.plans.push(b); parCle.set(clePlan(p), b); }
+      if (!b){ b = structuredClone(p); base.plans.push(b); parCle.set(clePlan(p), b); origine.set(b, s.nom); }
       else {
         const ea = champPlan(b, 'etat'), eb = champPlan(p, 'etat');
-        if (ea && eb && ea !== eb) noterEcart(b, 'État', nomBase, ea, s.nom, eb);
+        if (ea && eb && ea !== eb) noterEcart(b, 'État', deQui(b), ea, s.nom, eb);
         combler(b, p, ['id', 'ecarts']);
         b.elements = b.elements || {};
         Object.keys(p.elements || {}).forEach(k => { if (p.elements[k]) b.elements[k] = true; });
@@ -7224,10 +7227,10 @@ function fusionRap(sources){
       const prisesB = base.prises.filter(t => t.planId === b.id);
       s.db.prises.filter(t => t.planId === p.id).forEach(t => {
         const tb = prisesB.find(x => String(x.n) === String(t.n));
-        if (!tb){ const c = structuredClone(t); c.planId = b.id; base.prises.push(c); prisesB.push(c); return; }
+        if (!tb){ const c = structuredClone(t); c.planId = b.id; base.prises.push(c); prisesB.push(c); origine.set(c, s.nom); return; }
         CHAMPS_ECART.forEach(([k, label]) => {
           const a = valRap(tb[k]), v = valRap(t[k]);
-          if (a && v && a.toLowerCase() !== v.toLowerCase()) noterEcart(tb, label, nomBase, a, s.nom, v);
+          if (a && v && a.toLowerCase() !== v.toLowerCase()) noterEcart(tb, label, deQui(tb), a, s.nom, v);
         });
         if (valRap(t.notes) && valRap(tb.notes) && valRap(t.notes) !== valRap(tb.notes)) tb.notes = tb.notes.trim() + ' · ' + s.nom + ' : ' + t.notes.trim();
         // deux montres a quelques minutes pres : l'heure du milieu
