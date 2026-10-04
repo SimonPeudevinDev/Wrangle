@@ -1720,7 +1720,7 @@ function htmlChamp(p, c){
 /* La presaisie : ce que la Preparation a prevu pour le tournage s'affiche dans la fiche du plan
    d'une autre couleur, tant que personne ne l'a saisi au tournage. On le valide d'un geste, ou
    on le change ; laisse tel quel, il compte quand meme dans les rapports. */
-const PREVUS_PLAN = ['mouv'];
+const PREVUS_PLAN = ['mouv', 'cadrage'];
 const estPrevu = (p, k) => !!p && PREVUS_PLAN.includes(k) && !!valRap(p[k]) && !Object.keys(saisiesDe(p, k)).length;
 function validerPrevu(k){
   const p = plan(openId); if (!p) return;
