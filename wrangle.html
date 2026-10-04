@@ -1720,7 +1720,7 @@ function htmlChamp(p, c){
 /* La presaisie : ce que la Preparation a prevu pour le tournage s'affiche dans la fiche du plan
    d'une autre couleur, tant que personne ne l'a saisi au tournage. On le valide d'un geste, ou
    on le change ; laisse tel quel, il compte quand meme dans les rapports. */
-const PREVUS_PLAN = ['mouv', 'cadrage'];
+const PREVUS_PLAN = ['lieu', 'intExt', 'momentJour', 'meteo', 'acteurs', 'cadrage', 'mouv', 'support', 'focale', 'duree'];
 const estPrevu = (p, k) => !!p && PREVUS_PLAN.includes(k) && !!valRap(p[k]) && !Object.keys(saisiesDe(p, k)).length;
 function validerPrevu(k){
   const p = plan(openId); if (!p) return;
@@ -2237,17 +2237,19 @@ function blocPlan(p, seulementRetenues, qui){
   const el = lisElements(p);
 
   /* Le contexte du plan, en clair : decor, cadrage, mouvement, focale, duree. */
+  // ce qui vient de la Preparation et que personne n'a encore saisi au tournage : en bleu, comme dans la fiche
+  const pv = k => estPrevu(p, k) ? ' class="prevu" title="Prévu en préparation"' : '';
   const ctx = [
-    p.lieu && `<span><b>${esc(p.lieu)}</b></span>`,
-    p.cadrage && `<span>${esc(p.cadrage)}</span>`,
-    p.mouv && `<span>${esc(p.mouv)}</span>`,
-    p.support && `<span>${esc(p.support)}</span>`,
-    (p.acteurs || []).length && `<span>${esc(p.acteurs.join(', '))}</span>`,
+    p.lieu && `<span${pv('lieu')}><b>${esc(p.lieu)}</b></span>`,
+    p.cadrage && `<span${pv('cadrage')}>${esc(p.cadrage)}</span>`,
+    p.mouv && `<span${pv('mouv')}>${esc(p.mouv)}</span>`,
+    p.support && `<span${pv('support')}>${esc(p.support)}</span>`,
+    (p.acteurs || []).length && `<span${pv('acteurs')}>${esc(p.acteurs.join(', '))}</span>`,
     p.figu && `<span>Figuration</span>`,
-    p.focale && `<span>${esc(p.focale)}</span>`,
-    (d => d && `<span title="${d.prevue ? 'Durée prévue' : 'Durée de la prise ' + esc(d.prise)}">${esc(d.v)}${d.prevue ? ' prévus' : ''}</span>`)(dureeShot(p)),
-    p.intExt && `<span>${esc(p.intExt)}</span>`,
-    p.momentJour && `<span>${esc(p.momentJour)}</span>`
+    p.focale && `<span${pv('focale')}>${esc(p.focale)}</span>`,
+    (d => d && `<span${d.prevue ? ' class="prevu"' : ''} title="${d.prevue ? 'Durée prévue' : 'Durée de la prise ' + esc(d.prise)}">${esc(d.v)}${d.prevue ? ' prévus' : ''}</span>`)(dureeShot(p)),
+    p.intExt && `<span${pv('intExt')}>${esc(p.intExt)}</span>`,
+    p.momentJour && `<span${pv('momentJour')}>${esc(p.momentJour)}</span>`
   ].filter(Boolean).join('');
 
   return `<div class="plan ${p.etat === 'done' ? 'done' : p.etat === 'drop' ? 'drop' : ''}${p.termine ? ' termine' : ''}${p.fusionDans ? ' fusionne' : ''}" data-id="${p.id}">
@@ -7062,7 +7064,16 @@ function decorerPlan(sb, p){
   });
   sb.querySelectorAll('.textes-autres[data-texte]').forEach(d => {
     d.innerHTML = textesDe(p, d.dataset.texte).filter(([n]) => n !== (UI.nom || '').trim()).map(([n, v]) =>
-      `<div class="texte-autre">${n ? pastilleA2(personneA2(n)) : ''}<b>${esc(n || 'Commun')}</b><i>${esc(v)}</i></div>`).join('');
+      `<div class="texte-autre${n ? '' : ' prevu'}">${n ? pastilleA2(personneA2(n)) : ''}<b>${esc(n || 'Préparation')}</b><i>${esc(v)}</i></div>`).join('');
+  });
+  // les champs texte encore prevus (la duree) : en bleu, avec Valider, comme les lignes a tuiles
+  sb.querySelectorAll('.spec [data-k]').forEach(el => {
+    const k = el.dataset.k, sp = el.closest('.spec');
+    if (PREVUS_PLAN.indexOf(k) < 0 || el.dataset.o !== p.id) return;
+    const prevu = estPrevu(p, k), b = sp.querySelector('.prevu-ok');
+    sp.classList.toggle('prevu', prevu);
+    if (prevu && !b) sp.insertAdjacentHTML('beforeend', `<button type="button" class="mini prevu-ok" onclick="validerPrevu('${k}')" title="Garder ce qui était prévu">Valider</button>`);
+    if (!prevu && b) b.remove();
   });
 }
 /* Reprendre ce qu'un autre a note : sa valeur devient la mienne (une note s'ajoute a la mienne). */
