@@ -311,6 +311,10 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   la prise reste, marquée « non saisie » dans la liste. Elle sort de « À compléter », et quand l'équipe est réunie ce sont
   les saisies des autres qui comptent pour elle : ce que la page a repris de la prise d'avant ne
   fait pas de faux écart. Un second appui retire la marque.
+- **Verrouiller une journée** (Journée → Jours de tournage, le cadenas de chaque jour) : pour toute
+  l'équipe, ses shots, leurs prises, sa préparation, sa date et son décor ne se modifient plus. Un
+  cadenas vert la signale dans la rangée des jours ; elle se rouvre au même endroit, ou depuis le
+  bandeau de la fiche d'un de ses shots.
 - Dans la fiche : résultat (OK, NG, Série, Faux départ) et, en plus, Pick-up : une prise peut être
   OK et Pick-up à la fois. Puis note libre et mots rapides
   (Raccord, Jeu, Cadre…), nom de clip avec suggestion du suivant (bouton ＋1), relevés caméra
@@ -441,6 +445,7 @@ py tests/verif_dialogue.py         les boîtes de la page à la place de celles 
 py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues pour le montage, puis écarts entre saisies
 py tests/verif_fiche_vfx.py        le rapport VFX en PDF : une feuille caméra par plan, croquis compris
 py tests/verif_pickup.py           Pick-up se coche en plus de OK ou NG, et se lit partout (liste, DIT, VFX, exports)
+py tests/verif_verrou_jour.py      une journée verrouillée ne se modifie plus (shots, prises, préparation, date, décor)
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_plans_par_jour.py   préparer jour par jour : nombre de plans, jour de plus ou de moins, distribution cochée
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner

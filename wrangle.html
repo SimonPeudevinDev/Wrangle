@@ -695,21 +695,36 @@ if (RESEAU.possible){
 /* Un shot valide (coche verte) est verrouille : ni lui, ni ses prises ne se modifient tant
    qu'on ne l'a pas rouvert. Seul le decocher passe. */
 function shotDe(kind, id){ return kind === 'plan' ? plan(id) : kind === 'prise' ? (p => p && plan(p.planId))(prise(id)) : null; }
+/* Une journee verrouillee (Journee -> Jours de tournage) l'est pour toute l'equipe :
+   ses shots, leurs prises, sa preparation, sa date et son decor ne se modifient
+   plus tant qu'on ne l'a pas rouvert. verrouille rend le jour en cause, ou true
+   pour un shot valide, ou false. */
+const jourFige = j => !!(j && DB.prod && DB.prod['verrou_' + j]);
+const bloque = p => !!p && (!!p.termine || jourFige(p.jour));
 function verrouille(kind, id, data){
+  if (kind === 'prod')
+    return (data && Object.keys(data).map(k => (/^(?:date|decor)_(.+)$/.exec(k) || [])[1]).find(jourFige)) || false;
   const p = shotDe(kind, id);
-  if (!p || !p.termine) return false;
+  // un shot ne passe pas dans une journee verrouillee
+  if (kind === 'plan' && data && data.jour && jourFige(data.jour) && (!p || p.jour !== data.jour)) return data.jour;
+  if (!p) return false;
+  if (jourFige(p.jour)) return p.jour;
+  if (!p.termine) return false;
   if (kind === 'plan' && data && Object.keys(data).every(k => k === 'termine' || k === 'auteurs')) return false;
   return true;
 }
-function prevenirVerrou(p){
-  toast('Shot ' + ((p && p.plan) || '') + ' validé : décochez-le pour le modifier');
+function prevenirVerrou(p, j){
+  if (!j && p && jourFige(p.jour)) j = p.jour;
+  toast(j ? nomJour(j) + ' verrouillé : rouvrez-le dans Journée pour le modifier'
+          : 'Shot ' + ((p && p.plan) || '') + ' validé : décochez-le pour le modifier');
   // ce qui a ete tape a l'ecran reprend la valeur gardee
   if (openType === 'plan' || openType === 'prise') setTimeout(rouvrirFiche, 0);
 }
 function patch(kind, id, data){
   const o = kind === 'prod' ? DB.prod : cible(id);
   if (!o) return;
-  if (verrouille(kind, id, data)) return prevenirVerrou(shotDe(kind, id));
+  const v = verrouille(kind, id, data);
+  if (v) return prevenirVerrou(shotDe(kind, id), typeof v === 'string' ? v : '');
   if (kind === 'plan') data = avecAuteurs(o, data);
   Object.assign(o, data);
   save();
@@ -2021,7 +2036,7 @@ function chipsJours(actif, fn, info, jours){
   };
   // le nom du jour seul : les comptes et l'avancement sont dans la ligne de
   // filtres et dans l'en-tete de chaque journee
-  return un('*', 'Tout') + (jours || joursConnus()).map(j => un(j, nomJour(j))).join('');
+  return un('*', 'Tout') + (jours || joursConnus()).map(j => un(j, nomJour(j) + (jourFige(j) ? ICO_JOUR_FIGE : ''))).join('');
 }
 
 function renderShoot(){
@@ -2125,7 +2140,7 @@ function renderShoot(){
     if (j !== lastJour){
       lastJour = j; lastSeq = null;
       const a = avancement(j);
-      html += `<div class="jour"><b>${nomJour(j)}</b>
+      html += `<div class="jour${jourFige(j) ? ' fige' : ''}"><b>${nomJour(j)}${jourFige(j) ? ICO_JOUR_FIGE : ''}</b>
         <span>${esc(j === 'CG' ? 'Full CG' : decorJour(j))}</span>
         <i>${a.fait}/${a.total}</i></div>`;
     }
@@ -2187,14 +2202,32 @@ function calerPrises(racine){
 /* « Tourne » s'affiche une fois qu'on est passe a la suite : la derniere prise
    notee est sur un autre shot. Le shot qu'on tourne encore ne le dit pas. */
 /* Un shot termine (toutes ses prises faites) : coche sur sa carte, pour toute l'equipe ; son nom passe au vert. */
+// le petit cadenas d'une journee verrouillee, dans la rangee des jours et l'en-tete du jour
+const ICO_JOUR_FIGE = '<svg class="jfige" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-label="verrouillé">' +
+  '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>';
 // le cadenas : ferme, le shot est valide et verrouille ; ouvert, il peut l'etre
 const ICO_FINI = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2"/></svg>';
 const ICO_FINI_OUVERT = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/><path d="M12 14.5v2"/></svg>';
 /* Le bandeau d'un shot valide, en tete de sa fiche et de celles de ses prises */
-const bandeauVerrou = p => p && p.termine ? `<div class="verrou-shot">${ICO_FINI}<span>Shot validé : il ne se modifie plus.</span>
+const bandeauVerrou = p => p && jourFige(p.jour) ? `<div class="verrou-shot">${ICO_FINI}<span>${esc(nomJour(p.jour))} verrouillé : rien ne s’y modifie.</span>
+  <button type="button" class="btn sm" onclick="verrouillerJour('${esc(p.jour)}')">Rouvrir le jour</button></div>`
+  : p && p.termine ? `<div class="verrou-shot">${ICO_FINI}<span>Shot validé : il ne se modifie plus.</span>
   <button type="button" class="btn sm" onclick="terminerShot('${p.id}')">Rouvrir le shot</button></div>` : '';
+/* Verrouiller une journee demande confirmation ; la rouvrir, non. */
+function verrouillerJour(j){
+  const appliquer = v => {
+    patch('prod', 'prod', { ['verrou_' + j]: v });
+    if (v && UI.vise && (plan(UI.vise) || {}).jour === j){ UI.vise = null; ecrireUI(); }   // plus de Moteur dessus
+    oublierPrep(); renderAll();
+    if (openType === 'prod') openProd(); else if (openType === 'plan' || openType === 'prise') rouvrirFiche();
+    toast(nomJour(j) + (v ? ' verrouillé : plus rien ne s’y modifie' : ' rouvert'));
+  };
+  if (jourFige(j)) return appliquer(false);
+  confirmer('Verrouiller le ' + nomJour(j).toLowerCase() + ' ?', { detail: 'Ses shots, leurs prises et sa préparation ne se modifieront plus, pour toute l’équipe. Il se rouvre ici, dans Journée.', ok: 'Verrouiller' })
+    .then(oui => { if (oui) appliquer(true); });
+}
 /* Valider un shot demande confirmation (la double validation) ; le rouvrir, non. */
 function terminerShot(id){
   const p = plan(id); if (!p) return;
@@ -2488,7 +2521,7 @@ const ICO_MOTEUR = ICO('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12"
 const ICO_COUPEZ = ICO('<rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" stroke="none"/>', 17, 2);
 function planVise(){
   const p = (UI.vise && plan(UI.vise)) || (dernierPlan && plan(dernierPlan)) || null;
-  return p && !p.termine && p.etat !== 'drop' ? p : null;   // un shot valide ne se tourne plus : il ne reste pas vise, ses prises se replient
+  return p && !bloque(p) && p.etat !== 'drop' ? p : null;   // un shot valide ne se tourne plus : il ne reste pas vise, ses prises se replient
 }
 /* toucher l'anneau du plan deja vise rend la main au suivi automatique */
 /* Viser un plan : le Moteur et + Prise enregistrent dessus, et il deplie ses
@@ -2496,7 +2529,7 @@ function planVise(){
    meme si celui du dessus se replie. `garder` : viser sans basculer. */
 function viser(id, garder){
   if (!plan(id)) return;
-  if (plan(id).termine && UI.vise !== id) return prevenirVerrou(plan(id));
+  if (bloque(plan(id)) && UI.vise !== id) return prevenirVerrou(plan(id));
   const avant = document.querySelector('#l-shoot .plan[data-id="' + id + '"]');
   const y0 = avant ? avant.getBoundingClientRect().top : null;
   UI.vise = UI.vise === id && !garder ? null : id; ecrireUI();
@@ -2597,7 +2630,7 @@ function nouvellePrise(){
    plan au meme moment, le serveur tranche et le numero est corrige. */
 function ajouterPrise(planId, ouvrir, extra){
   const p = plan(planId); if (!p) return null;
-  if (p.termine){ prevenirVerrou(p); return null; }
+  if (bloque(p)){ prevenirVerrou(p); return null; }
   const sœurs = prisesDe(planId);
   const modele = sœurs[sœurs.length - 1] || DB.prises[DB.prises.length - 1];
   const n = sœurs.reduce((m, x) => Math.max(m, x.n || 0), 0) + 1;
@@ -3066,6 +3099,7 @@ function majAlertesPrise(){
 
 function delPrise(){
   const t = prise(openId); if (!t) return;
+  if (bloque(plan(t.planId))) return prevenirVerrou(plan(t.planId));
   confirmer('Supprimer la prise ' + t.n + ' ?', { ok:'Supprimer', danger:true }).then(oui => {
     if (!oui || !prise(t.id)) return;
     supprimerPrise(t);
@@ -4858,7 +4892,7 @@ function supprimerPlan(p){
 }
 /* Demande confirmation, supprime, propose Annuler. Tient vrai si c'est fait. */
 function supprimerPlanConfirme(p){
-  if (p.termine){ prevenirVerrou(p); return Promise.resolve(false); }
+  if (bloque(p)){ prevenirVerrou(p); return Promise.resolve(false); }
   const pr = prisesDe(p.id);
   return confirmer('Supprimer le shot ' + (p.plan || 'sans n°') + (pr.length ? ' et ses ' + pr.length + ' prise(s)' : '') + ' ?',
                    { ok:'Supprimer', danger:true }).then(oui => {
@@ -4894,6 +4928,7 @@ function nouveauPlan(){
     num = numeroPropre(num);
     const ref = dernierPlan && plan(dernierPlan);
     const p = creerPlan(fJour !== '*' ? fJour : (ref ? ref.jour : ''), true);
+    if (!p) return;
     // le plan est au decoupage : il arrive chez toute l'equipe, numero compris
     if (num) patch('plan', p.id, { plan: num });
     renderAll(); openPlan(p.id);
@@ -5057,7 +5092,7 @@ function bandeauSeq(ps, i){
 function renderPrep(){
   const l = $('l-prep'); if (!l) return;
   if (!prepare()) return renderPrepLecture(l);
-  const ids = fJourP + '|' + DB.plans.map(p => p.id).join(',');
+  const ids = fJourP + '|' + joursConnus().filter(jourFige).join(',') + '|' + DB.plans.map(p => p.id).join(',');
   // quelqu'un tape ici, ou coche dans un menu : on ne redessine pas, les autres champs se mettent a niveau
   if (l.dataset.ids === ids && (l.contains(document.activeElement) || l.querySelector('.menu'))){
     l.querySelectorAll('[data-o][data-k]').forEach(el => {
@@ -5094,9 +5129,14 @@ function renderPrep(){
       L’ordre des cartes est l’ordre de tournage : « Ordonner » permet de les glisser.</p>`;
   (unJour ? [fJourP] : tous).forEach(j => {
     const ps = trierPlans(plansDuJour(j), false);
-    html += `<div class="jour"><b>${nomJour(j)}</b><span>${ps.length} plan${plur(ps.length)}</span>${enteteJour(j, ps.length)}</div>` +
+    const fige = jourFige(j);
+    html += `<div class="jour${fige ? ' fige' : ''}"><b>${nomJour(j)}${fige ? ICO_JOUR_FIGE : ''}</b><span>${ps.length} plan${plur(ps.length)}</span>${
+              fige ? `<span class="jctrl"><button type="button" class="btn sm" onclick="verrouillerJour('${esc(j)}')">Verrouillé · rouvrir</button></span>`
+                   : enteteJour(j, ps.length)}</div>` +
+            (fige ? '<fieldset class="fige" disabled>' : '') +
             ps.map((p, i) => bandeauSeq(ps, i) + rangPrep(p)).join('') +
-            `<button type="button" class="addplan" onclick="ajouterPlanPrep('${esc(j)}')">+ Plan${j ? ' ' + esc(nomJour(j).toLowerCase()) : ''}</button>`;
+            (fige ? '</fieldset>'
+                  : `<button type="button" class="addplan" onclick="ajouterPlanPrep('${esc(j)}')">+ Plan${j ? ' ' + esc(nomJour(j).toLowerCase()) : ''}</button>`);
   });
   l.innerHTML = html; l.dataset.ids = ids;
   l.querySelectorAll('textarea').forEach(autoHauteur);
@@ -5152,6 +5192,9 @@ function deplacerLocal(id, apres){
   return true;
 }
 function deplacerPlan(id, apres){
+  const p = plan(id), dest = apres && plan(apres);
+  if (p && jourFige(p.jour)) return prevenirVerrou(p);
+  if (dest && dest.jour !== p.jour && jourFige(dest.jour)) return prevenirVerrou(null, dest.jour);
   if (id === apres || !deplacerLocal(id, apres)) return;
   operer({ op:'move', kind:'plan', id, apres });
   oublierPrep(); renderAll();
@@ -5213,6 +5256,7 @@ function brancherOrdre(){
 
 function ajouterPlanPrep(j){
   const p = creerPlan(j, false);
+  if (!p) return;
   renderAll();
   const i = document.querySelector(`#l-prep .prow[data-id="${p.id}"] input[data-k="plan"]`);
   if (i){ i.scrollIntoView({ block:'center' }); i.focus(); }
@@ -5260,6 +5304,7 @@ function ajouterJourPrep(){
 }
 /* Supprimer un jour : ses plans avec, apres confirmation s'il en a. */
 function supprimerJourPrep(j){
+  if (jourFige(j)) return prevenirVerrou(null, j);
   const ps = plansDuJour(j), pr = ps.reduce((n, p) => n + prisesDe(p.id).length, 0);
   const faire = () => {
     ps.forEach(supprimerPlan); corbeille = null;
@@ -5272,6 +5317,7 @@ function supprimerJourPrep(j){
             (pr ? ' (' + pr + ' prise' + plur(pr) + ')' : '') + ' ?', { ok:'Supprimer', danger:true }).then(oui => { if (oui) faire(); });
 }
 function fixerNombreJour(j, input){
+  if (jourFige(j)){ input.value = plansDuJour(j).length; return prevenirVerrou(null, j); }
   const n = Math.max(0, Math.min(99, parseInt(input.value, 10) || 0));
   const ps = plansDuJour(j);
   if (n > ps.length){
@@ -5315,6 +5361,7 @@ function touchePrep(e, id){
 /* Un plan de plus, range apres le dernier plan du meme jour. Sur le plateau
    (horsDT), il porte l'etiquette HORS DT pour se distinguer du decoupage. */
 function creerPlan(j, horsDT){
+  if (jourFige(j)){ prevenirVerrou(null, j); return null; }
   const ref = dernierPlan && plan(dernierPlan);
   const voisins = plansDuJour(j);
   const modele = voisins.length ? voisins[voisins.length - 1] : ref;
@@ -5391,7 +5438,7 @@ function choisirFusion(aId){
   $('stitle').textContent = 'Fusionner dans ' + (a.seq ? 'Séq ' + a.seq + ' · ' : '') + 'Shot ' + (a.plan || 'sans n°');
   $('ssub').textContent = 'Le shot tourné avec lui : ses prises le rejoignent';
   // ni un shot verrouille (valide), ni un shot abandonne ou deja fusionne : ils ne bougent plus
-  const libre = p => p.id !== a.id && !p.fusionDans && !p.termine && p.etat !== 'drop';
+  const libre = p => p.id !== a.id && !p.fusionDans && !bloque(p) && p.etat !== 'drop';
   const duJour = DB.plans.filter(p => libre(p) && (p.jour || '') === (a.jour || ''));
   const autres = DB.plans.filter(p => libre(p) && (p.jour || '') !== (a.jour || ''));
   const ligneF = p => {
@@ -5530,14 +5577,17 @@ function openProd(){
     <div class="sec">
       <h3>Jours de tournage</h3>
       <div class="jours-tournage">
-        ${joursConnus().filter(j => j && j !== 'CG').map(j => `<div class="jt">
-          <b>${esc(nomJour(j))}</b>
-          <div class="specs">
+        ${joursConnus().filter(j => j && j !== 'CG').map(j => `<div class="jt${jourFige(j) ? ' fige' : ''}">
+          <div class="jt-tete"><b>${esc(nomJour(j))}</b>
+            <button type="button" class="btn sm verrou-jour${jourFige(j) ? ' on' : ''}" onclick="verrouillerJour('${esc(j)}')"
+              aria-pressed="${jourFige(j)}">${jourFige(j) ? ICO_FINI + 'Verrouillé · rouvrir' : ICO_FINI_OUVERT + 'Verrouiller'}</button></div>
+          <fieldset class="fige specs"${jourFige(j) ? ' disabled' : ''}>
             ${champDate(p, 'Date', 'date_' + j)}
             ${F(p, 'Décor', 'decor_' + j, {ph: decorDesPlans(j), dl:'dl-lieu', refresh:1})}
-          </div></div>`).join('') || '<div class="note">Aucun jour pour l’instant : les jours viennent du découpage.</div>'}
+          </fieldset></div>`).join('') || '<div class="note">Aucun jour pour l’instant : les jours viennent du découpage.</div>'}
       </div>
-      <div class="note">Le jour dont la date est aujourd’hui devient le jour en cours. Sans décor noté, c’est celui de ses plans.</div>
+      <div class="note">Le jour dont la date est aujourd’hui devient le jour en cours. Sans décor noté, c’est celui de ses plans.
+        Un jour verrouillé ne se modifie plus, pour toute l’équipe : ni ses shots, ni leurs prises, ni sa préparation.</div>
     </div>
 
     <div class="sec">

@@ -1826,3 +1826,13 @@ nav button[hidden]{display:none}
 .btn.rec.rec-cam:hover{background:#1d1110}
 .btn.rec.rec-cam em{opacity:.9;color:#fff}
 body.rec-fiche #fab{display:none}
+/* une journee verrouillee : un petit cadenas vert, sa preparation et ses reglages en lecture */
+svg.jfige{display:inline-block;vertical-align:-1px;margin-left:5px;color:var(--ok)}
+.jour b svg.jfige{width:16px;height:16px;vertical-align:1px;margin-left:8px}
+fieldset.fige{border:0;margin:0;padding:0;min-width:0}
+fieldset.fige:disabled{opacity:.55}
+.jt-tete{display:flex;align-items:center;gap:10px}
+.jt-tete b{flex:1}
+.verrou-jour{display:inline-flex;align-items:center;gap:6px}
+.verrou-jour svg{width:15px;height:15px}
+.verrou-jour.on{color:var(--ok);border-color:rgba(var(--ok-rgb),.45);background:rgba(var(--ok-rgb),.12)}
