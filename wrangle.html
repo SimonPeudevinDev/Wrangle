@@ -325,7 +325,7 @@ const NOTES_RAPIDES = ['Raccord', 'Jeu', 'Cadre', 'Point', 'Son', 'Lumière', 'T
                        'Figuration', 'Bonne pour le son', 'Bonne pour l’image', 'Pas'];
 
 const NEUVE = () => ({
-  statut:'', retenue:false, clip:'', carte:'', cam:'', camModel:'ARRI Alexa 35', mouvement:'', support:'', meteo:'',
+  statut:'', pickup:false, retenue:false, clip:'', carte:'', cam:'', camModel:'ARRI Alexa 35', mouvement:'', support:'', meteo:'',
   tcIn:'', tcOut:'', duree:'', heure:'',
   focale:'', focaleStop:'', focusStart:'', focusStop:'', hauteurStart:'', hauteurStop:'', mesureDepuis:'',
   panStart:'', panStop:'', tiltStart:'', tiltStop:'', rollStart:'', rollStop:'',
@@ -439,6 +439,8 @@ function normaliser(d){
   const ranger = (o, k) => { const s = SUPPORT_ANCIEN[String(o[k] || '').trim().toLowerCase()]; if (s){ if (!o.support) o.support = s; o[k] = ''; } };
   db.plans.forEach(p => ranger(p, 'mouv'));
   db.prises.forEach(t => ranger(t, 'mouvement'));
+  // Pick-up etait un resultat parmi d'autres : c'est une marque a part, qui s'ajoute a OK ou NG
+  db.prises.forEach(t => { if (t.statut === 'Pick-up'){ t.statut = ''; t.pickup = true; } });
   verrouillerPrises(db);
   // une prise sans heure reprend celle de sa creation : son identifiant commence par cet instant
   // (uid : l'horloge en base 36, puis cinq caracteres au hasard)
@@ -2339,6 +2341,7 @@ function ligne(t, sansActions){
         ${t.notes ? `<span class="tnote" title="${esc(t.notes)}">${esc(t.notes)}</span>` : ''}
         ${t.statut && t.statut !== 'OK' && t.statut !== 'NG'
           ? `<span class="tstat">${esc(t.statut)}</span>` : ''}
+        ${t.pickup ? '<span class="tstat">Pick-up</span>' : ''}
         ${sansActions ? marque : ''}
       </div>
       ${meta || rel ? `<div class="tmeta">${meta}${rel}</div>` : ''}
@@ -2355,6 +2358,8 @@ function ligne(t, sansActions){
 /* Marquer, depuis la liste comme depuis la fiche, sans bouger la page. */
 function marquer(id, s){
   const t = prise(id); if (!t) return;
+  // Pick-up s'allume et s'eteint seul : il ne remplace ni OK ni NG
+  if (s === 'Pick-up'){ patch('prise', id, { pickup: !t.pickup }); return rafraichirDoux(); }
   const d = { statut: t.statut === s ? '' : s };
   // premiere bonne prise du plan : on la retient d'office, quitte a changer ensuite
   if (d.statut === 'OK' && !t.retenue && !prisesDe(t.planId).some(x => x.retenue)) d.retenue = true;
@@ -2889,7 +2894,7 @@ function openPrise(id, y){
     <div class="sec">
       <h3>Résultat</h3>
       <div class="seg verdict" id="seg-statut">${VERDICTS.map(([v, c]) =>
-        `<button data-st="${v}" class="${classeSeg(v, t.statut, c)}" onclick="marquer('${t.id}','${v}')">${v}</button>`).join('')}</div>
+        `<button data-st="${v}" class="${classeSeg(v, verdictDe(t, v), c)}" onclick="marquer('${t.id}','${v}')">${v}</button>`).join('')}</div>
       <button class="star ${t.retenue ? 'on' : ''}" id="btn-star" onclick="basculerEtoile('${t.id}')">${htmlEtoile(t)}</button>
     </div>
 
@@ -2994,6 +2999,9 @@ function openPrise(id, y){
 
 /* Les verdicts d'une prise et les etats d'un plan : la valeur, et la couleur du bouton choisi. */
 const VERDICTS = [['OK', 'g'], ['NG', 'r'], ['Série', ''], ['Faux départ', ''], ['Pick-up', '']];
+/* Pick-up se coche en plus du resultat : une prise peut etre « OK » et « Pick-up » a la fois. */
+const verdictDe = (t, v) => v === 'Pick-up' ? (t.pickup ? v : '') : t.statut;
+const libStatut = t => [t.statut, t.pickup ? 'Pick-up' : ''].filter(Boolean).join(' · ');
 const ETATS_SEG = [['todo', 'a'], ['done', 'g'], ['drop', '']];
 const classeSeg = (v, actuel, couleur) => v !== actuel ? '' : 'on' + (couleur ? ' ' + couleur : '');
 const htmlEtoile = t => `<em>${t.retenue ? '&#9733;' : '&#9734;'}</em>${t.retenue ? 'Prise retenue pour le montage' : 'Marquer comme prise à monter'}`;
@@ -3008,7 +3016,10 @@ function majSeg(sel, attr, defs, actuel){
 /* Met a jour les boutons en place, sans reconstruire la feuille. */
 function majBoutonsPrise(){
   const t = prise(openId); if (!t) return;
-  majSeg('#seg-statut', 'st', VERDICTS, t.statut);
+  document.querySelectorAll('#seg-statut button').forEach(b => {
+    const v = b.dataset.st, d = VERDICTS.find(x => x[0] === v);
+    b.className = classeSeg(v, verdictDe(t, v), d ? d[1] : '');
+  });
   const k = $('btn-star');
   if (k){ k.className = 'star' + (t.retenue ? ' on' : ''); k.innerHTML = htmlEtoile(t); }
   document.querySelectorAll('.chips-notes button').forEach(b => b.classList.toggle('on', aNote(t, b.dataset.n)));
@@ -5849,7 +5860,7 @@ function htmlPost(j){
           rel.map(r => `<em>${r[0]}</em> ${esc(r[1])}`).join('<br>')}</div></div>` : ''}
       </div>` : ''}
       ${autres.length ? `<div class="pautres">Autres prises : ${autres.map(t => {
-        const q = [t.statut, t.clip].filter(Boolean).join(' · ');
+        const q = [libStatut(t), t.clip].filter(Boolean).join(' · ');
         return esc(t.n + (q ? ' (' + q + ')' : ''));
       }).join(', ')}</div>` : ''}
     </article>`;
@@ -5895,7 +5906,7 @@ function modeleDIT(j){
   const pied = [p.titre || '', 'journal DIT édité le ' + deuxCh(d.getDate()) + '/' + deuxCh(d.getMonth() + 1) + '/' + d.getFullYear() +
                 ' à ' + hhmm(d) + (UI.nom ? ' par ' + UI.nom : ''), 'Wrangle'].filter(Boolean).join(' · ');
   const qui = t => [t.par, t.heure].filter(Boolean).join(' · ');
-  const prise = t => ({ n: String(t.n || ''), clip: t.clip || '', carte: t.carte || '', statut: t.statut || '',
+  const prise = t => ({ n: String(t.n || ''), clip: t.clip || '', carte: t.carte || '', statut: t.statut || '', pickup: !!t.pickup,
                         retenue: !!t.retenue, tcIn: t.tcIn || '', tcOut: t.tcOut || '', duree: t.duree || '',
                         note: t.notes || '', qui: qui(t), par: t.par || '', heure: t.heure || '', seq: t.seq || '', plan: t.plan || '',
                         dureePrevue: (plan(t.planId) || {}).duree || '', ecarts: t.ecarts || [] });
@@ -6266,6 +6277,9 @@ function pdfDIT(j){
   const vide = s => { doc.texte(PDF_M, doc.y - 8, s, { taille: 8.5, couleur: 'tan' }); doc.y -= 13; };
   // le statut d'une prise, dans sa couleur : OK en vert, NG en rouge, le reste en tan
   const statut = s => ({ t: s, couleur: s === 'OK' ? 'ok' : s === 'NG' ? 'ng' : 'tan', police: s === 'OK' || s === 'NG' ? 'HB' : 'H' });
+  // et Pick-up a sa suite, en tan
+  const statutPu = t => !t.pickup ? statut(t.statut) : !t.statut ? statut('Pick-up')
+    : { parts: [statut(t.statut), { t: ' · Pick-up', couleur: 'tan' }] };
   // qui a saisi : les deux premieres lettres de chaque prenom en gras (Si, Ro), l'heure en tan
   const initiales = par => String(par || '').split(/\s*,\s*/).filter(Boolean).map(n => n.slice(0, 2)).join(', ');
   const saisi = t => ({ parts: [{ t: initiales(t.par), police: 'HB', couleur: 'encre' }, { t: t.par && t.heure ? ' · ' : '', couleur: 'tan' },
@@ -6277,7 +6291,7 @@ function pdfDIT(j){
     clip:   ['Clip', 68, 'C', t => t.clip || '—'],
     // la sequence, le shot et la prise en toutes lettres : « Séq 06 · Shot 01 · Prise 2 »
     ou:     ['Séq · Shot · Prise', 128, 'H', t => [t.seq && 'Séq ' + t.seq, t.plan && 'Shot ' + t.plan, t.n && 'Prise ' + t.n].filter(Boolean).join(' · ')],
-    statut: ['Statut', 42, 'H', t => statut(t.statut)],
+    statut: ['Statut', 42, 'H', statutPu],
     // la duree chronometree de la prise ; a defaut, celle prevue pour le shot, en tan
     duree:  ['Durée', 58, 'H', t => t.duree || (t.dureePrevue ? { t: t.dureePrevue + ' prévue', couleur: 'tan' } : '')],
     carte:  ['Carte', 52, 'H', t => t.carte ? { t: t.carte, police: 'HB', couleur: 'encre' } : { t: '—', couleur: 'tan' }],
@@ -6293,6 +6307,9 @@ function pdfDIT(j){
     // « Saisi par » s'elargit quand trois personnes ont saisi la meme prise
     const qui = cols.find(c => c[0] === 'Saisi par');
     if (qui) qui[1] = Math.max(qui[1], ...prises.map(t => largeurPdf(initiales(t.par) + ' · ' + t.heure, taille, 'HB') + 8));
+    // « OK · Pick-up » ne tient pas dans la colonne du statut seul
+    const st = cols.find(c => c[0] === 'Statut');
+    if (st) st[1] = Math.max(st[1], ...prises.map(t => largeurPdf(libStatut(t), taille, 'HB') + 8));
     const reste = L - cols.reduce((a, c) => a + c[1], 0);
     const note = cols.find(c => c[0] === 'Note');
     if (note) note[1] = Math.max(80, reste); else cols[cols.length - 1][1] += Math.max(0, reste);
@@ -6430,7 +6447,7 @@ function feuilleVFX(x, jour){
       tilt: [sansUnite(t.tiltStart, /\s*°$/), sansUnite(t.tiltStop, /\s*°$/)],
       roll: [sansUnite(t.rollStart, /\s*°$/), sansUnite(t.rollStop, /\s*°$/)],
       // le resultat qui n'est ni OK ni NG (Serie, Faux depart…) et le montage se lisent dans la note
-      note: [t.statut && t.statut !== 'OK' && t.statut !== 'NG' ? t.statut : '', t.retenue ? 'Kept for edit' : '', t.notes]
+      note: [t.statut && t.statut !== 'OK' && t.statut !== 'NG' ? t.statut : '', t.pickup ? 'Pick-up' : '', t.retenue ? 'Kept for edit' : '', t.notes]
         .filter(Boolean).join(' · ')
     })),
     mesure: val('mesureDepuis'),
@@ -6967,7 +6984,10 @@ function decorerFiche(){
   specs.forEach(s => decorerSpec(s, o, j));
   const qui = f => j.filter(x => f(x.o)).map(x => x.a);
   if (openType === 'prise'){
-    sb.querySelectorAll('#seg-statut button[data-st]').forEach(b => decorerBulle(b, o.statut === b.dataset.st, qui(x => x.statut === b.dataset.st)));
+    sb.querySelectorAll('#seg-statut button[data-st]').forEach(b => {
+      const a = x => verdictDe(x, b.dataset.st) === b.dataset.st;
+      decorerBulle(b, a(o), qui(a));
+    });
     const k = $('btn-star'); if (k) decorerBulle(k, !!o.retenue, qui(x => !!x.retenue));
     sb.querySelectorAll('.chips-notes button[data-n]').forEach(b => decorerBulle(b, aNote(o, b.dataset.n), qui(x => aNote(x, b.dataset.n))));
   } else {
@@ -7102,7 +7122,7 @@ function reprendreAutre(espace, cles){
    premiere source, ce navigateur, fait foi sur les ecarts ; les autres
    comblent les vides et apportent leurs prises en plus. */
 const RAP = { sources: [], equipier: [], equipe: true, tente: false, chargement: false };   // le rapport porte toujours sur toute l'equipe   // equipe : le bilan porte sur l'equipe ; equipier : chacun des autres sur le serveur, choisi ou non
-const RAP_PRISE = [['statut', 'Statut'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
+const RAP_PRISE = [['statut', 'Statut'], ['pickup', 'Pick-up'], ['retenue', 'À monter'], ['clip', 'Clip'], ['carte', 'Carte'], ['cam', 'Caméra'],
   ['tcIn', 'TC in'], ['tcOut', 'TC out'], ['duree', 'Durée'], ['heure', 'Heure'], ['notes', 'Note'], ['focale', 'Focale'],
   ['focaleStop', 'Focale fin'], ['diaph', 'Diaph'], ['mouvement', 'Mouvement'], ['support', 'Support'], ['meteo', 'Météo'],
   ['codec', 'Codec'], ['reso', 'Résolution'], ['fps', 'Cadence'], ['shutter', 'Obturateur'], ['ei', 'EI'], ['wb', 'Balance'],
@@ -7434,7 +7454,7 @@ function modeleWrangling(j){
       const parQui = new Map();
       b.prises.filter(t => t.seuls && t.seuls.length === 1 && s.length > 1).forEach(t => {
         const qui = t.seuls[0], x = lesPrises(b, t.n)[0] || {};
-        parQui.set(qui, (parQui.get(qui) || []).concat([{ n: t.n, clip: x.clip || '', statut: x.statut || '', retenue: !!x.retenue }]));
+        parQui.set(qui, (parQui.get(qui) || []).concat([{ n: t.n, clip: x.clip || '', statut: libStatut(x), retenue: !!x.retenue }]));
       });
       parQui.forEach((l, qui) => seuls.push({ seq: b.seq, plan: b.plan, qui, prises: l }));
     });
@@ -7474,7 +7494,7 @@ function pdfWrangling(j){
   const desaccord = vals => vals.map(([n, v]) => ini(n) + ' ' + v).join(' / ');
   const ROUGE = { police: 'HB', couleur: 'ng' };
   const COLS = [['n', 'Pr.', 22, 'HB', t => t.n], ['clip', 'Clip', 72, 'C', t => t.clip], ['carte', 'Carte', 46, 'H', t => t.carte],
-    ['statut', 'Statut', 54, 'HB', t => t.statut], ['retenue', 'Montage', 48, 'H', t => t.retenue ? 'retenue' : ''],
+    ['statut', 'Statut', 54, 'HB', libStatut], ['retenue', 'Montage', 48, 'H', t => t.retenue ? 'retenue' : ''],
     ['focale', 'Focale', 66, 'H', t => fleche(t.focale, t.focaleStop)], ['diaph', 'Diaph', 34, 'H', t => t.diaph],
     ['ei', 'ISO', 32, 'H', t => t.ei], ['wb', 'Balance', 44, 'H', t => t.wb], ['shutter', 'Obtur.', 38, 'H', t => t.shutter],
     ['mouvement', 'Mouvement', 64, 'H', t => t.mouvement], ['support', 'Support', 50, 'H', t => t.support],
@@ -7488,7 +7508,7 @@ function pdfWrangling(j){
     const e = ecartDe(t, k), err = t.erreurs.find(q => q[0] === k), v = valRap(lire(t));
     if (e) return Object.assign({ t: desaccord(e.valeurs) }, ROUGE);
     if (err) return Object.assign({ t: v || 'manque' }, ROUGE);
-    if (k === 'statut') return { t: v, police: 'HB', couleur: v === 'OK' ? 'ok' : 'ng' };
+    if (k === 'statut') return { t: v, police: 'HB', couleur: t.statut === 'OK' ? 'ok' : 'ng' };
     if (k === 'retenue' && v) return { t: v, puce: 'caramel', police: 'HB', couleur: 'encre' };
     return k === 'n' ? { t: v, police: 'HB', couleur: 'encre' } : v;
   }]);
@@ -7952,7 +7972,7 @@ function exportCSVDe(kind){
             'Éléments du plan','Description VFX','Description du plan','Int/Ext','Moment','Saisie par'];
     rows = src.map(t => {
       const p = plan(t.planId);
-      return [t.jour ? nomJour(t.jour) : '', t.seq, t.plan, t.n, t.statut, t.retenue ? 'oui' : '',
+      return [t.jour ? nomJour(t.jour) : '', t.seq, t.plan, t.n, libStatut(t), t.retenue ? 'oui' : '',
         t.clip, t.cam, t.camModel, t.carte, t.tcIn, t.tcOut, t.duree, t.heure, t.meteo,
         t.focale, t.focaleStop, t.diaph, t.focusStart, t.focusStop, t.hauteurStart, t.hauteurStop, t.mesureDepuis,
         t.panStart, t.panStop, t.tiltStart, t.tiltStop, t.rollStart, t.rollStop, t.mouvement, t.support,
@@ -7993,7 +8013,7 @@ function exportALEDe(){
     const p = plan(t.planId);
     return [t.clip, t.carte, t.clip, t.tcIn, t.tcOut, (t.seq || '') + '/' + (t.plan || ''), t.n, t.cam, t.carte, t.sonRoll,
       t.objectif, t.focale, t.diaph, t.ei, t.shutter, t.wb, t.lut, listeElements(p),
-      [t.retenue ? 'A MONTER' : '', t.statut, t.notes].filter(Boolean).join(' - ')
+      [t.retenue ? 'A MONTER' : '', libStatut(t), t.notes].filter(Boolean).join(' - ')
     ].map(plat).join('\t');
   });
   const ale = ['Heading', 'FIELD_DELIM\tTABS', 'VIDEO_FORMAT\tCUSTOM', 'AUDIO_FORMAT\t48kHz',

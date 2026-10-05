@@ -311,7 +311,8 @@ La page Tournage n'a pas de champ de recherche : on parcourt par jour et par fil
   la prise reste, marquée « non saisie » dans la liste. Elle sort de « À compléter », et quand l'équipe est réunie ce sont
   les saisies des autres qui comptent pour elle : ce que la page a repris de la prise d'avant ne
   fait pas de faux écart. Un second appui retire la marque.
-- Dans la fiche : résultat (OK, NG, Série, Faux départ, Pick-up), note libre et mots rapides
+- Dans la fiche : résultat (OK, NG, Série, Faux départ) et, en plus, Pick-up : une prise peut être
+  OK et Pick-up à la fois. Puis note libre et mots rapides
   (Raccord, Jeu, Cadre…), nom de clip avec suggestion du suivant (bouton ＋1), relevés caméra
   pour le matchmove, réglages image, son.
 - Caméra, carte, optique, réglages : repris automatiquement de la prise précédente. La focale est
@@ -439,6 +440,7 @@ py tests/verif_reprise.py          recharger la page ramène là où on était
 py tests/verif_dialogue.py         les boîtes de la page à la place de celles du navigateur
 py tests/verif_journal_dit.py      le journal DIT en PDF : par jour, prises retenues pour le montage, puis écarts entre saisies
 py tests/verif_fiche_vfx.py        le rapport VFX en PDF : une feuille caméra par plan, croquis compris
+py tests/verif_pickup.py           Pick-up se coche en plus de OK ou NG, et se lit partout (liste, DIT, VFX, exports)
 py tests/verif_prep_cadrage.py     en préparation, plusieurs cadrages sur un plan
 py tests/verif_plans_par_jour.py   préparer jour par jour : nombre de plans, jour de plus ou de moins, distribution cochée
 py tests/verif_viser.py            l'anneau des cartes choisit le plan que le Moteur va tourner
