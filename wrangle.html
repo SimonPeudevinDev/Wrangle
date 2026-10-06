@@ -2031,7 +2031,7 @@ function chipsJours(actif, fn, info, jours){
   const un = (j, label) => {
     const d = info(j) || {};
     const fini = d.total > 0 && d.fait === d.total;
-    return `<button class="chip${actif === j ? ' on' : ''}${fini ? ' fini' : ''}${d.vide ? ' vide' : ''}"
+    return `<button class="chip${actif === j ? ' on' : ''}${fini ? ' boucle' : ''}${d.vide ? ' vide' : ''}"
       onclick="${fn}('${esc(j)}')"${d.titre ? ` title="${esc(d.titre)}"` : ''}>${label}</button>`;
   };
   // le nom du jour seul : les comptes et l'avancement sont dans la ligne de
